@@ -1,0 +1,23 @@
+.bingo-board table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: center;
+  }
+  
+  .bingo-board td {
+    width: 20%;
+    height: 80px;
+    border: 1px solid #000;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  
+  .bingo-board .marked {
+    background-color: #66bb6a; /* Green background for marked cells */
+    color: #fff;
+  }
+  
+  .bingo-board .free-space {
+    background-color: #ddd;
+    color: #666;
+  }
