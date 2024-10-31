@@ -1,13 +1,15 @@
 <div class="bingo-board">
     <table>
-      <tr *ngFor="let row of [0, 1, 2, 3, 4]">
-        <td *ngFor="let col of [0, 1, 2, 3, 4]"
-            (click)="toggleMark(board[col][row]); $event.stopPropagation()"
-            [class.marked]="board[col][row].marked"
-            [class.free-space]="col === 2 && row === 2">
-          {{ board[col][row].number !== 0 ? board[col][row].number : 'FREE' }}
-        </td>
-      </tr>
+      <tbody>
+        <tr *ngFor="let row of [0, 1, 2, 3, 4]">
+          <td *ngFor="let col of [0, 1, 2, 3, 4]"
+              (click)="toggleMark(board[col][row])"
+              [class.marked]="board[col][row].marked"
+              [class.free-space]="col === 2 && row === 2">
+            {{ board[col][row].number !== 0 ? board[col][row].number : 'FREE' }}
+          </td>
+        </tr>
+      </tbody>
     </table>
   </div>
   

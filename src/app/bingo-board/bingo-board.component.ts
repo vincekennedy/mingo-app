@@ -53,7 +53,6 @@ export class BingoBoardComponent implements OnInit {
   }
 
   toggleMark(cell: BingoCell): void {
-    alert(`Cell ${cell.number} clicked!`); // Debugging
     cell.marked = !cell.marked;
   }
 }
