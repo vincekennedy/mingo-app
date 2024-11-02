@@ -54,5 +54,33 @@ export class BingoBoardComponent implements OnInit {
 
   toggleMark(cell: BingoCell): void {
     cell.marked = !cell.marked;
+
+    if (this.checkForBingo()) {
+      alert("Bingo! You've got BINGO!");
+      // Optionally, add logic here to reset the board or end the game
+    }
   }
+
+  checkForBingo(): boolean {
+    // Check rows
+    for (let row = 0; row < 5; row++) {
+      if (this.board.every((col) => col[row].marked)) {
+        return true;
+      }
+    }
+  
+    // Check columns
+    for (let col = 0; col < 5; col++) {
+      if (this.board[col].every((cell) => cell.marked)) {
+        return true;
+      }
+    }
+  
+    // Check diagonals
+    const leftDiagonal = [0, 1, 2, 3, 4].every((i) => this.board[i][i].marked);
+    const rightDiagonal = [0, 1, 2, 3, 4].every((i) => this.board[i][4 - i].marked);
+  
+    return leftDiagonal || rightDiagonal;
+  }
+
 }
