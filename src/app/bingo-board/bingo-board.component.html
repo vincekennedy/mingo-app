@@ -6,7 +6,7 @@
               (click)="toggleMark(board[col][row])"
               [class.marked]="board[col][row].marked"
               [class.free-space]="col === 2 && row === 2">
-            {{ board[col][row].number !== 0 ? board[col][row].number : 'FREE' }}
+            {{ board[col][row].square !== '' ? board[col][row].square : 'FREE' }}
           </td>
         </tr>
       </tbody>

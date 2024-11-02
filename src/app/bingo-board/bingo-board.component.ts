@@ -1,8 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Firestore, collectionData, collection } from '@angular/fire/firestore';
+import { Observable } from 'rxjs';
 
 interface BingoCell {
-  number: number;
+  square: string;
   marked: boolean;
 }
 
@@ -15,41 +17,30 @@ interface BingoCell {
 })
 export class BingoBoardComponent implements OnInit {
   board: BingoCell[][] = [];
+  items!: Observable<any[]>;
 
-  constructor() {}
+  constructor(private firestore: Firestore) {}
 
   ngOnInit(): void {
-    this.generateBoard();
+    this.fetchBingoStrings();
   }
 
-  generateBoard() {
-    const ranges = [
-      { min: 1, max: 15 },
-      { min: 16, max: 30 },
-      { min: 31, max: 45 },
-      { min: 46, max: 60 },
-      { min: 61, max: 75 }
-    ];
-
-    this.board = [];
-
-    for (let col = 0; col < 5; col++) {
-      const columnNumbers = this.generateUniqueNumbers(ranges[col].min, ranges[col].max, 5);
-      const column = columnNumbers.map(number => ({ number, marked: false }));
-      this.board.push(column);
-    }
-
-    // Center "free" space at (2, 2)
-    this.board[2][2] = { number: 0, marked: true };
-  }
-
-  generateUniqueNumbers(min: number, max: number, count: number): number[] {
-    const numbers = new Set<number>();
-    while (numbers.size < count) {
-      const num = Math.floor(Math.random() * (max - min + 1)) + min;
-      numbers.add(num);
-    }
-    return Array.from(numbers);
+  fetchBingoStrings(): void {
+    const bingoStringsCollection = collection(this.firestore, 'TestGame');
+    this.items = collectionData(bingoStringsCollection);
+    this.items.subscribe(data => {
+      let squares = data[0]['squares']
+      for (let col = 0; col < 5; col++) {
+        let colSqs: string[] = [];
+        colSqs[0] = squares[0];
+        colSqs[1] = squares[1];
+        colSqs[2] = squares[2];
+        colSqs[3] = squares[3];
+        colSqs[4] = squares[4];
+        const column: BingoCell[] = colSqs.map(sq => ({square: sq, marked: false }));
+        this.board.push(column);
+      }
+    });
   }
 
   toggleMark(cell: BingoCell): void {
