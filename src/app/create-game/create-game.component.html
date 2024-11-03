@@ -1,0 +1,11 @@
+<h2>Create a New Game</h2>
+<form [formGroup]="gameForm" (ngSubmit)="saveGame()">
+  <div formArrayName="squares" class="squares-container">
+    <div *ngFor="let square of squares.controls; let i = index">
+      <label>Square {{ i + 1 }}:
+        <input [formControlName]="i" placeholder="Enter text" required />
+      </label>
+    </div>
+  </div>
+  <button type="submit" [disabled]="!gameForm.valid">Save Game</button>
+</form>
