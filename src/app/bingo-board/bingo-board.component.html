@@ -1,5 +1,6 @@
+<div *ngIf="!squares.length">Loading squares...</div>
 <div class="bingo-board">
-    <table>
+    <table *ngIf="squares.length > 0">
       <tbody>
         <tr *ngFor="let row of [0, 1, 2, 3, 4]">
           <td *ngFor="let col of [0, 1, 2, 3, 4]"

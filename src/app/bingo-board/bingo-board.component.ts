@@ -17,6 +17,7 @@ interface BingoCell {
 })
 export class BingoBoardComponent implements OnInit {
   board: BingoCell[][] = [];
+  squares: string[] =[]
   items!: Observable<any[]>;
 
   constructor(private firestore: Firestore) {}
@@ -29,14 +30,14 @@ export class BingoBoardComponent implements OnInit {
     const bingoStringsCollection = collection(this.firestore, 'TestGame');
     this.items = collectionData(bingoStringsCollection);
     this.items.subscribe(data => {
-      let squares = data[0]['squares']
+      this.squares = data.length > 0 ? data[0]['squares'] : [];
       for (let col = 0; col < 5; col++) {
         let colSqs: string[] = [];
-        colSqs[0] = squares[0];
-        colSqs[1] = squares[1];
-        colSqs[2] = squares[2];
-        colSqs[3] = squares[3];
-        colSqs[4] = squares[4];
+        colSqs[0] = this.squares[0];
+        colSqs[1] = this.squares[1];
+        colSqs[2] = this.squares[2];
+        colSqs[3] = this.squares[3];
+        colSqs[4] = this.squares[4];
         const column: BingoCell[] = colSqs.map(sq => ({square: sq, marked: false }));
         this.board.push(column);
       }
