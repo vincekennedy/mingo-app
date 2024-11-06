@@ -1,16 +1,16 @@
-<div *ngIf="!squares.length">Loading squares...</div>
-<div class="bingo-board">
-    <table *ngIf="squares.length > 0">
-      <tbody>
-        <tr *ngFor="let row of [0, 1, 2, 3, 4]">
-          <td *ngFor="let col of [0, 1, 2, 3, 4]"
-              (click)="toggleMark(board[col][row])"
-              [class.marked]="board[col][row].marked"
-              [class.free-space]="col === 2 && row === 2">
-            {{ board[col][row].square !== '' ? board[col][row].square : 'FREE' }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+<div *ngIf="gameData">
+  <h2>Game Board</h2>
+  <div class="grid-container">
+    <div
+      *ngFor="let square of gameData.squares; let i = index"
+      class="grid-item"
+      [ngClass]="{ 'selected': square.selected }"
+      (click)="toggleSelection(i)"
+    >
+      {{ square.value }}
+    </div>
   </div>
-  
+</div>
+<div *ngIf="!gameData">
+  <p>Loading game data...</p>
+</div>

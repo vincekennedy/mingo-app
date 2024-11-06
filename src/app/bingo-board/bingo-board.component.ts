@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Firestore, collectionData, collection } from '@angular/fire/firestore';
+import { Firestore, collectionData, collection, doc, getDoc } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
 interface BingoCell {
@@ -16,63 +16,37 @@ interface BingoCell {
   styleUrls: ['./bingo-board.component.css']
 })
 export class BingoBoardComponent implements OnInit {
-  board: BingoCell[][] = [];
-  squares: string[] =[]
-  items!: Observable<any[]>;
+  gameData: any;
 
   constructor(private firestore: Firestore) {}
 
   ngOnInit(): void {
-    this.fetchBingoStrings();
+    this.fetchGameById('9X30');
   }
 
-  fetchBingoStrings(): void {
-    const bingoStringsCollection = collection(this.firestore, 'TestGame');
-    this.items = collectionData(bingoStringsCollection);
-    this.items.subscribe(data => {
-      this.squares = data.length > 0 ? data[0]['squares'] : [];
-      for (let col = 0; col < 5; col++) {
-        let colSqs: string[] = [];
-        colSqs[0] = this.squares[0];
-        colSqs[1] = this.squares[1];
-        colSqs[2] = this.squares[2];
-        colSqs[3] = this.squares[3];
-        colSqs[4] = this.squares[4];
-        const column: BingoCell[] = colSqs.map(sq => ({square: sq, marked: false }));
-        this.board.push(column);
+  async fetchGameById(gameCode: string): Promise<void> {
+    try {
+      const gameRef = doc(this.firestore, 'games', '9X3O');
+      const gameSnap = await getDoc(gameRef);
+
+      if (gameSnap.exists()) {
+        this.gameData = {
+          squares: Array(25).fill(null).map((_, i) => ({
+            value: gameSnap.data()['squares'][i], // Replace with actual value
+            selected: false
+          }))
+        };
+      } else {
+        console.log('No such game found!');
       }
-    });
-  }
-
-  toggleMark(cell: BingoCell): void {
-    cell.marked = !cell.marked;
-
-    if (this.checkForBingo()) {
-      alert("Bingo! You've got BINGO!");
-      // Optionally, add logic here to reset the board or end the game
+    } catch (error) {
+      console.error('Error fetching game:', error);
     }
   }
 
-  checkForBingo(): boolean {
-    // Check rows
-    for (let row = 0; row < 5; row++) {
-      if (this.board.every((col) => col[row].marked)) {
-        return true;
-      }
-    }
-  
-    // Check columns
-    for (let col = 0; col < 5; col++) {
-      if (this.board[col].every((cell) => cell.marked)) {
-        return true;
-      }
-    }
-  
-    // Check diagonals
-    const leftDiagonal = [0, 1, 2, 3, 4].every((i) => this.board[i][i].marked);
-    const rightDiagonal = [0, 1, 2, 3, 4].every((i) => this.board[i][4 - i].marked);
-  
-    return leftDiagonal || rightDiagonal;
+  toggleSelection(index: number): void {
+    console.log('toggle', index);
+    this.gameData.squares[index].selected = !this.gameData.squares[index].selected;
   }
 
 }

@@ -1,23 +1,24 @@
-.bingo-board table {
-    width: 100%;
-    border-collapse: collapse;
-    text-align: center;
-  }
-  
-  .bingo-board td {
-    width: 20%;
-    height: 80px;
-    border: 1px solid #000;
-    font-size: 24px;
-    font-weight: bold;
-  }
-  
-  .bingo-board .marked {
-    background-color: #66bb6a; /* Green background for marked cells */
-    color: #fff;
-  }
-  
-  .bingo-board .free-space {
-    background-color: #ddd;
-    color: #666;
-  }
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  max-width: 400px;
+  margin: 0 auto; /* Center the grid */
+}
+
+.grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f2f2f2; /* Light gray background */
+  border: 1px solid #ddd;
+  height: 70px; /* Adjust height to ensure a square appearance */
+  font-size: 16px; /* Adjust font size as desired */
+  font-weight: bold;
+  color: #333; /* Text color */
+}
+
+.grid-item.selected {
+  background-color: #4CAF50; /* Green for selected */
+  color: #fff; /* White text for selected */
+}
