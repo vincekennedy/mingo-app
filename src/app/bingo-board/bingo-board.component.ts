@@ -30,9 +30,11 @@ export class BingoBoardComponent implements OnInit {
       const gameSnap = await getDoc(gameRef);
 
       if (gameSnap.exists()) {
+        const shuffled = this.shuffleArray(gameSnap.data()['squares']);
+        console.log(shuffled);
         this.gameData = {
           squares: Array(25).fill(null).map((_, i) => ({
-            value: gameSnap.data()['squares'][i], // Replace with actual value
+            value: shuffled[i],
             selected: false
           }))
         };
@@ -42,6 +44,14 @@ export class BingoBoardComponent implements OnInit {
     } catch (error) {
       console.error('Error fetching game:', error);
     }
+  }
+
+  shuffleArray(array: any[]): any[] {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]]; // Swap elements
+    }
+    return array;
   }
 
   toggleSelection(index: number): void {
