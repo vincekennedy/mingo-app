@@ -17,6 +17,7 @@ interface BingoCell {
 })
 export class BingoBoardComponent implements OnInit {
   gameData: any;
+  hasBingo: boolean = false;
 
   constructor(private firestore: Firestore) {}
 
@@ -57,6 +58,38 @@ export class BingoBoardComponent implements OnInit {
   toggleSelection(index: number): void {
     console.log('toggle', index);
     this.gameData.squares[index].selected = !this.gameData.squares[index].selected;
+    this.hasBingo = this.checkBingo();
   }
+
+  checkBingo(): boolean {
+    const size = 5; // Assuming a 5x5 grid
+  
+    // Check rows for bingo
+    for (let row = 0; row < size; row++) {
+      if (this.gameData.squares.slice(row * size, (row + 1) * size).every((square: any) => square.selected)) {
+        return true;
+      }
+    }
+  
+    // Check columns for bingo
+    for (let col = 0; col < size; col++) {
+      if (Array.from({ length: size }).every((_, row) => this.gameData.squares[row * size + col].selected)) {
+        return true;
+      }
+    }
+  
+    // Check first diagonal for bingo
+    if (Array.from({ length: size }).every((_, i) => this.gameData.squares[i * (size + 1)].selected)) {
+      return true;
+    }
+  
+    // Check second diagonal for bingo
+    if (Array.from({ length: size }).every((_, i) => this.gameData.squares[(i + 1) * (size - 1)].selected)) {
+      return true;
+    }
+  
+    return false;
+  }
+
 
 }
