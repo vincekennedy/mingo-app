@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Firestore, collectionData, collection, doc, getDoc } from '@angular/fire/firestore';
-import { Observable } from 'rxjs';
+import { Firestore, doc, getDoc } from '@angular/fire/firestore';
+import { ActivatedRoute } from '@angular/router';
+
 
 interface BingoCell {
   square: string;
@@ -19,15 +20,22 @@ export class BingoBoardComponent implements OnInit {
   gameData: any;
   hasBingo: boolean = false;
 
-  constructor(private firestore: Firestore) {}
+  constructor(private firestore: Firestore,
+              private route: ActivatedRoute) {}
 
   ngOnInit(): void {
-    this.fetchGameById('9X30');
+    this.route.queryParams.subscribe(params => {
+      const gameCode = params['code'];
+      console.log('GameCode: ', gameCode);
+      if (gameCode) {
+        this.fetchGameById(gameCode);
+      }
+    });
   }
 
   async fetchGameById(gameCode: string): Promise<void> {
     try {
-      const gameRef = doc(this.firestore, 'games', '9X3O');
+      const gameRef = doc(this.firestore, 'games', gameCode);
       const gameSnap = await getDoc(gameRef);
 
       if (gameSnap.exists()) {
