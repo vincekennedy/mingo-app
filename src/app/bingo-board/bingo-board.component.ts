@@ -19,18 +19,22 @@ interface BingoCell {
 export class BingoBoardComponent implements OnInit {
   gameData: any;
   hasBingo: boolean = false;
+  gameCode: string | null = null;
 
   constructor(private firestore: Firestore,
               private route: ActivatedRoute) {}
 
   ngOnInit(): void {
-    this.route.queryParams.subscribe(params => {
-      const gameCode = params['code'];
-      console.log('GameCode: ', gameCode);
-      if (gameCode) {
-        this.fetchGameById(gameCode);
-      }
-    });
+    this.gameCode = this.route.snapshot.paramMap.get('gameCode');
+    console.log('Game Code: ', this.gameCode);
+
+    if (this.gameCode) {
+      // Fetch the game data based on gameCode from Firebase or another service
+      console.log(`Fetching game with code: ${this.gameCode}`);
+      this.fetchGameById(this.gameCode);
+    } else {
+      console.error('No game code provided!');
+    }
   }
 
   async fetchGameById(gameCode: string): Promise<void> {

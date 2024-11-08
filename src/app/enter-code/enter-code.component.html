@@ -1,0 +1,12 @@
+<h2>Enter Game Code</h2>
+<form (ngSubmit)="onSubmit()">
+  <label for="gameCode">Game Code:</label>
+  <input
+    type="text"
+    id="gameCode"
+    [(ngModel)]="gameCode"
+    name="gameCode"
+    required
+  />
+  <button type="submit">Enter Game</button>
+</form>

@@ -1,5 +1,5 @@
 <div *ngIf="gameData">
-  <h2>Game Board</h2>
+  <h2>Game Board for Code: {{ gameCode }}</h2>
   <div class="grid-container">
     <div
       *ngFor="let square of gameData.squares; let i = index"
