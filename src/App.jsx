@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export default function Mingo() {
@@ -15,7 +15,12 @@ export default function Mingo() {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
+  const [isHost, setIsHost] = useState(false);
+  const [pendingWinClaim, setPendingWinClaim] = useState(null);
+  const [winConfirmed, setWinConfirmed] = useState(false);
+  const [winRejected, setWinRejected] = useState(false);
   const confettiIntervalRef = useRef(null);
+  const pollIntervalRef = useRef(null);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -77,12 +82,39 @@ export default function Mingo() {
 
     setGameCode(code);
     setGameConfig(config);
+    setIsHost(true);
     
-    // Store in persistent storage
+    // Store in persistent storage (try window.storage, fallback to localStorage)
     try {
-      await window.storage.set(`game:${code}`, JSON.stringify(config), true);
+      const configString = JSON.stringify(config);
+      
+      // Try window.storage first (if available)
+      if (window.storage && typeof window.storage.set === 'function') {
+        try {
+          await window.storage.set(`game:${code}`, configString, true);
+          await window.storage.set(`win:${code}`, JSON.stringify({ status: null, claim: null }), true);
+        } catch (e) {
+          console.warn('window.storage not available, using localStorage');
+          // Fallback to localStorage
+          localStorage.setItem(`game:${code}`, configString);
+          localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
+        }
+      } else {
+        // Use localStorage directly
+        localStorage.setItem(`game:${code}`, configString);
+        localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
+      }
     } catch (error) {
       console.error('Storage error:', error);
+      // Try localStorage as fallback
+      try {
+        localStorage.setItem(`game:${code}`, JSON.stringify(config));
+        localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
+      } catch (localError) {
+        console.error('localStorage error:', localError);
+        alert('Could not save game. Please try again.');
+        return;
+      }
     }
 
     setScreen('host');
@@ -96,20 +128,37 @@ export default function Mingo() {
     }
 
     try {
-      const result = await window.storage.get(`game:${code}`, true);
-      if (!result) {
+      const gameData = await getStorage(`game:${code}`);
+
+      if (!gameData) {
         alert('Game not found. Please check the code and try again.');
         return;
       }
 
-      const config = JSON.parse(result.value);
+      const config = JSON.parse(gameData);
+      if (!config.items || !Array.isArray(config.items) || config.items.length === 0) {
+        alert('Invalid game configuration. Please check the code and try again.');
+        return;
+      }
+
+      // Reset player state
+      setPendingWinClaim(null);
+      setWinConfirmed(false);
+      setWinRejected(false);
+      setHasWon(false);
+      setMarked(new Set());
+      
       setGameConfig(config);
       setGameCode(code);
-      setBoardSize(config.boardSize);
-      setUseFreeSpace(config.useFreeSpace);
+      setBoardSize(config.boardSize || 5);
+      setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      setIsHost(false);
+      
+      // Generate unique board for this player
       generateBoardFromConfig(config);
     } catch (error) {
-      alert('Game not found. Please check the code and try again.');
+      console.error('Error joining game:', error);
+      alert(`Error joining game: ${error.message}. Please check the code and try again.`);
     }
   };
 
@@ -118,8 +167,25 @@ export default function Mingo() {
     const totalCells = size * size;
     const neededItems = freeSpace ? totalCells - 1 : totalCells;
 
-    const shuffled = [...validItems].sort(() => Math.random() - 0.5);
+    // Better shuffle algorithm (Fisher-Yates)
+    const shuffled = [...validItems];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    
+    // Select items for this board
     const selected = shuffled.slice(0, neededItems);
+    
+    // Randomize the board positions
+    const positions = [];
+    for (let i = 0; i < selected.length; i++) {
+      positions.push(i);
+    }
+    for (let i = positions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
     
     const newBoard = [];
     const centerIndex = Math.floor(totalCells / 2);
@@ -129,7 +195,7 @@ export default function Mingo() {
       if (freeSpace && i === centerIndex) {
         newBoard.push({ text: 'FREE', isFree: true });
       } else {
-        newBoard.push({ text: selected[itemIndex], isFree: false });
+        newBoard.push({ text: selected[positions[itemIndex]], isFree: false });
         itemIndex++;
       }
     }
@@ -146,8 +212,84 @@ export default function Mingo() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const setStorage = async (key, value) => {
+    try {
+      if (window.storage && typeof window.storage.set === 'function') {
+        await window.storage.set(key, typeof value === 'string' ? value : JSON.stringify(value), true);
+      } else {
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      }
+    } catch (error) {
+      console.error('Storage set error:', error);
+      // Fallback to localStorage
+      try {
+        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+      } catch (e) {
+        console.error('localStorage set error:', e);
+      }
+    }
+  };
+
+  const getStorage = async (key) => {
+    try {
+      if (window.storage && typeof window.storage.get === 'function') {
+        const result = await window.storage.get(key, true);
+        return result?.value || localStorage.getItem(key);
+      } else {
+        return localStorage.getItem(key);
+      }
+    } catch (error) {
+      console.error('Storage get error:', error);
+      return localStorage.getItem(key);
+    }
+  };
+
+  const confirmWin = async () => {
+    try {
+      const claim = {
+        ...pendingWinClaim,
+        status: 'confirmed',
+        confirmedAt: Date.now()
+      };
+      await setStorage(`win:${gameCode}`, JSON.stringify(claim));
+      setPendingWinClaim(null);
+      // Reset claim after a delay to allow player to see confirmation
+      setTimeout(async () => {
+        try {
+          await setStorage(`win:${gameCode}`, JSON.stringify({ status: null, claim: null }));
+        } catch (error) {
+          console.error('Error resetting win claim:', error);
+        }
+      }, 5000);
+    } catch (error) {
+      console.error('Error confirming win:', error);
+    }
+  };
+
+  const rejectWin = async () => {
+    try {
+      const claim = {
+        ...pendingWinClaim,
+        status: 'rejected',
+        rejectedAt: Date.now()
+      };
+      await setStorage(`win:${gameCode}`, JSON.stringify(claim));
+      setPendingWinClaim(null);
+      // Reset claim after a delay to allow player to see rejection
+      setTimeout(async () => {
+        try {
+          await setStorage(`win:${gameCode}`, JSON.stringify({ status: null, claim: null }));
+        } catch (error) {
+          console.error('Error resetting win claim:', error);
+        }
+      }, 5000);
+    } catch (error) {
+      console.error('Error rejecting win:', error);
+    }
+  };
+
   const toggleCell = (index) => {
-    if (board[index].isFree || hasWon) return;
+    if (board[index].isFree || hasWon || pendingWinClaim || winRejected) return;
     
     const newMarked = new Set(marked);
     if (newMarked.has(index)) {
@@ -159,51 +301,176 @@ export default function Mingo() {
   };
 
   const checkWin = () => {
+    // Check rows
     for (let row = 0; row < boardSize; row++) {
       let win = true;
+      const winIndices = [];
       for (let col = 0; col < boardSize; col++) {
-        if (!marked.has(row * boardSize + col)) {
+        const index = row * boardSize + col;
+        if (!marked.has(index)) {
           win = false;
           break;
         }
+        winIndices.push(index);
       }
-      if (win) return true;
+      if (win) {
+        const winItems = winIndices.map(idx => board[idx].text);
+        return { type: 'row', row, indices: winIndices, items: winItems };
+      }
     }
 
+    // Check columns
     for (let col = 0; col < boardSize; col++) {
       let win = true;
+      const winIndices = [];
       for (let row = 0; row < boardSize; row++) {
-        if (!marked.has(row * boardSize + col)) {
+        const index = row * boardSize + col;
+        if (!marked.has(index)) {
           win = false;
           break;
         }
+        winIndices.push(index);
       }
-      if (win) return true;
+      if (win) {
+        const winItems = winIndices.map(idx => board[idx].text);
+        return { type: 'column', column: col, indices: winIndices, items: winItems };
+      }
     }
 
+    // Check diagonal 1 (top-left to bottom-right)
     let diagonal1 = true;
-    let diagonal2 = true;
+    const diag1Indices = [];
     for (let i = 0; i < boardSize; i++) {
-      if (!marked.has(i * boardSize + i)) diagonal1 = false;
-      if (!marked.has(i * boardSize + (boardSize - 1 - i))) diagonal2 = false;
+      const index = i * boardSize + i;
+      if (!marked.has(index)) {
+        diagonal1 = false;
+        break;
+      }
+      diag1Indices.push(index);
+    }
+    if (diagonal1) {
+      const winItems = diag1Indices.map(idx => board[idx].text);
+      return { type: 'diagonal', diagonal: 1, indices: diag1Indices, items: winItems };
     }
 
-    return diagonal1 || diagonal2;
+    // Check diagonal 2 (top-right to bottom-left)
+    let diagonal2 = true;
+    const diag2Indices = [];
+    for (let i = 0; i < boardSize; i++) {
+      const index = i * boardSize + (boardSize - 1 - i);
+      if (!marked.has(index)) {
+        diagonal2 = false;
+        break;
+      }
+      diag2Indices.push(index);
+    }
+    if (diagonal2) {
+      const winItems = diag2Indices.map(idx => board[idx].text);
+      return { type: 'diagonal', diagonal: 2, indices: diag2Indices, items: winItems };
+    }
+
+    return null;
   };
 
   // Check for win condition
   useEffect(() => {
-    if (screen === 'play' && !hasWon) {
-      if (checkWin()) {
+    if (screen === 'play' && !hasWon && !pendingWinClaim && !winConfirmed && !winRejected && board.length > 0 && boardSize > 0) {
+      const winResult = checkWin();
+      if (winResult && !isHost) {
+        // Player won - store claim for host verification
+        const storeWinClaim = async () => {
+          try {
+            const claim = {
+              status: 'pending',
+              type: winResult.type,
+              items: winResult.items,
+              indices: winResult.indices,
+              timestamp: Date.now()
+            };
+            await setStorage(`win:${gameCode}`, JSON.stringify(claim));
+            setPendingWinClaim(claim);
+          } catch (error) {
+            console.error('Error storing win claim:', error);
+          }
+        };
+        storeWinClaim();
+      } else if (winResult && isHost) {
+        // Host won - auto-confirm for host (no verification needed)
         setHasWon(true);
+        setWinConfirmed(true);
       }
     }
-  }, [marked, screen, hasWon]);
+  }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
 
-  // Trigger confetti when someone wins
+  // Poll for win claims (host) or confirmation status (player)
   useEffect(() => {
-    if (hasWon && screen === 'play') {
-      // Trigger confetti animation when win is detected
+    if (gameCode && isHost && (screen === 'host' || screen === 'play')) {
+      // Host polls for win claims (even when playing)
+      const checkWinClaims = async () => {
+        try {
+          const result = await getStorage(`win:${gameCode}`);
+          if (result) {
+            const claim = JSON.parse(result);
+            if (claim && claim.status === 'pending' && (!pendingWinClaim || pendingWinClaim.timestamp !== claim.timestamp)) {
+              setPendingWinClaim(claim);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking win claims:', error);
+        }
+      };
+
+      checkWinClaims();
+      pollIntervalRef.current = setInterval(checkWinClaims, 1000);
+
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
+    } else if (gameCode && screen === 'play' && !isHost && pendingWinClaim) {
+      // Player polls for confirmation/rejection
+      const checkConfirmation = async () => {
+        try {
+          const result = await getStorage(`win:${gameCode}`);
+          if (result) {
+            const claim = JSON.parse(result);
+            if (claim && claim.status === 'confirmed' && !winConfirmed) {
+              setWinConfirmed(true);
+              setHasWon(true);
+              setPendingWinClaim(null);
+            } else if (claim && claim.status === 'rejected' && !winRejected) {
+              setWinRejected(true);
+              setPendingWinClaim(null);
+              setHasWon(false);
+              // Reset after rejection - allow player to try again
+              setTimeout(() => {
+                setWinRejected(false);
+              }, 4000);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking confirmation:', error);
+        }
+      };
+
+      checkConfirmation();
+      pollIntervalRef.current = setInterval(checkConfirmation, 1000);
+
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      };
+    }
+  }, [gameCode, screen, isHost, pendingWinClaim, winConfirmed, winRejected]);
+
+  // Trigger confetti when win is confirmed
+  useEffect(() => {
+    if (hasWon && winConfirmed && screen === 'play' && !isHost) {
+      // Trigger confetti animation when win is confirmed by host
       const duration = 3000;
       const animationEnd = Date.now() + duration;
 
@@ -270,7 +537,7 @@ export default function Mingo() {
         }
       };
     }
-  }, [hasWon, screen]);
+  }, [hasWon, winConfirmed, screen, isHost]);
 
   const resetToHome = () => {
     setScreen('home');
@@ -283,6 +550,14 @@ export default function Mingo() {
     setGameCode('');
     setJoinCode('');
     setGameConfig(null);
+    setIsHost(false);
+    setPendingWinClaim(null);
+    setWinConfirmed(false);
+    setWinRejected(false);
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
   };
 
   return (
@@ -417,44 +692,136 @@ export default function Mingo() {
         )}
 
         {screen === 'host' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 text-center space-y-4 sm:space-y-6">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
-              <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
-            </div>
+          <div className="space-y-4 sm:space-y-6">
+            {/* Win Verification Modal */}
+            {pendingWinClaim && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
+                      <AlertCircle className="text-yellow-500" size={32} />
+                      Bingo Win Claim!
+                    </h2>
+                  </div>
+                  
+                  <div className="mb-6">
+                    <p className="text-gray-600 mb-4">A player has claimed a bingo win. Please verify the selected items:</p>
+                    
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                      <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
+                      <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {pendingWinClaim.items?.map((item, idx) => (
+                          <div key={idx} className="bg-white border-2 border-purple-300 rounded-lg p-2 text-sm font-semibold text-gray-800">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 sm:p-6 rounded-xl">
-              <div className="text-3xl sm:text-5xl font-bold font-mono text-purple-600 mb-3 sm:mb-4 tracking-wider">
-                {gameCode}
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <button
+                      onClick={rejectWin}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
+                    >
+                      <X size={20} /> Reject
+                    </button>
+                    <button
+                      onClick={confirmWin}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition shadow-lg"
+                    >
+                      <Check size={20} /> Confirm Win
+                    </button>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={copyCode}
-                className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm sm:text-base"
-              >
-                {copied ? <Check size={18} className="sm:w-5 sm:h-5" /> : <Copy size={18} className="sm:w-5 sm:h-5" />}
-                {copied ? 'Copied!' : 'Copy Code'}
-              </button>
-            </div>
+            )}
 
-            <div className="space-y-3">
-              <button
-                onClick={() => generateBoardFromConfig(gameConfig)}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
-              >
-                <Play size={20} className="sm:w-6 sm:h-6" /> Start Playing
-              </button>
-              <button
-                onClick={resetToHome}
-                className="w-full px-6 py-2 sm:py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-              >
-                Back to Home
-              </button>
+            <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 text-center space-y-4 sm:space-y-6">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
+                <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
+              </div>
+
+              <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 sm:p-6 rounded-xl">
+                <div className="text-3xl sm:text-5xl font-bold font-mono text-purple-600 mb-3 sm:mb-4 tracking-wider">
+                  {gameCode}
+                </div>
+                <button
+                  onClick={copyCode}
+                  className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm sm:text-base"
+                >
+                  {copied ? <Check size={18} className="sm:w-5 sm:h-5" /> : <Copy size={18} className="sm:w-5 sm:h-5" />}
+                  {copied ? 'Copied!' : 'Copy Code'}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  onClick={() => generateBoardFromConfig(gameConfig)}
+                  className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+                >
+                  <Play size={20} className="sm:w-6 sm:h-6" /> Start Playing
+                </button>
+                <button
+                  onClick={resetToHome}
+                  className="w-full px-6 py-2 sm:py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+                >
+                  Back to Home
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {screen === 'play' && (
           <div className="space-y-4 sm:space-y-6">
+            {/* Win Verification Modal for Host */}
+            {isHost && pendingWinClaim && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
+                      <AlertCircle className="text-yellow-500" size={32} />
+                      Bingo Win Claim!
+                    </h2>
+                  </div>
+                  
+                  <div className="mb-6">
+                    <p className="text-gray-600 mb-4">A player has claimed a bingo win. Please verify the selected items:</p>
+                    
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
+                      <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
+                      <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {pendingWinClaim.items?.map((item, idx) => (
+                          <div key={idx} className="bg-white border-2 border-purple-300 rounded-lg p-2 text-sm font-semibold text-gray-800">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <button
+                      onClick={rejectWin}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
+                    >
+                      <X size={20} /> Reject
+                    </button>
+                    <button
+                      onClick={confirmWin}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition shadow-lg"
+                    >
+                      <Check size={20} /> Confirm Win
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {gameCode && (
               <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 text-center">
                 <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
@@ -462,11 +829,29 @@ export default function Mingo() {
               </div>
             )}
 
-            {hasWon && (
+            {pendingWinClaim && !winConfirmed && !winRejected && (
+              <div className="bg-yellow-400 text-gray-900 p-4 sm:p-6 rounded-2xl text-center shadow-2xl animate-pulse">
+                <AlertCircle size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
+                <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
+                <p className="text-base sm:text-lg mt-2">Waiting for host verification...</p>
+                <p className="text-sm mt-1 opacity-75">Your win claim has been submitted. Please wait.</p>
+              </div>
+            )}
+
+            {winRejected && (
+              <div className="bg-red-400 text-white p-4 sm:p-6 rounded-2xl text-center shadow-2xl">
+                <X size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
+                <h2 className="text-2xl sm:text-3xl font-bold">Win Rejected</h2>
+                <p className="text-base sm:text-lg mt-2">Your win claim was not verified by the host.</p>
+                <p className="text-sm mt-1 opacity-75">Please continue playing.</p>
+              </div>
+            )}
+
+            {hasWon && winConfirmed && (
               <div className="bg-yellow-400 text-gray-900 p-4 sm:p-6 rounded-2xl text-center shadow-2xl animate-pulse">
                 <Trophy size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
                 <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
-                <p className="text-base sm:text-lg">You won!</p>
+                <p className="text-base sm:text-lg">You won! Win confirmed!</p>
               </div>
             )}
 
