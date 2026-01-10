@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 export default function Mingo() {
   const [screen, setScreen] = useState('home'); // home, setup, host, play
@@ -14,6 +15,7 @@ export default function Mingo() {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
+  const confettiIntervalRef = useRef(null);
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -189,13 +191,86 @@ export default function Mingo() {
     return diagonal1 || diagonal2;
   };
 
+  // Check for win condition
   useEffect(() => {
     if (screen === 'play' && !hasWon) {
       if (checkWin()) {
         setHasWon(true);
       }
     }
-  }, [marked]);
+  }, [marked, screen, hasWon]);
+
+  // Trigger confetti when someone wins
+  useEffect(() => {
+    if (hasWon && screen === 'play') {
+      // Trigger confetti animation when win is detected
+      const duration = 3000;
+      const animationEnd = Date.now() + duration;
+
+      function randomInRange(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      // Initial confetti burst from center
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      // Continuous confetti for duration
+      confettiIntervalRef.current = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          if (confettiIntervalRef.current) {
+            clearInterval(confettiIntervalRef.current);
+            confettiIntervalRef.current = null;
+          }
+          return;
+        }
+
+        const particleCount = Math.floor(50 * (timeLeft / duration));
+        
+        // Launch confetti from different positions
+        confetti({
+          startVelocity: 30,
+          spread: 360,
+          ticks: 60,
+          zIndex: 0,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+        });
+        confetti({
+          startVelocity: 30,
+          spread: 360,
+          ticks: 60,
+          zIndex: 0,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+        });
+      }, 250);
+
+      // Cleanup interval after duration
+      const timeoutId = setTimeout(() => {
+        if (confettiIntervalRef.current) {
+          clearInterval(confettiIntervalRef.current);
+          confettiIntervalRef.current = null;
+        }
+      }, duration);
+
+      // Cleanup on unmount or when dependencies change
+      return () => {
+        if (confettiIntervalRef.current) {
+          clearInterval(confettiIntervalRef.current);
+          confettiIntervalRef.current = null;
+        }
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+    }
+  }, [hasWon, screen]);
 
   const resetToHome = () => {
     setScreen('home');
