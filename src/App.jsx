@@ -19,6 +19,7 @@ export default function Mingo() {
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
   const [winRejected, setWinRejected] = useState(false);
+  const [selectedIncorrectItems, setSelectedIncorrectItems] = useState(new Set());
   const confettiIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
@@ -253,6 +254,7 @@ export default function Mingo() {
       };
       await setStorage(`win:${gameCode}`, JSON.stringify(claim));
       setPendingWinClaim(null);
+      setSelectedIncorrectItems(new Set()); // Reset selection
       // Reset claim after a delay to allow player to see confirmation
       setTimeout(async () => {
         try {
@@ -268,24 +270,46 @@ export default function Mingo() {
 
   const rejectWin = async () => {
     try {
+      // Convert selected incorrect items Set to Array
+      const incorrectIndices = Array.from(selectedIncorrectItems);
+      
+      // Map item indices to board indices
+      const incorrectBoardIndices = incorrectIndices.map(itemIdx => {
+        // pendingWinClaim.indices contains the board indices for each item in the win claim
+        return pendingWinClaim.indices[itemIdx];
+      });
+
       const claim = {
         ...pendingWinClaim,
         status: 'rejected',
-        rejectedAt: Date.now()
+        rejectedAt: Date.now(),
+        incorrectIndices: incorrectBoardIndices // Store board indices to unselect
       };
       await setStorage(`win:${gameCode}`, JSON.stringify(claim));
       setPendingWinClaim(null);
-      // Reset claim after a delay to allow player to see rejection
+      setSelectedIncorrectItems(new Set()); // Reset selection
+      
+      // Reset claim after a delay to allow player to see rejection and unselect items
       setTimeout(async () => {
         try {
           await setStorage(`win:${gameCode}`, JSON.stringify({ status: null, claim: null }));
         } catch (error) {
           console.error('Error resetting win claim:', error);
         }
-      }, 5000);
+      }, 8000); // Increased delay to allow time for item unselection
     } catch (error) {
       console.error('Error rejecting win:', error);
     }
+  };
+
+  const toggleIncorrectItem = (itemIndex) => {
+    const newSelected = new Set(selectedIncorrectItems);
+    if (newSelected.has(itemIndex)) {
+      newSelected.delete(itemIndex);
+    } else {
+      newSelected.add(itemIndex);
+    }
+    setSelectedIncorrectItems(newSelected);
   };
 
   const toggleCell = (index) => {
@@ -413,6 +437,7 @@ export default function Mingo() {
             const claim = JSON.parse(result);
             if (claim && claim.status === 'pending' && (!pendingWinClaim || pendingWinClaim.timestamp !== claim.timestamp)) {
               setPendingWinClaim(claim);
+              setSelectedIncorrectItems(new Set()); // Reset selection for new claim
             }
           }
         } catch (error) {
@@ -441,10 +466,22 @@ export default function Mingo() {
               setHasWon(true);
               setPendingWinClaim(null);
             } else if (claim && claim.status === 'rejected' && !winRejected) {
+              // Unselect incorrect items from player's board
+              if (claim.incorrectIndices && Array.isArray(claim.incorrectIndices) && claim.incorrectIndices.length > 0) {
+                setMarked(prevMarked => {
+                  const newMarked = new Set(prevMarked);
+                  claim.incorrectIndices.forEach(boardIndex => {
+                    newMarked.delete(boardIndex);
+                  });
+                  return newMarked;
+                });
+              }
+              
               setWinRejected(true);
               setPendingWinClaim(null);
               setHasWon(false);
-              // Reset after rejection - allow player to try again
+              
+              // Clear notification and reset after rejection - allow player to try again
               setTimeout(() => {
                 setWinRejected(false);
               }, 4000);
@@ -554,6 +591,7 @@ export default function Mingo() {
     setPendingWinClaim(null);
     setWinConfirmed(false);
     setWinRejected(false);
+    setSelectedIncorrectItems(new Set());
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -710,22 +748,48 @@ export default function Mingo() {
                     <div className="bg-gray-50 rounded-lg p-4 mb-4">
                       <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
                       <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
+                      <p className="text-sm text-gray-600 mb-3">Select the incorrect items (if any) to reject:</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {pendingWinClaim.items?.map((item, idx) => (
-                          <div key={idx} className="bg-white border-2 border-purple-300 rounded-lg p-2 text-sm font-semibold text-gray-800">
-                            {item}
-                          </div>
+                          <label
+                            key={idx}
+                            className={`bg-white border-2 rounded-lg p-2 text-sm font-semibold cursor-pointer transition-all ${
+                              selectedIncorrectItems.has(idx)
+                                ? 'border-red-500 bg-red-50 text-red-900'
+                                : 'border-purple-300 text-gray-800 hover:border-purple-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIncorrectItems.has(idx)}
+                                onChange={() => toggleIncorrectItem(idx)}
+                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                              />
+                              <span>{item}</span>
+                            </div>
+                          </label>
                         ))}
                       </div>
+                      {selectedIncorrectItems.size > 0 && (
+                        <p className="text-sm text-red-600 mt-2 font-semibold">
+                          {selectedIncorrectItems.size} item(s) marked as incorrect
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <button
                       onClick={rejectWin}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
+                      disabled={selectedIncorrectItems.size === 0}
+                      className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition shadow-lg ${
+                        selectedIncorrectItems.size === 0
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-red-500 hover:bg-red-600'
+                      }`}
                     >
-                      <X size={20} /> Reject
+                      <X size={20} /> Reject {selectedIncorrectItems.size > 0 && `(${selectedIncorrectItems.size} incorrect)`}
                     </button>
                     <button
                       onClick={confirmWin}
@@ -794,22 +858,48 @@ export default function Mingo() {
                     <div className="bg-gray-50 rounded-lg p-4 mb-4">
                       <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
                       <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
+                      <p className="text-sm text-gray-600 mb-3">Select the incorrect items (if any) to reject:</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {pendingWinClaim.items?.map((item, idx) => (
-                          <div key={idx} className="bg-white border-2 border-purple-300 rounded-lg p-2 text-sm font-semibold text-gray-800">
-                            {item}
-                          </div>
+                          <label
+                            key={idx}
+                            className={`bg-white border-2 rounded-lg p-2 text-sm font-semibold cursor-pointer transition-all ${
+                              selectedIncorrectItems.has(idx)
+                                ? 'border-red-500 bg-red-50 text-red-900'
+                                : 'border-purple-300 text-gray-800 hover:border-purple-500'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedIncorrectItems.has(idx)}
+                                onChange={() => toggleIncorrectItem(idx)}
+                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                              />
+                              <span>{item}</span>
+                            </div>
+                          </label>
                         ))}
                       </div>
+                      {selectedIncorrectItems.size > 0 && (
+                        <p className="text-sm text-red-600 mt-2 font-semibold">
+                          {selectedIncorrectItems.size} item(s) marked as incorrect
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                     <button
                       onClick={rejectWin}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
+                      disabled={selectedIncorrectItems.size === 0}
+                      className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition shadow-lg ${
+                        selectedIncorrectItems.size === 0
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-red-500 hover:bg-red-600'
+                      }`}
                     >
-                      <X size={20} /> Reject
+                      <X size={20} /> Reject {selectedIncorrectItems.size > 0 && `(${selectedIncorrectItems.size} incorrect)`}
                     </button>
                     <button
                       onClick={confirmWin}
@@ -843,7 +933,7 @@ export default function Mingo() {
                 <X size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
                 <h2 className="text-2xl sm:text-3xl font-bold">Win Rejected</h2>
                 <p className="text-base sm:text-lg mt-2">Your win claim was not verified by the host.</p>
-                <p className="text-sm mt-1 opacity-75">Please continue playing.</p>
+                <p className="text-sm mt-1 opacity-90">Incorrect items have been unselected. Please continue playing.</p>
               </div>
             )}
 
