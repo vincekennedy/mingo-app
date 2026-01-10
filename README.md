@@ -1,16 +1,53 @@
-# React + Vite
+# 🎯 Mingo
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**Mingo** is a browser-based bingo game creator designed for **distributed play**. Create a bingo game from a custom list, share a short join code, and let each participant receive a randomized bingo board — no downloads, no accounts for players, just instant fun.
 
-Currently, two official plugins are available:
+Built entirely with the help of **Claude** and **Cursor**, and deployed on **Vercel**.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 🎲 **Custom Bingo Creation**  
+  Create a bingo game from a list of 24+ custom items.
 
-## Expanding the ESLint configuration
+- 🔐 **Shareable Game Codes**  
+  Each game generates a short alphanumeric code that players can use to join.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- 🧩 **Randomized Boards**  
+  Every participant receives a unique, randomized bingo board generated from the same item pool.
+
+- 🌐 **Browser-Based & Distributed**  
+  Designed for remote or in-person groups — works anywhere with a browser.
+
+- ⚡ **Fast & Serverless**  
+  Deployed with Vercel for quick load times and easy scaling.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend:** Web (browser-based)
+- **AI Tooling:**  
+  - Claude  
+  - Cursor
+- **Hosting / Deployment:**  
+  - Vercel
+
+> This project was developed end-to-end using AI-assisted tooling for ideation, implementation, and iteration.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (if running locally)
+- A modern web browser
+
+### Local Development
+
+```bash
+git clone https://github.com/vincekennedy/mingo.git
+cd mingo
+npm install
+npm run dev
