@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { authService } from './services/auth';
 import { gameService } from './services/game';
@@ -1246,6 +1246,22 @@ export default function Mingo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+      {/* User Profile Banner - top right */}
+      {currentUser && (
+        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-20">
+          <button
+            onClick={() => setScreen('dashboard')}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200"
+          >
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+              <User size={16} className="text-white sm:w-5 sm:h-5" />
+            </div>
+            <span className="text-sm sm:text-base font-semibold text-gray-800 max-w-[100px] sm:max-w-[150px] truncate">
+              {currentUser.username}
+            </span>
+          </button>
+        </div>
+      )}
       {/* Version display - bottom left */}
       <div className="fixed bottom-2 left-2 text-white text-xs opacity-60 font-mono z-10">
         v{getVersion()}
