@@ -23,6 +23,7 @@ export default function Mingo() {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
+  const [gameTitle, setGameTitle] = useState('');
   const [isHost, setIsHost] = useState(false);
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
@@ -462,6 +463,7 @@ export default function Mingo() {
       setIsHost(game.isHost);
       setGameConfig(game.config);
       setGameCode(game.gameCode);
+      setGameTitle(game.config?.title || '');
       setBoardSize(game.config.boardSize || 5);
       setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
       if (!game.isHost) {
@@ -522,7 +524,8 @@ export default function Mingo() {
     const config = {
       items: validItems,
       boardSize,
-      useFreeSpace
+      useFreeSpace,
+      title: gameTitle.trim() || null
     };
 
     if (!currentUser) {
@@ -1105,6 +1108,7 @@ export default function Mingo() {
     setGameCode('');
     setJoinCode('');
     setGameConfig(null);
+    setGameTitle('');
     setIsHost(false);
     setPendingWinClaim(null);
     setWinConfirmed(false);
@@ -1317,6 +1321,9 @@ export default function Mingo() {
                       className="w-full flex items-center justify-between text-left mb-2 hover:opacity-80 transition"
                     >
                       <div className="flex-1">
+                        {game.config?.title && (
+                          <h3 className="font-bold text-lg text-gray-800 mb-1">{game.config.title}</h3>
+                        )}
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="font-bold text-lg font-mono text-purple-600">{game.gameCode}</span>
                           {game.isHost && (
@@ -1509,6 +1516,19 @@ export default function Mingo() {
           <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8">
             <div className="mb-6">
               <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+                Game Title (Optional)
+              </label>
+              <input
+                type="text"
+                value={gameTitle}
+                onChange={(e) => setGameTitle(e.target.value)}
+                placeholder="Enter a title for your game"
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
                 Board Size
               </label>
               <select
@@ -1696,6 +1716,9 @@ export default function Mingo() {
             <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 text-center space-y-4 sm:space-y-6">
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
+                {gameConfig?.title && (
+                  <h3 className="text-lg sm:text-xl font-semibold text-purple-600 mb-2">{gameConfig.title}</h3>
+                )}
                 <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
               </div>
 
@@ -1857,6 +1880,12 @@ export default function Mingo() {
                 <Trophy size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
                 <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
                 <p className="text-base sm:text-lg">You won! Win confirmed!</p>
+              </div>
+            )}
+
+            {gameConfig?.title && (
+              <div className="text-center mb-4">
+                <h2 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">{gameConfig.title}</h2>
               </div>
             )}
 
