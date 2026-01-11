@@ -634,12 +634,15 @@ export default function Mingo() {
   };
 
   const confirmWin = async () => {
-    if (!pendingWinClaim?.claimId) return;
+    if (!pendingWinClaim?.claimId || !gameCode) return;
     
     try {
       await winClaimsService.confirmClaim(pendingWinClaim.claimId);
       setPendingWinClaim(null);
       setSelectedIncorrectItems(new Set()); // Reset selection
+      
+      // Mark game as ended since a win was confirmed
+      await gameService.markGameAsEnded(gameCode);
       
       // Update dashboard
       if (currentUser) {

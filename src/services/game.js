@@ -158,8 +158,22 @@ export const gameService = {
       
       if (error) throw error
       
-      // Transform data to match expected format
-      return data.map(participant => ({
+      // Filter out ended games and transform data to match expected format
+      const activeGames = data.filter(participant => {
+        // Check if game exists and is not ended
+        if (!participant.game) {
+          console.warn('Participant has no game data:', participant)
+          return false
+        }
+        const gameStatus = participant.game.status
+        const isActive = gameStatus === 'active'
+        if (!isActive) {
+          console.log('Filtering out ended game:', participant.game_code, 'status:', gameStatus)
+        }
+        return isActive
+      })
+      
+      return activeGames.map(participant => ({
         gameCode: participant.game_code,
         isHost: participant.is_host,
         joinedAt: participant.joined_at,
@@ -183,7 +197,7 @@ export const gameService = {
       // Verify user is host
       const { data: game } = await supabase
         .from('games')
-        .select('host_id')
+        .select('host_id, status')
         .eq('code', code)
         .single()
       
@@ -192,6 +206,30 @@ export const gameService = {
       }
       
       // Update game status to ended
+      const { data: updatedGame, error } = await supabase
+        .from('games')
+        .update({ status: 'ended' })
+        .eq('code', code)
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      // Return updated game for verification
+      return updatedGame
+    } catch (error) {
+      console.error('End game error:', error)
+      throw error
+    }
+  },
+  
+  /**
+   * Mark a game as ended (used when win is confirmed)
+   * @param {string} code - Game code
+   * @returns {Promise<void>}
+   */
+  async markGameAsEnded(code) {
+    try {
       const { error } = await supabase
         .from('games')
         .update({ status: 'ended' })
@@ -199,7 +237,7 @@ export const gameService = {
       
       if (error) throw error
     } catch (error) {
-      console.error('End game error:', error)
+      console.error('Mark game as ended error:', error)
       throw error
     }
   },
