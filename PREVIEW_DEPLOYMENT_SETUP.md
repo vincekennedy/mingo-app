@@ -59,24 +59,42 @@ Preview deployments from pull requests should use a separate test database to:
 
 ### Option A: Preview-Specific Environment Variables (Recommended)
 
+**Important:** You need to add separate environment variables for Preview deployments. If you already have variables set for Production, those will NOT automatically apply to Preview unless you specifically set them.
+
 1. Go to your Vercel dashboard: [https://vercel.com/dashboard](https://vercel.com/dashboard)
 2. Click on your project (mingo)
 3. Click on **Settings** in the top navigation
 4. Click on **Environment Variables** in the left sidebar
 
-5. Add preview-specific variables:
+5. Check if `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` already exist:
+   - If they exist, check which environments they're enabled for
+   - If they're only set for **Production**, you need to add them for **Preview** separately
+   - If they're set for **All environments**, you may need to update them
 
-   **Variable 1 (Preview):**
-   - **Name:** `VITE_SUPABASE_URL`
-   - **Value:** `https://your-preview-project-id.supabase.co` (paste your preview project URL)
-   - **Environments:** Select **Preview** only (uncheck Production and Development)
+6. Add or update preview-specific variables:
 
-   **Variable 2 (Preview):**
-   - **Name:** `VITE_SUPABASE_ANON_KEY`
-   - **Value:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (paste your preview project anon key)
-   - **Environments:** Select **Preview** only (uncheck Production and Development)
+   **For `VITE_SUPABASE_URL`:**
+   - If it doesn't exist, click **Add New** → Enter **Name:** `VITE_SUPABASE_URL`
+   - If it exists, click on it to edit
+   - **Value:** `https://your-preview-project-id.supabase.co` (paste your preview project URL from Step 2)
+   - **Environments:** ⚠️ **IMPORTANT** - Select **Preview** only (uncheck Production and Development)
+     - This ensures preview deployments use the test database
+     - Production deployments will continue using the production database
+   - Click **Save**
 
-6. Click **Save** for each variable
+   **For `VITE_SUPABASE_ANON_KEY`:**
+   - If it doesn't exist, click **Add New** → Enter **Name:** `VITE_SUPABASE_ANON_KEY`
+   - If it exists, click on it to edit
+   - **Value:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (paste your preview project anon key from Step 2)
+   - **Environments:** ⚠️ **IMPORTANT** - Select **Preview** only (uncheck Production and Development)
+   - Click **Save**
+
+7. **Redeploy your preview deployment:**
+   - Go to the **Deployments** tab in Vercel
+   - Find your most recent preview deployment (from the develop branch)
+   - Click the **...** (three dots) menu on that deployment
+   - Click **Redeploy** to apply the new environment variables
+   - Or push a new commit to trigger a fresh deployment
 
 ### Option B: Same Database for All Environments
 
@@ -121,9 +139,19 @@ WHERE game_code IN (
 
 ### Preview deployment still uses production database
 
-- Check that environment variables are set for **Preview** environment
-- Make sure you saved the variables after selecting Preview
-- Redeploy the preview deployment to pick up new environment variables
+**Common causes:**
+1. **Variables only set for Production:** Check Vercel Settings → Environment Variables and ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set for **Preview** environment specifically (not just Production)
+2. **Forgot to save:** After selecting Preview environment, make sure you clicked **Save**
+3. **Need to redeploy:** Environment variables only apply to NEW deployments. You must:
+   - Go to Deployments tab
+   - Find your preview deployment
+   - Click **...** menu → **Redeploy**
+   - Or push a new commit to trigger a new deployment
+
+**How to verify:**
+- After redeploying, check the browser console on your preview deployment
+- The version should show in the bottom left (confirms the build is new)
+- Try creating a test account - check your Supabase dashboard to see which project it was created in
 
 ### Images not uploading in preview
 
