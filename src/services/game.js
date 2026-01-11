@@ -10,6 +10,18 @@ export const gameService = {
    */
   async createGame(code, hostId, config) {
     try {
+      // Verify user profile exists first
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', hostId)
+        .single()
+      
+      if (profileError || !userProfile) {
+        console.error('User profile not found:', hostId, profileError)
+        throw new Error('User profile not found. Please ensure your account was created correctly. Try logging out and back in.')
+      }
+      
       // Create game
       const { data: game, error: gameError } = await supabase
         .from('games')
@@ -22,7 +34,13 @@ export const gameService = {
         .select()
         .single()
       
-      if (gameError) throw gameError
+      if (gameError) {
+        // Provide more helpful error message for foreign key constraint
+        if (gameError.code === '23503' && gameError.message?.includes('host_id_fkey')) {
+          throw new Error('User profile not found in database. Please try logging out and back in, or contact support if the issue persists.')
+        }
+        throw gameError
+      }
       
       // Add host as participant
       const { error: participantError } = await supabase
