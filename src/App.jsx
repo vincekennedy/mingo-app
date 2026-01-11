@@ -459,7 +459,7 @@ export default function Mingo() {
     setSelectedGame(game);
     const loaded = await loadBoardState(game.gameCode);
     if (!loaded) {
-      // If no saved state, generate board
+      // If no saved state, set up game config
       setIsHost(game.isHost);
       setGameConfig(game.config);
       setGameCode(game.gameCode);
@@ -467,14 +467,17 @@ export default function Mingo() {
       setBoardSize(game.config.boardSize || 5);
       setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
       if (!game.isHost) {
+        // Player: generate board immediately
         await generateBoardFromConfig(game.config, game.gameCode);
       } else {
+        // Host: show "Game Created!" screen (host screen) - they can click "Start Playing" to generate board
         setBoard([]);
         setMarked(new Set());
         setScreen('host');
       }
     } else {
-      setScreen(game.isHost ? 'host' : 'play');
+      // Board state was loaded - show play screen (host or player)
+      setScreen('play');
     }
   };
 
@@ -1738,17 +1741,13 @@ export default function Mingo() {
               <div className="space-y-3">
                 <button
                   onClick={async () => {
-                    // Load board state if exists, otherwise generate new board
-                    if (currentUser && gameCode) {
-                      const loaded = await loadBoardState(gameCode);
-                      if (!loaded) {
-                        await generateBoardFromConfig(gameConfig, gameCode);
-                      }
-                    } else if (gameCode) {
+                    // Generate board for host and switch to play screen
+                    if (gameConfig && gameCode) {
                       await generateBoardFromConfig(gameConfig, gameCode);
-                    } else {
-                      // Fallback if gameCode not set
+                    } else if (gameConfig) {
                       await generateBoardFromConfig(gameConfig);
+                    } else {
+                      alert('Game configuration not found. Please try selecting the game again.');
                     }
                   }}
                   className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
