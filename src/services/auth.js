@@ -68,9 +68,18 @@ export const authService = {
         
         if (profileError) {
           console.error('Profile creation error:', profileError)
-          // Provide helpful error message
-          if (profileError.message?.includes('row-level security')) {
-            throw new Error('Trigger failed and manual insert blocked by RLS. Please run FIX_TRIGGER_FINAL.sql in Supabase SQL Editor.')
+          // Provide helpful error message with detailed instructions
+          if (profileError.message?.includes('row-level security') || profileError.code === '42501') {
+            throw new Error(
+              'User profile creation failed. The database trigger and RLS policies need to be set up.\n\n' +
+              'QUICK FIX: Run COMPLETE_USER_SETUP.sql in Supabase SQL Editor\n\n' +
+              'Steps:\n' +
+              '1. Go to Supabase Dashboard → SQL Editor\n' +
+              '2. Copy and paste the entire contents of COMPLETE_USER_SETUP.sql\n' +
+              '3. Click Run\n' +
+              '4. Try creating your account again\n\n' +
+              'This will set up both the trigger (for automatic profile creation) and the RLS policies (for fallback manual creation).'
+            )
           }
           throw profileError
         }
