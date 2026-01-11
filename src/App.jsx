@@ -31,8 +31,11 @@ export default function Mingo() {
   const [winRejected, setWinRejected] = useState(false);
   const [selectedIncorrectItems, setSelectedIncorrectItems] = useState(new Set());
   const [showEndGameDialog, setShowEndGameDialog] = useState(false);
+  const [gamePlayers, setGamePlayers] = useState([]);
+  const [confirmedWinners, setConfirmedWinners] = useState([]);
   const confettiIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const playerListIntervalRef = useRef(null);
 
   // Authentication and user management - check on mount
   useEffect(() => {
@@ -448,6 +451,23 @@ export default function Mingo() {
     } catch (error) {
       console.error('Error loading board state:', error);
       return false;
+    }
+  };
+
+  // Fetch players and winners for a game
+  const fetchGamePlayers = async (gameCodeToFetch) => {
+    if (!gameCodeToFetch) return;
+    
+    try {
+      const [players, winners] = await Promise.all([
+        gameService.getGameParticipants(gameCodeToFetch),
+        winClaimsService.getConfirmedWinners(gameCodeToFetch),
+      ]);
+      
+      setGamePlayers(players);
+      setConfirmedWinners(winners);
+    } catch (error) {
+      console.error('Error fetching game players:', error);
     }
   };
 
@@ -1000,6 +1020,30 @@ export default function Mingo() {
     }
   }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
 
+  // Poll for player list updates when in a game
+  useEffect(() => {
+    if (gameCode && (screen === 'play' || screen === 'host')) {
+      // Initial fetch
+      fetchGamePlayers(gameCode);
+      
+      // Poll every 3 seconds
+      playerListIntervalRef.current = setInterval(() => {
+        fetchGamePlayers(gameCode);
+      }, 3000);
+      
+      return () => {
+        if (playerListIntervalRef.current) {
+          clearInterval(playerListIntervalRef.current);
+          playerListIntervalRef.current = null;
+        }
+      };
+    } else {
+      // Clear players when not in a game
+      setGamePlayers([]);
+      setConfirmedWinners([]);
+    }
+  }, [gameCode, screen]);
+
   // Poll for win claims and update dashboard if on dashboard
   useEffect(() => {
     if (currentUser && screen === 'dashboard') {
@@ -1217,9 +1261,15 @@ export default function Mingo() {
     setWinRejected(false);
     setSelectedIncorrectItems(new Set());
     setSelectedGame(null);
+    setGamePlayers([]);
+    setConfirmedWinners([]);
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
+    }
+    if (playerListIntervalRef.current) {
+      clearInterval(playerListIntervalRef.current);
+      playerListIntervalRef.current = null;
     }
   };
 
@@ -1801,7 +1851,57 @@ export default function Mingo() {
         )}
 
         {screen === 'host' && gameCode && (
-          <div className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+            {/* Player List Sidebar */}
+            <div className="lg:w-64 flex-shrink-0">
+              <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">
+                <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <Users size={20} className="text-purple-600" />
+                  Players ({gamePlayers.length})
+                </h3>
+                {gamePlayers.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No players yet...</p>
+                ) : (
+                  <ul className="space-y-2 max-h-96 overflow-y-auto">
+                    {gamePlayers.map((player) => {
+                      const hasWon = confirmedWinners.includes(player.id);
+                      return (
+                        <li
+                          key={player.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                            hasWon
+                              ? 'bg-yellow-100 border-2 border-yellow-400'
+                              : player.isHost
+                              ? 'bg-purple-100 border border-purple-300'
+                              : 'bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-semibold truncate ${
+                              hasWon ? 'text-yellow-800' : 'text-gray-800'
+                            }`}>
+                              {player.username}
+                            </p>
+                            {player.isHost && (
+                              <span className="text-xs text-purple-600 font-medium">Host</span>
+                            )}
+                          </div>
+                          {hasWon && (
+                            <div className="flex items-center gap-1 text-yellow-600" title="Bingo Winner!">
+                              <Trophy size={18} className="flex-shrink-0" />
+                              <span className="text-xs font-bold hidden sm:inline">BINGO!</span>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 space-y-4 sm:space-y-6">
             {/* Win Verification Modal */}
             {pendingWinClaim && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1945,11 +2045,62 @@ export default function Mingo() {
                 </button>
               </div>
             </div>
+            </div>
           </div>
         )}
 
         {screen === 'play' && (
-          <div className="space-y-4 sm:space-y-6">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+            {/* Player List Sidebar */}
+            <div className="lg:w-64 flex-shrink-0">
+              <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">
+                <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                  <Users size={20} className="text-purple-600" />
+                  Players ({gamePlayers.length})
+                </h3>
+                {gamePlayers.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">Loading players...</p>
+                ) : (
+                  <ul className="space-y-2 max-h-96 overflow-y-auto">
+                    {gamePlayers.map((player) => {
+                      const hasWon = confirmedWinners.includes(player.id);
+                      return (
+                        <li
+                          key={player.id}
+                          className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
+                            hasWon
+                              ? 'bg-yellow-100 border-2 border-yellow-400'
+                              : player.isHost
+                              ? 'bg-purple-100 border border-purple-300'
+                              : 'bg-gray-100 border border-gray-200'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-semibold truncate ${
+                              hasWon ? 'text-yellow-800' : 'text-gray-800'
+                            }`}>
+                              {player.username}
+                            </p>
+                            {player.isHost && (
+                              <span className="text-xs text-purple-600 font-medium">Host</span>
+                            )}
+                          </div>
+                          {hasWon && (
+                            <div className="flex items-center gap-1 text-yellow-600" title="Bingo Winner!">
+                              <Trophy size={18} className="flex-shrink-0" />
+                              <span className="text-xs font-bold hidden sm:inline">BINGO!</span>
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Main Game Content */}
+            <div className="flex-1 space-y-4 sm:space-y-6">
             {/* Win Verification Modal for Host */}
             {isHost && pendingWinClaim && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2126,6 +2277,7 @@ export default function Mingo() {
               >
                 <RotateCcw size={18} className="sm:w-5 sm:h-5" /> {currentUser ? 'Back to Dashboard' : 'End Game'}
               </button>
+            </div>
             </div>
           </div>
         )}

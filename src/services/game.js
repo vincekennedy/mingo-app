@@ -255,6 +255,38 @@ export const gameService = {
   },
   
   /**
+   * Get all participants for a game with their usernames
+   * @param {string} code - Game code
+   * @returns {Promise<Array>} Array of participants with usernames
+   */
+  async getGameParticipants(code) {
+    try {
+      const { data, error } = await supabase
+        .from('game_participants')
+        .select(`
+          user_id,
+          is_host,
+          joined_at,
+          user:users(username)
+        `)
+        .eq('game_code', code)
+        .order('joined_at', { ascending: true })
+      
+      if (error) throw error
+      
+      return data.map(participant => ({
+        id: participant.user_id,
+        username: participant.user?.username || 'Unknown',
+        isHost: participant.is_host,
+        joinedAt: participant.joined_at,
+      }))
+    } catch (error) {
+      console.error('Get game participants error:', error)
+      return []
+    }
+  },
+
+  /**
    * Mark a game as ended (used when win is confirmed)
    * @param {string} code - Game code
    * @returns {Promise<void>}
