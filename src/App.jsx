@@ -6,9 +6,10 @@ import { authService } from './services/auth';
 import { gameService } from './services/game';
 import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
+import { supabase } from './lib/supabase';
 
 export default function Mingo() {
-  const [screen, setScreen] = useState('home'); // home, login, register, dashboard, setup, host, play
+  const [screen, setScreen] = useState('home'); // home, login, register, email-confirmation, dashboard, setup, host, play
   const [currentUser, setCurrentUser] = useState(null);
   const [userGames, setUserGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
@@ -205,8 +206,32 @@ export default function Mingo() {
       // Create user in Supabase auth
       const user = await authService.signUp(username, email, password);
       
+      // Check if email confirmation is required (no session means confirmation needed)
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // Email confirmation is required
+        // Supabase automatically sends confirmation email
+        // Store the email for the confirmation screen
+        setCurrentUser({
+          id: user.id,
+          email: user.email,
+          username: username,
+        });
+        setScreen('email-confirmation');
+        return true;
+      }
+      
+      // User is already confirmed (email confirmation disabled or auto-confirmed)
       // Get user profile with username
-      const profile = await authService.getUserProfile(user.id);
+      let profile = null;
+      try {
+        profile = await authService.getUserProfile(user.id);
+      } catch (profileError) {
+        console.warn('Could not read profile immediately after signup:', profileError.message);
+        console.warn('This is normal if RLS is blocking reads');
+        console.warn('User account was created successfully - profile will be accessible');
+      }
       
       // Set current user state
       const userUsername = profile?.username || username;
@@ -217,22 +242,40 @@ export default function Mingo() {
       });
       
       // Load user games
-      await loadUserGames(user.id);
+      try {
+        await loadUserGames(user.id);
+      } catch (gamesError) {
+        console.warn('Could not load games immediately after signup:', gamesError.message);
+      }
+      
       setScreen('dashboard');
       return true;
     } catch (error) {
       console.error('Registration error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
       // Provide user-friendly error messages
-      if (error.message?.includes('already registered')) {
+      if (error.message?.includes('already registered') || error.message?.includes('already exists')) {
         throw new Error('Email already registered. Please use a different email or login.');
-      } else if (error.message?.includes('username')) {
+      } else if (error.message?.includes('username') && error.message?.includes('unique')) {
         throw new Error('Username already taken. Please choose a different username.');
-      } else if (error.message?.includes('password')) {
+      } else if (error.message?.includes('password') && error.message?.includes('length')) {
         throw new Error('Password must be at least 6 characters.');
-      } else if (error.message?.includes('email')) {
-        throw new Error('Invalid email address.');
+      } else if (error.message?.includes('Invalid email') || (error.message?.includes('email') && error.message?.includes('format'))) {
+        throw new Error('Invalid email address format.');
+      } else if (error.message?.includes('row-level security') || error.message?.includes('RLS')) {
+        // Don't change RLS errors - they have specific instructions
+        throw error;
+      } else if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
+        throw new Error('Registration timed out. Your account may have been created. Please try logging in.');
       }
-      throw new Error(error.message || 'Registration failed. Please try again.');
+      // Pass through the original error message for more specific errors
+      throw error;
     }
   };
 
@@ -1297,6 +1340,52 @@ export default function Mingo() {
                 className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition"
               >
                 Join Game with Code
+              </button>
+            </div>
+          </div>
+        )}
+
+        {screen === 'email-confirmation' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
+            <div className="mb-6">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <Check size={32} className="text-green-600" />
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Check Your Email</h2>
+              <p className="text-gray-600 text-sm sm:text-base">
+                We've sent a confirmation email to
+              </p>
+              <p className="text-purple-600 font-semibold text-base sm:text-lg mt-1">
+                {currentUser?.email || 'your email address'}
+              </p>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-700 mb-2">
+                <strong>Next steps:</strong>
+              </p>
+              <ol className="text-sm text-gray-600 text-left space-y-1 list-decimal list-inside">
+                <li>Check your email inbox (and spam folder)</li>
+                <li>Click the confirmation link in the email</li>
+                <li>Return here and log in with your account</li>
+              </ol>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => setScreen('login')}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <LogIn size={20} /> Go to Login
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentUser(null);
+                  setScreen('home');
+                }}
+                className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+              >
+                Back to Home
               </button>
             </div>
           </div>
