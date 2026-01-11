@@ -6,6 +6,7 @@ import { authService } from './services/auth';
 import { gameService } from './services/game';
 import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
+import { storageService } from './services/storage';
 import { supabase } from './lib/supabase';
 
 export default function Mingo() {
@@ -13,7 +14,7 @@ export default function Mingo() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userGames, setUserGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
-  const [items, setItems] = useState(Array(24).fill(''));
+  const [items, setItems] = useState(Array(24).fill({ text: '', imageUrl: null }));
   const [boardSize, setBoardSize] = useState(5);
   const [board, setBoard] = useState([]);
   const [marked, setMarked] = useState(new Set());
@@ -482,16 +483,83 @@ export default function Mingo() {
   };
 
   const addItem = () => {
-    setItems([...items, '']);
+    setItems([...items, { text: '', imageUrl: null }]);
   };
 
-  const removeItem = (index) => {
+  const removeItem = async (index) => {
+    // If item has an image, delete it from storage
+    const item = items[index];
+    if (item && typeof item === 'object' && item.imageUrl) {
+      try {
+        await storageService.deleteImage(item.imageUrl);
+      } catch (error) {
+        console.error('Error deleting image:', error);
+        // Continue with removal even if delete fails
+      }
+    }
     setItems(items.filter((_, i) => i !== index));
   };
 
   const updateItem = (index, value) => {
     const newItems = [...items];
-    newItems[index] = value;
+    const currentItem = newItems[index];
+    if (typeof currentItem === 'string') {
+      newItems[index] = { text: value, imageUrl: null };
+    } else {
+      newItems[index] = { ...currentItem, text: value };
+    }
+    setItems(newItems);
+  };
+
+  const updateItemImage = async (index, file) => {
+    if (!file || !currentUser) {
+      alert('Please log in to upload images.');
+      return;
+    }
+
+    try {
+      // Delete old image if exists
+      const currentItem = items[index];
+      if (currentItem && typeof currentItem === 'object' && currentItem.imageUrl) {
+        try {
+          await storageService.deleteImage(currentItem.imageUrl);
+        } catch (error) {
+          console.error('Error deleting old image:', error);
+        }
+      }
+
+      // Use gameCode if available, otherwise use temp identifier
+      const storageCode = gameCode || `temp-${Date.now()}`;
+      
+      // Upload new image
+      const imageUrl = await storageService.uploadImage(file, storageCode, currentUser.id);
+      
+      const newItems = [...items];
+      const itemToUpdate = typeof newItems[index] === 'string' 
+        ? { text: '', imageUrl: null }
+        : { ...newItems[index] };
+      newItems[index] = { ...itemToUpdate, imageUrl, text: itemToUpdate.text || '' };
+      setItems(newItems);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert(error.message || 'Error uploading image. Please try again.');
+    }
+  };
+
+  const removeItemImage = async (index) => {
+    const currentItem = items[index];
+    if (currentItem && typeof currentItem === 'object' && currentItem.imageUrl) {
+      try {
+        await storageService.deleteImage(currentItem.imageUrl);
+      } catch (error) {
+        console.error('Error deleting image:', error);
+      }
+    }
+    const newItems = [...items];
+    const itemToUpdate = typeof newItems[index] === 'string' 
+      ? { text: newItems[index], imageUrl: null }
+      : { ...newItems[index], imageUrl: null };
+    newItems[index] = itemToUpdate;
     setItems(newItems);
   };
 
@@ -500,7 +568,7 @@ export default function Mingo() {
     const neededItems = useFreeSpace ? size * size - 1 : size * size;
     // Adjust items array to match needed items
     if (items.length < neededItems) {
-      setItems([...items, ...Array(neededItems - items.length).fill('')]);
+      setItems([...items, ...Array(neededItems - items.length).fill({ text: '', imageUrl: null })]);
     }
   };
 
@@ -509,12 +577,21 @@ export default function Mingo() {
     const neededItems = hasFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
     // Adjust items array to match needed items
     if (items.length < neededItems) {
-      setItems([...items, ...Array(neededItems - items.length).fill('')]);
+      setItems([...items, ...Array(neededItems - items.length).fill({ text: '', imageUrl: null })]);
     }
   };
 
   const createGame = async () => {
-    const validItems = items.filter(item => item.trim() !== '');
+    // Filter items that have either text or image
+    const validItems = items.filter(item => {
+      if (typeof item === 'string') {
+        // Legacy format: just text string
+        return item.trim() !== '';
+      }
+      // New format: object with text and/or imageUrl
+      return (item.text && item.text.trim() !== '') || item.imageUrl;
+    });
+    
     const totalCells = boardSize * boardSize;
     const neededItems = useFreeSpace ? totalCells - 1 : totalCells;
 
@@ -524,8 +601,17 @@ export default function Mingo() {
     }
 
     const code = generateCode();
+    
+    // Normalize items format (convert strings to objects for backward compatibility)
+    const normalizedItems = validItems.map(item => {
+      if (typeof item === 'string') {
+        return { text: item, imageUrl: null };
+      }
+      return item;
+    });
+    
     const config = {
-      items: validItems,
+      items: normalizedItems,
       boardSize,
       useFreeSpace,
       title: gameTitle.trim() || null
@@ -632,8 +718,16 @@ export default function Mingo() {
     const totalCells = size * size;
     const neededItems = freeSpace ? totalCells - 1 : totalCells;
 
+    // Normalize items format (handle both string and object formats)
+    const normalizedItems = validItems.map(item => {
+      if (typeof item === 'string') {
+        return { text: item, imageUrl: null };
+      }
+      return item;
+    });
+
     // Better shuffle algorithm (Fisher-Yates)
-    const shuffled = [...validItems];
+    const shuffled = [...normalizedItems];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -658,9 +752,14 @@ export default function Mingo() {
     let itemIndex = 0;
     for (let i = 0; i < totalCells; i++) {
       if (freeSpace && i === centerIndex) {
-        newBoard.push({ text: 'FREE', isFree: true });
+        newBoard.push({ text: 'FREE', isFree: true, imageUrl: null });
       } else {
-        newBoard.push({ text: selected[positions[itemIndex]], isFree: false });
+        const item = selected[positions[itemIndex]];
+        newBoard.push({ 
+          text: item.text || '', 
+          imageUrl: item.imageUrl || null,
+          isFree: false 
+        });
         itemIndex++;
       }
     }
@@ -1102,7 +1201,7 @@ export default function Mingo() {
       setScreen('home');
     }
     
-    setItems(Array(24).fill(''));
+    setItems(Array(24).fill({ text: '', imageUrl: null }));
     setBoardSize(5);
     setBoard([]);
     setMarked(new Set());
@@ -1561,7 +1660,10 @@ export default function Mingo() {
             <div className="mb-6">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2">
                 <label className="text-gray-700 font-semibold text-sm sm:text-base">
-                  Bingo Items ({items.filter(i => i.trim()).length} of {useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize} filled)
+                  Bingo Items ({items.filter(i => {
+                    if (typeof i === 'string') return i.trim() !== '';
+                    return (i.text && i.text.trim() !== '') || i.imageUrl;
+                  }).length} of {useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize} filled)
                 </label>
                 <button
                   onClick={addItem}
@@ -1572,25 +1674,65 @@ export default function Mingo() {
               </div>
               
               <div className="space-y-2 max-h-64 sm:max-h-96 overflow-y-auto">
-                {items.map((item, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => updateItem(index, e.target.value)}
-                      placeholder={`Item ${index + 1}`}
-                      className="flex-1 p-2 sm:p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-                    />
-                    {index >= (useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize) && (
-                      <button
-                        onClick={() => removeItem(index)}
-                        className="px-2 sm:px-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                      >
-                        <Trash2 size={18} className="sm:w-5 sm:h-5" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {items.map((item, index) => {
+                  const itemValue = typeof item === 'string' ? item : (item?.text || '');
+                  const itemImageUrl = typeof item === 'string' ? null : (item?.imageUrl || null);
+                  
+                  return (
+                    <div key={index} className="flex flex-col gap-2 p-2 border-2 border-gray-200 rounded-lg">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={itemValue}
+                          onChange={(e) => updateItem(index, e.target.value)}
+                          placeholder={`Item ${index + 1} (text)`}
+                          disabled={!!itemImageUrl}
+                          className={`flex-1 p-2 sm:p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base ${
+                            itemImageUrl ? 'bg-gray-100 cursor-not-allowed' : ''
+                          }`}
+                        />
+                        <label className="flex items-center justify-center px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer text-sm">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                updateItemImage(index, file);
+                              }
+                            }}
+                            disabled={!currentUser}
+                          />
+                          📷 Image
+                        </label>
+                        {index >= (useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize) && (
+                          <button
+                            onClick={() => removeItem(index)}
+                            className="px-2 sm:px-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                          >
+                            <Trash2 size={18} className="sm:w-5 sm:h-5" />
+                          </button>
+                        )}
+                      </div>
+                      {itemImageUrl && (
+                        <div className="relative">
+                          <img
+                            src={itemImageUrl}
+                            alt={`Item ${index + 1}`}
+                            className="w-full h-32 object-contain rounded border-2 border-purple-300"
+                          />
+                          <button
+                            onClick={() => removeItemImage(index)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1910,7 +2052,15 @@ export default function Mingo() {
                       }
                     `}
                   >
-                    <span className="break-words leading-tight">{cell.text}</span>
+                    {cell.imageUrl ? (
+                      <img
+                        src={cell.imageUrl}
+                        alt={cell.text || 'Bingo item'}
+                        className="w-full h-full object-cover rounded"
+                      />
+                    ) : (
+                      <span className="break-words leading-tight">{cell.text}</span>
+                    )}
                   </button>
                 ))}
               </div>
