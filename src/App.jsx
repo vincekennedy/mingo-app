@@ -1,10 +1,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { authService } from './services/auth';
+import { gameService } from './services/game';
+import { boardService } from './services/board';
+import { winClaimsService } from './services/winClaims';
 
 export default function Mingo() {
-  const [screen, setScreen] = useState('home'); // home, setup, host, play
+  const [screen, setScreen] = useState('home'); // home, login, register, dashboard, setup, host, play
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userGames, setUserGames] = useState([]);
+  const [selectedGame, setSelectedGame] = useState(null);
   const [items, setItems] = useState(Array(24).fill(''));
   const [boardSize, setBoardSize] = useState(5);
   const [board, setBoard] = useState([]);
@@ -23,6 +30,104 @@ export default function Mingo() {
   const confettiIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
+  // Authentication and user management - check on mount
+  useEffect(() => {
+    // Check if user is logged in on mount
+    const checkAuth = async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        if (user) {
+      // Get user profile with username
+      const profile = await authService.getUserProfile(user.id);
+      const username = profile?.username || user.email?.split('@')[0] || 'User';
+      
+      // Set current user state
+      setCurrentUser({
+        id: user.id,
+        email: user.email,
+        username,
+      });
+      
+      // Load user games
+      await loadUserGames(user.id);
+          
+          // Redirect to dashboard if on home screen
+          if (screen === 'home') {
+            setScreen('dashboard');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+      }
+    };
+    checkAuth();
+    
+    // Listen for auth state changes (e.g., token refresh, logout from another tab)
+    const { data: { subscription } } = authService.onAuthStateChange(async (user, event) => {
+      if (event === 'SIGNED_OUT' || !user) {
+        setCurrentUser(null);
+        setUserGames([]);
+        setSelectedGame(null);
+        if (screen === 'dashboard' || screen === 'host' || screen === 'play') {
+          setScreen('home');
+        }
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const profile = await authService.getUserProfile(user.id);
+        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        setCurrentUser({
+          id: user.id,
+          email: user.email,
+          username,
+        });
+        // Load user games
+        await loadUserGames(user.id);
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []); // Only run on mount
+
+  const loadUserGames = async (userId) => {
+    if (!userId || !currentUser) {
+      setUserGames([]);
+      return;
+    }
+    
+    try {
+      // Get games from Supabase
+      const games = await gameService.getUserGames(userId);
+      
+      // Check for pending wins (only for host games)
+      const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
+      const pendingWinsMap = hostGameCodes.length > 0 
+        ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
+        : {};
+      
+      // Load board state for each game
+      const gamesWithState = await Promise.all(
+        games.map(async (game) => {
+          const boardState = await boardService.loadBoardState(game.gameCode, userId);
+          return {
+            ...game,
+            boardState: boardState ? {
+              board: boardState.board,
+              marked: boardState.marked,
+              hasWon: boardState.hasWon,
+            } : null,
+            pendingWin: pendingWinsMap[game.gameCode] || false,
+          };
+        })
+      );
+      
+      setUserGames(gamesWithState);
+    } catch (error) {
+      console.error('Error loading user games:', error);
+      setUserGames([]);
+    }
+  };
+
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -30,6 +135,294 @@ export default function Mingo() {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
+  };
+
+  // Storage helpers (move before useEffect that uses them)
+  const setStorage = async (key, value) => {
+    const valueToStore = typeof value === 'string' ? value : JSON.stringify(value);
+    
+    try {
+      // Always use localStorage as primary storage
+      localStorage.setItem(key, valueToStore);
+      
+      // Also try window.storage if available (Cursor-specific, for cross-tab sync)
+      if (window.storage && typeof window.storage.set === 'function') {
+        try {
+          await window.storage.set(key, valueToStore, true);
+        } catch (storageError) {
+          console.warn('window.storage.set error:', storageError);
+          // Continue even if window.storage fails, localStorage is primary
+        }
+      }
+    } catch (error) {
+      console.error('Storage set error:', error);
+      // If localStorage fails, try one more time
+      try {
+        localStorage.setItem(key, valueToStore);
+      } catch (e) {
+        console.error('localStorage set error:', e);
+        throw new Error('Failed to save to storage. Your browser may have storage disabled.');
+      }
+    }
+  };
+
+  const getStorage = async (key) => {
+    try {
+      // Always try localStorage first as it's the standard approach
+      const localValue = localStorage.getItem(key);
+      if (localValue !== null) {
+        return localValue;
+      }
+      
+      // Fallback to window.storage if available (Cursor-specific)
+      if (window.storage && typeof window.storage.get === 'function') {
+        try {
+          const result = await window.storage.get(key, true);
+          if (result?.value) {
+            return result.value;
+          }
+        } catch (storageError) {
+          console.warn('window.storage.get error:', storageError);
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Storage get error:', error);
+      // Final fallback to localStorage
+      try {
+        return localStorage.getItem(key);
+      } catch (e) {
+        console.error('localStorage.getItem error:', e);
+        return null;
+      }
+    }
+  };
+
+  // Authentication functions (Supabase)
+  const registerUser = async (username, email, password) => {
+    try {
+      // Create user in Supabase auth
+      const user = await authService.signUp(username, email, password);
+      
+      // Get user profile with username
+      const profile = await authService.getUserProfile(user.id);
+      
+      // Set current user state
+      const userUsername = profile?.username || username;
+      setCurrentUser({
+        id: user.id,
+        email: user.email,
+        username: userUsername,
+      });
+      
+      // Load user games
+      await loadUserGames(user.id);
+      setScreen('dashboard');
+      return true;
+    } catch (error) {
+      console.error('Registration error:', error);
+      // Provide user-friendly error messages
+      if (error.message?.includes('already registered')) {
+        throw new Error('Email already registered. Please use a different email or login.');
+      } else if (error.message?.includes('username')) {
+        throw new Error('Username already taken. Please choose a different username.');
+      } else if (error.message?.includes('password')) {
+        throw new Error('Password must be at least 6 characters.');
+      } else if (error.message?.includes('email')) {
+        throw new Error('Invalid email address.');
+      }
+      throw new Error(error.message || 'Registration failed. Please try again.');
+    }
+  };
+
+  const loginUser = async (email, password) => {
+    try {
+      // Sign in with Supabase
+      const user = await authService.signIn(email, password);
+      
+      // Get user profile with username
+      const profile = await authService.getUserProfile(user.id);
+      
+      // Set current user state
+      const userUsername = profile?.username || email.split('@')[0];
+      setCurrentUser({
+        id: user.id,
+        email: user.email,
+        username: userUsername,
+      });
+      
+      // Load user games
+      await loadUserGames(user.id);
+      setScreen('dashboard');
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      // Provide user-friendly error messages
+      if (error.message?.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Please try again.');
+      } else if (error.message?.includes('Email not confirmed')) {
+        throw new Error('Please check your email to confirm your account.');
+      }
+      throw new Error(error.message || 'Login failed. Please try again.');
+    }
+  };
+
+  const logoutUser = async () => {
+    try {
+      // Sign out from Supabase
+      await authService.signOut();
+      
+      // Clear local state
+      setCurrentUser(null);
+      setUserGames([]);
+      setSelectedGame(null);
+      resetToHome();
+      setScreen('home');
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if logout fails, clear local state
+      setCurrentUser(null);
+      setUserGames([]);
+      setSelectedGame(null);
+      resetToHome();
+      setScreen('home');
+    }
+  };
+
+  const endGame = async (gameCodeToEnd) => {
+    if (!currentUser) return;
+
+    try {
+      // End game in Supabase (host only)
+      await gameService.endGame(gameCodeToEnd, currentUser.id);
+      
+      // Reload games list
+      await loadUserGames(currentUser.id);
+      
+      // If we're currently viewing this game, go back to dashboard
+      if (gameCode === gameCodeToEnd && (screen === 'host' || screen === 'play')) {
+        setSelectedGame(null);
+        setGameCode('');
+        setBoard([]);
+        setMarked(new Set());
+        setGameConfig(null);
+        setScreen('dashboard');
+      }
+    } catch (error) {
+      console.error('Error ending game:', error);
+      alert(error.message || 'Error ending game. Please try again.');
+    }
+  };
+
+  // addGameToUser is no longer needed - handled by gameService.joinGame
+
+  const saveBoardState = async (gameCodeToSave) => {
+    if (!currentUser) return;
+    const codeToSave = gameCodeToSave || gameCode;
+    if (!codeToSave || !board || board.length === 0) return;
+
+    try {
+      await boardService.saveBoardState(codeToSave, currentUser.id, {
+        board,
+        marked,
+        hasWon,
+        pendingWinClaim,
+        winConfirmed,
+        winRejected,
+      });
+    } catch (error) {
+      console.error('Error saving board state:', error);
+    }
+  };
+
+  // Auto-save board state when marked changes or win state changes
+  useEffect(() => {
+    if (currentUser && gameCode && board.length > 0 && (screen === 'play' || screen === 'host')) {
+      const timeoutId = setTimeout(() => {
+        saveBoardState(gameCode);
+      }, 500); // Debounce saves
+      return () => clearTimeout(timeoutId);
+    }
+  }, [marked, hasWon, pendingWinClaim, winConfirmed, winRejected, currentUser, gameCode, screen]);
+
+  const loadBoardState = async (gameCodeToLoad) => {
+    if (!currentUser) return false;
+
+    try {
+      // Get game from Supabase
+      const game = await gameService.getGame(gameCodeToLoad);
+      if (!game) return false;
+
+      const config = game.config;
+      setGameConfig(config);
+      setGameCode(gameCodeToLoad);
+      setBoardSize(config.boardSize || 5);
+      setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      
+      // Check if user is host
+      setIsHost(game.host_id === currentUser.id);
+      
+      // Get board state from Supabase
+      const boardState = await boardService.loadBoardState(gameCodeToLoad, currentUser.id);
+      if (boardState && boardState.board && boardState.board.length > 0) {
+        setBoard(boardState.board);
+        setMarked(boardState.marked);
+        setHasWon(boardState.hasWon || false);
+        
+        // Get win claim status
+        const claimStatus = await winClaimsService.getUserClaimStatus(gameCodeToLoad, currentUser.id);
+        if (claimStatus) {
+          setPendingWinClaim(claimStatus.status === 'pending' ? {
+            type: claimStatus.type,
+            indices: claimStatus.indices,
+            items: claimStatus.items,
+            claimId: claimStatus.id,
+            timestamp: claimStatus.timestamp,
+          } : null);
+          setWinConfirmed(claimStatus.status === 'confirmed');
+          setWinRejected(claimStatus.status === 'rejected');
+        } else {
+          setPendingWinClaim(null);
+          setWinConfirmed(false);
+          setWinRejected(false);
+        }
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error loading board state:', error);
+      return false;
+    }
+  };
+
+  const selectGame = async (game) => {
+    // Save current game state if switching games
+    if (gameCode && gameCode !== game.gameCode && currentUser && board.length > 0) {
+      await saveBoardState(gameCode);
+    }
+    
+    setSelectedGame(game);
+    const loaded = await loadBoardState(game.gameCode);
+    if (!loaded) {
+      // If no saved state, generate board
+      setIsHost(game.isHost);
+      setGameConfig(game.config);
+      setGameCode(game.gameCode);
+      setBoardSize(game.config.boardSize || 5);
+      setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
+      if (!game.isHost) {
+        await generateBoardFromConfig(game.config, game.gameCode);
+      } else {
+        setBoard([]);
+        setMarked(new Set());
+        setScreen('host');
+      }
+    } else {
+      setScreen(game.isHost ? 'host' : 'play');
+    }
   };
 
   const addItem = () => {
@@ -81,41 +474,26 @@ export default function Mingo() {
       useFreeSpace
     };
 
+    if (!currentUser) {
+      alert('Please log in to create a game.');
+      return;
+    }
+
     setGameCode(code);
     setGameConfig(config);
     setIsHost(true);
     
-    // Store in persistent storage (try window.storage, fallback to localStorage)
+    // Store in Supabase
     try {
-      const configString = JSON.stringify(config);
+      await gameService.createGame(code, currentUser.id, config);
+      console.log(`Game ${code} created and stored successfully`);
       
-      // Try window.storage first (if available)
-      if (window.storage && typeof window.storage.set === 'function') {
-        try {
-          await window.storage.set(`game:${code}`, configString, true);
-          await window.storage.set(`win:${code}`, JSON.stringify({ status: null, claim: null }), true);
-        } catch (e) {
-          console.warn('window.storage not available, using localStorage');
-          // Fallback to localStorage
-          localStorage.setItem(`game:${code}`, configString);
-          localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
-        }
-      } else {
-        // Use localStorage directly
-        localStorage.setItem(`game:${code}`, configString);
-        localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
-      }
+      // Reload user games to show the new game
+      await loadUserGames(currentUser.id);
     } catch (error) {
       console.error('Storage error:', error);
-      // Try localStorage as fallback
-      try {
-        localStorage.setItem(`game:${code}`, JSON.stringify(config));
-        localStorage.setItem(`win:${code}`, JSON.stringify({ status: null, claim: null }));
-      } catch (localError) {
-        console.error('localStorage error:', localError);
-        alert('Could not save game. Please try again.');
-        return;
-      }
+      alert(`Could not save game: ${error.message || 'Please try again.'}`);
+      return;
     }
 
     setScreen('host');
@@ -128,15 +506,21 @@ export default function Mingo() {
       return;
     }
 
-    try {
-      const gameData = await getStorage(`game:${code}`);
+    if (!currentUser) {
+      alert('Please log in to join a game.');
+      return;
+    }
 
-      if (!gameData) {
-        alert('Game not found. Please check the code and try again.');
+    try {
+      // Get game from Supabase
+      const game = await gameService.joinGame(code, currentUser.id);
+      
+      if (!game || !game.config) {
+        alert('Game not found or invalid. Please check the code and try again.');
         return;
       }
 
-      const config = JSON.parse(gameData);
+      const config = game.config;
       if (!config.items || !Array.isArray(config.items) || config.items.length === 0) {
         alert('Invalid game configuration. Please check the code and try again.');
         return;
@@ -155,15 +539,38 @@ export default function Mingo() {
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
       setIsHost(false);
       
-      // Generate unique board for this player
-      generateBoardFromConfig(config);
+      // Try to load saved board state first
+      const boardState = await boardService.loadBoardState(code, currentUser.id);
+      if (boardState && boardState.board && boardState.board.length > 0) {
+        // Restore board state
+        setBoard(boardState.board);
+        setMarked(boardState.marked);
+        setHasWon(boardState.hasWon || false);
+        setScreen('play');
+        
+        // Reload user games to update the list
+        await loadUserGames(currentUser.id);
+      } else {
+        // Generate new board
+        await generateBoardFromConfig(config, code);
+        
+        // Reload user games to update the list
+        await loadUserGames(currentUser.id);
+      }
     } catch (error) {
       console.error('Error joining game:', error);
-      alert(`Error joining game: ${error.message}. Please check the code and try again.`);
+      if (error.message?.includes('not found')) {
+        alert(`Game "${code}" not found. Please check the code and try again.`);
+      } else if (error.message?.includes('already joined')) {
+        // User already joined, just load the game
+        await joinGame(); // Retry to load existing state
+      } else {
+        alert(`Error joining game: ${error.message || 'Please try again.'}`);
+      }
     }
   };
 
-  const generateBoardFromConfig = (config) => {
+  const generateBoardFromConfig = async (config, gameCodeToUse = null) => {
     const { items: validItems, boardSize: size, useFreeSpace: freeSpace } = config;
     const totalCells = size * size;
     const neededItems = freeSpace ? totalCells - 1 : totalCells;
@@ -204,7 +611,20 @@ export default function Mingo() {
     setBoard(newBoard);
     setMarked(freeSpace ? new Set([centerIndex]) : new Set());
     setHasWon(false);
+    setPendingWinClaim(null);
+    setWinConfirmed(false);
+    setWinRejected(false);
     setScreen('play');
+    
+    // Save generated board to Supabase
+    const codeToSave = gameCodeToUse || gameCode;
+    if (currentUser && codeToSave) {
+      try {
+        await boardService.saveGeneratedBoard(codeToSave, currentUser.id, config, newBoard, freeSpace ? new Set([centerIndex]) : new Set());
+      } catch (error) {
+        console.error('Error saving generated board:', error);
+      }
+    }
   };
 
   const copyCode = () => {
@@ -213,62 +633,27 @@ export default function Mingo() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const setStorage = async (key, value) => {
-    try {
-      if (window.storage && typeof window.storage.set === 'function') {
-        await window.storage.set(key, typeof value === 'string' ? value : JSON.stringify(value), true);
-      } else {
-        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-      }
-    } catch (error) {
-      console.error('Storage set error:', error);
-      // Fallback to localStorage
-      try {
-        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-      } catch (e) {
-        console.error('localStorage set error:', e);
-      }
-    }
-  };
-
-  const getStorage = async (key) => {
-    try {
-      if (window.storage && typeof window.storage.get === 'function') {
-        const result = await window.storage.get(key, true);
-        return result?.value || localStorage.getItem(key);
-      } else {
-        return localStorage.getItem(key);
-      }
-    } catch (error) {
-      console.error('Storage get error:', error);
-      return localStorage.getItem(key);
-    }
-  };
-
   const confirmWin = async () => {
+    if (!pendingWinClaim?.claimId) return;
+    
     try {
-      const claim = {
-        ...pendingWinClaim,
-        status: 'confirmed',
-        confirmedAt: Date.now()
-      };
-      await setStorage(`win:${gameCode}`, JSON.stringify(claim));
+      await winClaimsService.confirmClaim(pendingWinClaim.claimId);
       setPendingWinClaim(null);
       setSelectedIncorrectItems(new Set()); // Reset selection
-      // Reset claim after a delay to allow player to see confirmation
-      setTimeout(async () => {
-        try {
-          await setStorage(`win:${gameCode}`, JSON.stringify({ status: null, claim: null }));
-        } catch (error) {
-          console.error('Error resetting win claim:', error);
-        }
-      }, 5000);
+      
+      // Update dashboard
+      if (currentUser) {
+        await loadUserGames(currentUser.id);
+      }
     } catch (error) {
       console.error('Error confirming win:', error);
+      alert('Error confirming win. Please try again.');
     }
   };
 
   const rejectWin = async () => {
+    if (!pendingWinClaim?.claimId) return;
+    
     try {
       // Convert selected incorrect items Set to Array
       const incorrectIndices = Array.from(selectedIncorrectItems);
@@ -279,26 +664,17 @@ export default function Mingo() {
         return pendingWinClaim.indices[itemIdx];
       });
 
-      const claim = {
-        ...pendingWinClaim,
-        status: 'rejected',
-        rejectedAt: Date.now(),
-        incorrectIndices: incorrectBoardIndices // Store board indices to unselect
-      };
-      await setStorage(`win:${gameCode}`, JSON.stringify(claim));
+      await winClaimsService.rejectClaim(pendingWinClaim.claimId, incorrectBoardIndices);
       setPendingWinClaim(null);
       setSelectedIncorrectItems(new Set()); // Reset selection
       
-      // Reset claim after a delay to allow player to see rejection and unselect items
-      setTimeout(async () => {
-        try {
-          await setStorage(`win:${gameCode}`, JSON.stringify({ status: null, claim: null }));
-        } catch (error) {
-          console.error('Error resetting win claim:', error);
-        }
-      }, 8000); // Increased delay to allow time for item unselection
+      // Update dashboard
+      if (currentUser) {
+        await loadUserGames(currentUser.id);
+      }
     } catch (error) {
       console.error('Error rejecting win:', error);
+      alert('Error rejecting win. Please try again.');
     }
   };
 
@@ -322,6 +698,11 @@ export default function Mingo() {
       newMarked.add(index);
     }
     setMarked(newMarked);
+    
+    // Save board state after marking if logged in
+    if (currentUser && gameCode) {
+      saveBoardState(gameCode);
+    }
   };
 
   const checkWin = () => {
@@ -401,23 +782,30 @@ export default function Mingo() {
     if (screen === 'play' && !hasWon && !pendingWinClaim && !winConfirmed && !winRejected && board.length > 0 && boardSize > 0) {
       const winResult = checkWin();
       if (winResult && !isHost) {
-        // Player won - store claim for host verification
-        const storeWinClaim = async () => {
+        // Player won - submit claim for host verification
+        const submitWinClaim = async () => {
+          if (!currentUser) return;
+          
           try {
-            const claim = {
-              status: 'pending',
+            const claimData = await winClaimsService.submitClaim(gameCode, currentUser.id, {
               type: winResult.type,
               items: winResult.items,
               indices: winResult.indices,
-              timestamp: Date.now()
-            };
-            await setStorage(`win:${gameCode}`, JSON.stringify(claim));
-            setPendingWinClaim(claim);
+            });
+            
+            setPendingWinClaim({
+              type: winResult.type,
+              items: winResult.items,
+              indices: winResult.indices,
+              claimId: claimData.id,
+              timestamp: new Date(claimData.created_at).getTime(),
+            });
           } catch (error) {
-            console.error('Error storing win claim:', error);
+            console.error('Error submitting win claim:', error);
+            alert('Error submitting win claim. Please try again.');
           }
         };
-        storeWinClaim();
+        submitWinClaim();
       } else if (winResult && isHost) {
         // Host won - auto-confirm for host (no verification needed)
         setHasWon(true);
@@ -426,19 +814,57 @@ export default function Mingo() {
     }
   }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
 
+  // Poll for win claims and update dashboard if on dashboard
+  useEffect(() => {
+    if (currentUser && screen === 'dashboard') {
+      // Poll user games for pending wins
+      const pollPendingWins = async () => {
+        if (currentUser) {
+          try {
+            const games = await gameService.getUserGames(currentUser.id);
+            const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
+            const pendingWinsMap = hostGameCodes.length > 0 
+              ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
+              : {};
+            
+            // Reload games to update pending win status
+            await loadUserGames(currentUser.id);
+          } catch (error) {
+            console.error('Error polling pending wins:', error);
+          }
+        }
+      };
+      
+      pollPendingWins();
+      const interval = setInterval(pollPendingWins, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, screen]);
+
   // Poll for win claims (host) or confirmation status (player)
   useEffect(() => {
-    if (gameCode && isHost && (screen === 'host' || screen === 'play')) {
+    if (gameCode && isHost && (screen === 'host' || screen === 'play') && currentUser) {
       // Host polls for win claims (even when playing)
       const checkWinClaims = async () => {
         try {
-          const result = await getStorage(`win:${gameCode}`);
-          if (result) {
-            const claim = JSON.parse(result);
-            if (claim && claim.status === 'pending' && (!pendingWinClaim || pendingWinClaim.timestamp !== claim.timestamp)) {
-              setPendingWinClaim(claim);
+          const claims = await winClaimsService.getPendingClaims(gameCode);
+          if (claims && claims.length > 0) {
+            const latestClaim = claims[0]; // Get most recent claim
+            if (!pendingWinClaim || pendingWinClaim.claimId !== latestClaim.id) {
+              setPendingWinClaim({
+                type: latestClaim.type,
+                items: latestClaim.items,
+                indices: latestClaim.indices,
+                claimId: latestClaim.id,
+                userId: latestClaim.userId,
+                username: latestClaim.username,
+                timestamp: latestClaim.timestamp,
+              });
               setSelectedIncorrectItems(new Set()); // Reset selection for new claim
             }
+          } else if (pendingWinClaim) {
+            // No pending claims, clear if we had one
+            setPendingWinClaim(null);
           }
         } catch (error) {
           console.error('Error checking win claims:', error);
@@ -446,7 +872,7 @@ export default function Mingo() {
       };
 
       checkWinClaims();
-      pollIntervalRef.current = setInterval(checkWinClaims, 1000);
+      pollIntervalRef.current = setInterval(checkWinClaims, 2000);
 
       return () => {
         if (pollIntervalRef.current) {
@@ -454,23 +880,22 @@ export default function Mingo() {
           pollIntervalRef.current = null;
         }
       };
-    } else if (gameCode && screen === 'play' && !isHost && pendingWinClaim) {
+    } else if (gameCode && screen === 'play' && !isHost && pendingWinClaim && currentUser) {
       // Player polls for confirmation/rejection
       const checkConfirmation = async () => {
         try {
-          const result = await getStorage(`win:${gameCode}`);
-          if (result) {
-            const claim = JSON.parse(result);
-            if (claim && claim.status === 'confirmed' && !winConfirmed) {
+          const claimStatus = await winClaimsService.getUserClaimStatus(gameCode, currentUser.id);
+          if (claimStatus) {
+            if (claimStatus.status === 'confirmed' && !winConfirmed) {
               setWinConfirmed(true);
               setHasWon(true);
               setPendingWinClaim(null);
-            } else if (claim && claim.status === 'rejected' && !winRejected) {
+            } else if (claimStatus.status === 'rejected' && !winRejected) {
               // Unselect incorrect items from player's board
-              if (claim.incorrectIndices && Array.isArray(claim.incorrectIndices) && claim.incorrectIndices.length > 0) {
+              if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
                 setMarked(prevMarked => {
                   const newMarked = new Set(prevMarked);
-                  claim.incorrectIndices.forEach(boardIndex => {
+                  claimStatus.incorrectIndices.forEach(boardIndex => {
                     newMarked.delete(boardIndex);
                   });
                   return newMarked;
@@ -577,7 +1002,19 @@ export default function Mingo() {
   }, [hasWon, winConfirmed, screen, isHost]);
 
   const resetToHome = () => {
-    setScreen('home');
+    // Save current board state if logged in and in a game
+    if (currentUser && gameCode && board.length > 0) {
+      saveBoardState(gameCode);
+    }
+    
+    // Navigate to dashboard if logged in, otherwise home
+    if (currentUser) {
+      setScreen('dashboard');
+      loadUserGames(currentUser.id);
+    } else {
+      setScreen('home');
+    }
+    
     setItems(Array(24).fill(''));
     setBoardSize(5);
     setBoard([]);
@@ -592,6 +1029,7 @@ export default function Mingo() {
     setWinConfirmed(false);
     setWinRejected(false);
     setSelectedIncorrectItems(new Set());
+    setSelectedGame(null);
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
@@ -606,8 +1044,302 @@ export default function Mingo() {
           <p className="text-white text-base sm:text-lg opacity-90">Create & Play Custom Bingo</p>
         </div>
 
+        {screen === 'login' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Login</h2>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const email = formData.get('email');
+                const password = formData.get('password');
+                try {
+                  await loginUser(email, password);
+                } catch (error) {
+                  alert(error.message || 'Login failed. Please try again.');
+                }
+              }}
+              className="space-y-4"
+            >
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                required
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Password"
+                required
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <LogIn size={20} /> Login
+              </button>
+            </form>
+            <div className="text-center">
+              <p className="text-gray-600 text-sm">Don't have an account?</p>
+              <button
+                onClick={() => setScreen('register')}
+                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2"
+              >
+                Register here
+              </button>
+            </div>
+            <button
+              onClick={() => setScreen('home')}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {screen === 'register' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const username = formData.get('username');
+                const email = formData.get('email');
+                const password = formData.get('password');
+                const confirmPassword = formData.get('confirmPassword');
+                
+                if (password !== confirmPassword) {
+                  alert('Passwords do not match');
+                  return;
+                }
+                
+                if (password.length < 6) {
+                  alert('Password must be at least 6 characters');
+                  return;
+                }
+                
+                if (username.length < 3) {
+                  alert('Username must be at least 3 characters');
+                  return;
+                }
+                
+                try {
+                  await registerUser(username, email, password);
+                } catch (error) {
+                  alert(error.message || 'Registration failed. Please try again.');
+                }
+              }}
+              className="space-y-4"
+            >
+              <input
+                name="username"
+                type="text"
+                placeholder="Username (min 3 characters)"
+                required
+                minLength={3}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                required
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Password (min 6 characters)"
+                required
+                minLength={6}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <input
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm Password"
+                required
+                minLength={6}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <UserPlus size={20} /> Create Account
+              </button>
+            </form>
+            <div className="text-center">
+              <p className="text-gray-600 text-sm">Already have an account?</p>
+              <button
+                onClick={() => setScreen('login')}
+                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2"
+              >
+                Login here
+              </button>
+            </div>
+            <button
+              onClick={() => setScreen('home')}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {screen === 'dashboard' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 sm:space-y-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Welcome, {currentUser?.username}!</h2>
+                <p className="text-sm text-gray-600">Your Games</p>
+              </div>
+              <button
+                onClick={logoutUser}
+                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm"
+              >
+                <LogOut size={18} /> Logout
+              </button>
+            </div>
+
+            {userGames.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-600 mb-4">You haven't joined any games yet.</p>
+                <button
+                  onClick={() => {
+                    setScreen('setup');
+                  }}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+                >
+                  Create Your First Game
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {userGames.map((game) => (
+                  <div
+                    key={game.gameCode}
+                    className={`w-full p-4 rounded-xl border-2 ${
+                      game.pendingWin && game.isHost
+                        ? 'border-yellow-500 bg-yellow-50'
+                        : game.isHost
+                        ? 'border-purple-300 bg-purple-50'
+                        : 'border-gray-300 bg-gray-50'
+                    }`}
+                  >
+                    <button
+                      onClick={() => selectGame(game)}
+                      className="w-full flex items-center justify-between text-left mb-2 hover:opacity-80 transition"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-bold text-lg font-mono text-purple-600">{game.gameCode}</span>
+                          {game.isHost && (
+                            <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
+                              HOST
+                            </span>
+                          )}
+                          {game.pendingWin && game.isHost && (
+                            <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-semibold rounded flex items-center gap-1 animate-pulse">
+                              <AlertCircle size={12} /> Pending Win
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {game.isHost ? 'Host' : 'Player'} • {game.config?.boardSize}x{game.config?.boardSize} board
+                        </p>
+                      </div>
+                      <Play size={20} className="text-purple-600 flex-shrink-0 ml-2" />
+                    </button>
+                    {game.isHost && (
+                      <div className="mt-3 pt-3 border-t border-gray-300">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to end game ${game.gameCode}? This will remove it from your games list.`)) {
+                              endGame(game.gameCode);
+                            }
+                          }}
+                          className="w-full px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
+                        >
+                          <X size={16} /> End Game
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setSelectedGame(null);
+                  setScreen('setup');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <Play size={20} /> Create New Game
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedGame(null);
+                  setJoinCode('');
+                  setScreen('home');
+                }}
+                className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition"
+              >
+                Join Game with Code
+              </button>
+            </div>
+          </div>
+        )}
+
         {screen === 'home' && (
           <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+            {currentUser ? (
+              <>
+                <div className="text-center mb-4">
+                  <p className="text-gray-600 mb-2">Logged in as: <span className="font-bold text-purple-600">{currentUser.username}</span></p>
+                  <button
+                    onClick={() => setScreen('dashboard')}
+                    className="text-purple-600 font-semibold hover:text-purple-700 text-sm"
+                  >
+                    Go to Dashboard →
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-center mb-4">
+                  <p className="text-gray-600 mb-4">Sign in to save your games and play multiple boards</p>
+                </div>
+                <button
+                  onClick={() => setScreen('login')}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+                >
+                  <LogIn size={20} /> Login
+                </button>
+                <button
+                  onClick={() => setScreen('register')}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+                >
+                  <UserPlus size={20} /> Create Account
+                </button>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-white text-gray-500">or continue as guest</span>
+                  </div>
+                </div>
+              </>
+            )}
             <button
               onClick={() => setScreen('setup')}
               className="w-full flex items-center justify-center gap-3 px-6 py-4 sm:py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg sm:text-xl rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
@@ -714,7 +1446,13 @@ export default function Mingo() {
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
-                onClick={() => setScreen('home')}
+                onClick={() => {
+                  if (currentUser) {
+                    setScreen('dashboard');
+                  } else {
+                    setScreen('home');
+                  }
+                }}
                 className="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
               >
                 Back
@@ -729,7 +1467,7 @@ export default function Mingo() {
           </div>
         )}
 
-        {screen === 'host' && (
+        {screen === 'host' && gameCode && (
           <div className="space-y-4 sm:space-y-6">
             {/* Win Verification Modal */}
             {pendingWinClaim && (
@@ -823,7 +1561,20 @@ export default function Mingo() {
 
               <div className="space-y-3">
                 <button
-                  onClick={() => generateBoardFromConfig(gameConfig)}
+                  onClick={async () => {
+                    // Load board state if exists, otherwise generate new board
+                    if (currentUser && gameCode) {
+                      const loaded = await loadBoardState(gameCode);
+                      if (!loaded) {
+                        await generateBoardFromConfig(gameConfig, gameCode);
+                      }
+                    } else if (gameCode) {
+                      await generateBoardFromConfig(gameConfig, gameCode);
+                    } else {
+                      // Fallback if gameCode not set
+                      await generateBoardFromConfig(gameConfig);
+                    }
+                  }}
                   className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
                 >
                   <Play size={20} className="sm:w-6 sm:h-6" /> Start Playing
@@ -832,7 +1583,7 @@ export default function Mingo() {
                   onClick={resetToHome}
                   className="w-full px-6 py-2 sm:py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
                 >
-                  Back to Home
+                  {currentUser ? 'Back to Dashboard' : 'Back to Home'}
                 </button>
               </div>
             </div>
@@ -913,9 +1664,19 @@ export default function Mingo() {
             )}
 
             {gameCode && (
-              <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4 text-center">
-                <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
-                <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
+              <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
+                <div className="text-center mb-2">
+                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
+                  <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
+                </div>
+                {currentUser && (
+                  <button
+                    onClick={resetToHome}
+                    className="w-full mt-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
+                  >
+                    <Home size={16} /> Back to Dashboard
+                  </button>
+                )}
               </div>
             )}
 
@@ -975,7 +1736,13 @@ export default function Mingo() {
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <button
-                onClick={() => generateBoardFromConfig(gameConfig)}
+                onClick={async () => {
+                  if (gameConfig && gameCode) {
+                    await generateBoardFromConfig(gameConfig, gameCode);
+                  } else if (gameConfig) {
+                    await generateBoardFromConfig(gameConfig);
+                  }
+                }}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg text-sm sm:text-base"
               >
                 <Shuffle size={18} className="sm:w-5 sm:h-5" /> New Board
@@ -984,7 +1751,7 @@ export default function Mingo() {
                 onClick={resetToHome}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 transition shadow-lg text-sm sm:text-base"
               >
-                <RotateCcw size={18} className="sm:w-5 sm:h-5" /> End Game
+                <RotateCcw size={18} className="sm:w-5 sm:h-5" /> {currentUser ? 'Back to Dashboard' : 'End Game'}
               </button>
             </div>
           </div>
