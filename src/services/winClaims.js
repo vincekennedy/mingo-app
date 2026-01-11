@@ -151,6 +151,30 @@ export const winClaimsService = {
   },
   
   /**
+   * Get confirmed winners for a game
+   * @param {string} gameCode - Game code
+   * @returns {Promise<Array>} Array of user IDs who have confirmed wins
+   */
+  async getConfirmedWinners(gameCode) {
+    try {
+      const { data, error } = await supabase
+        .from('win_claims')
+        .select('user_id')
+        .eq('game_code', gameCode)
+        .eq('status', 'confirmed')
+      
+      if (error) throw error
+      
+      // Return unique user IDs
+      const uniqueUserIds = [...new Set(data.map(claim => claim.user_id))]
+      return uniqueUserIds
+    } catch (error) {
+      console.error('Get confirmed winners error:', error)
+      return []
+    }
+  },
+
+  /**
    * Check if there are pending wins for games where user is host
    * @param {Array} gameCodes - Array of game codes
    * @returns {Promise<Object>} Map of gameCode -> hasPendingWin
