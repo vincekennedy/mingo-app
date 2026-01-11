@@ -158,8 +158,22 @@ export const gameService = {
       
       if (error) throw error
       
-      // Transform data to match expected format
-      return data.map(participant => ({
+      // Filter out ended games and transform data to match expected format
+      const activeGames = data.filter(participant => {
+        // Check if game exists and is not ended
+        if (!participant.game) {
+          console.warn('Participant has no game data:', participant)
+          return false
+        }
+        const gameStatus = participant.game.status
+        const isActive = gameStatus === 'active'
+        if (!isActive) {
+          console.log('Filtering out ended game:', participant.game_code, 'status:', gameStatus)
+        }
+        return isActive
+      })
+      
+      return activeGames.map(participant => ({
         gameCode: participant.game_code,
         isHost: participant.is_host,
         joinedAt: participant.joined_at,
@@ -181,25 +195,105 @@ export const gameService = {
   async endGame(code, userId) {
     try {
       // Verify user is host
-      const { data: game } = await supabase
+      const { data: game, error: fetchError } = await supabase
         .from('games')
-        .select('host_id')
+        .select('host_id, status')
         .eq('code', code)
         .single()
       
-      if (!game || game.host_id !== userId) {
+      if (fetchError) {
+        console.error('Error fetching game:', fetchError)
+        throw fetchError
+      }
+      
+      if (!game) {
+        throw new Error('Game not found')
+      }
+      
+      if (game.host_id !== userId) {
         throw new Error('Only the host can end the game')
       }
       
+      console.log('Updating game status to ended:', { code, userId, currentStatus: game.status })
+      
       // Update game status to ended
-      const { error } = await supabase
+      const { data: updatedGame, error } = await supabase
         .from('games')
         .update({ status: 'ended' })
         .eq('code', code)
+        .select()
+        .single()
       
-      if (error) throw error
+      if (error) {
+        console.error('Error updating game status:', error)
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+        
+        // Check if it's an RLS policy error
+        if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
+          throw new Error(
+            'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
+            'FIX: Run FIX_GAMES_UPDATE_POLICY.sql in Supabase SQL Editor to add the UPDATE policy for games table.'
+          )
+        }
+        
+        throw error
+      }
+      
+      console.log('Game status updated successfully:', updatedGame)
+      
+      // Return updated game for verification
+      return updatedGame
     } catch (error) {
       console.error('End game error:', error)
+      throw error
+    }
+  },
+  
+  /**
+   * Mark a game as ended (used when win is confirmed)
+   * @param {string} code - Game code
+   * @returns {Promise<void>}
+   */
+  async markGameAsEnded(code) {
+    try {
+      console.log('Marking game as ended:', code)
+      
+      const { data: updatedGame, error } = await supabase
+        .from('games')
+        .update({ status: 'ended' })
+        .eq('code', code)
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('Error marking game as ended:', error)
+        console.error('Error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+        
+        // Check if it's an RLS policy error
+        if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
+          throw new Error(
+            'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
+            'FIX: Run FIX_GAMES_UPDATE_POLICY.sql in Supabase SQL Editor to add the UPDATE policy for games table.'
+          )
+        }
+        
+        throw error
+      }
+      
+      console.log('Game marked as ended successfully:', updatedGame)
+      return updatedGame
+    } catch (error) {
+      console.error('Mark game as ended error:', error)
       throw error
     }
   },
