@@ -1225,15 +1225,22 @@ export default function Mingo() {
 
   // Get version info
   const getVersion = () => {
+    // @ts-ignore - injected by Vite
+    const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : (import.meta.env.MODE === 'development' ? 'development' : 'production')
+    // @ts-ignore - injected by Vite
+    const commitHash = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev'
+    // @ts-ignore - injected by Vite
+    const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : import.meta.env.VITE_APP_VERSION || '0.0.0'
+    
     if (import.meta.env.MODE === 'development') {
-      // In development, show first 5 chars of commit hash
-      // @ts-ignore - injected by Vite
-      const commitHash = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev'
+      // In local development, show first 5 chars of commit hash
       return commitHash.substring(0, 5)
+    } else if (vercelEnv === 'preview') {
+      // In preview deployments, show CalVer + first 5 chars of commit hash
+      return `${appVersion}+${commitHash.substring(0, 5)}`
     } else {
-      // In production, show version from package.json (can be CalVer format)
-      // @ts-ignore - injected by Vite
-      return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : import.meta.env.VITE_APP_VERSION || '0.0.0'
+      // In production, show CalVer version only
+      return appVersion
     }
   }
 

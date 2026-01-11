@@ -22,11 +22,17 @@ function getPackageVersion() {
   }
 }
 
+// Get Vercel environment (development, preview, production)
+function getVercelEnv() {
+  return process.env.VERCEL_ENV || 'development'
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   define: {
     __COMMIT_HASH__: JSON.stringify(getCommitHash()),
     __APP_VERSION__: JSON.stringify(getPackageVersion()),
+    __VERCEL_ENV__: JSON.stringify(getVercelEnv()),
   },
 })
