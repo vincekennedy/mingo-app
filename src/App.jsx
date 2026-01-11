@@ -1223,8 +1223,26 @@ export default function Mingo() {
     }
   };
 
+  // Get version info
+  const getVersion = () => {
+    if (import.meta.env.MODE === 'development') {
+      // In development, show first 5 chars of commit hash
+      // @ts-ignore - injected by Vite
+      const commitHash = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev'
+      return commitHash.substring(0, 5)
+    } else {
+      // In production, show version from package.json (can be CalVer format)
+      // @ts-ignore - injected by Vite
+      return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : import.meta.env.VITE_APP_VERSION || '0.0.0'
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+      {/* Version display - bottom left */}
+      <div className="fixed bottom-2 left-2 text-white text-xs opacity-60 font-mono z-10">
+        v{getVersion()}
+      </div>
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-4 sm:mb-8">
           <h1 className="text-4xl sm:text-6xl font-bold text-white mb-2">🎲 Mingo</h1>
