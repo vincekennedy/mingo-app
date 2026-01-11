@@ -28,6 +28,7 @@ export default function Mingo() {
   const [winConfirmed, setWinConfirmed] = useState(false);
   const [winRejected, setWinRejected] = useState(false);
   const [selectedIncorrectItems, setSelectedIncorrectItems] = useState(new Set());
+  const [showEndGameDialog, setShowEndGameDialog] = useState(false);
   const confettiIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
@@ -338,9 +339,11 @@ export default function Mingo() {
 
     try {
       // End game in Supabase (host only)
-      await gameService.endGame(gameCodeToEnd, currentUser.id);
+      const updatedGame = await gameService.endGame(gameCodeToEnd, currentUser.id);
       
-      // Reload games list
+      console.log('Game ended successfully:', updatedGame);
+      
+      // Reload games list to refresh the UI
       await loadUserGames(currentUser.id);
       
       // If we're currently viewing this game, go back to dashboard
@@ -354,6 +357,11 @@ export default function Mingo() {
       }
     } catch (error) {
       console.error('Error ending game:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
       alert(error.message || 'Error ending game. Please try again.');
     }
   };
@@ -684,17 +692,44 @@ export default function Mingo() {
       setPendingWinClaim(null);
       setSelectedIncorrectItems(new Set()); // Reset selection
       
-      // Mark game as ended since a win was confirmed
+      // Show dialog to choose whether to end game or continue
+      setShowEndGameDialog(true);
+    } catch (error) {
+      console.error('Error confirming win:', error);
+      alert('Error confirming win. Please try again.');
+    }
+  };
+
+  const handleEndGameAfterWin = async () => {
+    if (!gameCode) return;
+    
+    try {
       await gameService.markGameAsEnded(gameCode);
+      setShowEndGameDialog(false);
       
       // Update dashboard
       if (currentUser) {
         await loadUserGames(currentUser.id);
       }
+      
+      // If we're currently viewing this game, go back to dashboard
+      if (screen === 'host' || screen === 'play') {
+        setSelectedGame(null);
+        setGameCode('');
+        setBoard([]);
+        setMarked(new Set());
+        setGameConfig(null);
+        setScreen('dashboard');
+      }
     } catch (error) {
-      console.error('Error confirming win:', error);
-      alert('Error confirming win. Please try again.');
+      console.error('Error ending game after win:', error);
+      alert('Error ending game. Please try again.');
     }
+  };
+
+  const handleContinueAfterWin = () => {
+    setShowEndGameDialog(false);
+    // Game continues - players can keep playing
   };
 
   const rejectWin = async () => {
@@ -1632,6 +1667,32 @@ export default function Mingo() {
               </div>
             )}
 
+            {showEndGameDialog && isHost && (
+              <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
+                <div className="mb-4">
+                  <Trophy size={48} className="mx-auto mb-3 text-yellow-500" />
+                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Win Confirmed!</h2>
+                  <p className="text-gray-600 text-sm sm:text-base">
+                    A player has won. Would you like to end the game or continue playing?
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                  <button
+                    onClick={handleContinueAfterWin}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg"
+                  >
+                    <Play size={20} /> Continue Playing
+                  </button>
+                  <button
+                    onClick={handleEndGameAfterWin}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
+                  >
+                    <X size={20} /> End Game
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 text-center space-y-4 sm:space-y-6">
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
@@ -1754,6 +1815,7 @@ export default function Mingo() {
                 </div>
               </div>
             )}
+
 
             {gameCode && (
               <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
