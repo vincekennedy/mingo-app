@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { authService } from './services/auth';
 import { gameService } from './services/game';
@@ -10,7 +10,7 @@ import { storageService } from './services/storage';
 import { supabase } from './lib/supabase';
 
 export default function Mingo() {
-  const [screen, setScreen] = useState('home'); // home, login, register, email-confirmation, dashboard, setup, host, play
+  const [screen, setScreen] = useState('home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play
   const [currentUser, setCurrentUser] = useState(null);
   const [userGames, setUserGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
@@ -36,14 +36,35 @@ export default function Mingo() {
   const confettiIntervalRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const playerListIntervalRef = useRef(null);
+  const passwordRecoveryRef = useRef(false);
 
   // Authentication and user management - check on mount
   useEffect(() => {
+    try {
+      const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
+      if (hash && new URLSearchParams(hash).get('type') === 'recovery') {
+        passwordRecoveryRef.current = true;
+      }
+    } catch (_) {
+      /* ignore malformed hash */
+    }
+
     // Check if user is logged in on mount
     const checkAuth = async () => {
       try {
         const user = await authService.getCurrentUser();
-        if (user) {
+        if (user && passwordRecoveryRef.current) {
+          const profile = await authService.getUserProfile(user.id);
+          const username = profile?.username || user.email?.split('@')[0] || 'User';
+          setCurrentUser({
+            id: user.id,
+            email: user.email,
+            username,
+          });
+          setScreen('reset-password');
+          return;
+        }
+        if (user && !passwordRecoveryRef.current) {
       // Get user profile with username
       const profile = await authService.getUserProfile(user.id);
       const username = profile?.username || user.email?.split('@')[0] || 'User';
@@ -59,26 +80,39 @@ export default function Mingo() {
       await loadUserGames(user.id);
           
           // Redirect to dashboard if on home screen
-          if (screen === 'home') {
-            setScreen('dashboard');
-          }
+          setScreen((prev) => (prev === 'home' ? 'dashboard' : prev));
         }
       } catch (error) {
         console.error('Error checking auth:', error);
       }
     };
-    checkAuth();
     
     // Listen for auth state changes (e.g., token refresh, logout from another tab)
     const { data: { subscription } } = authService.onAuthStateChange(async (user, event) => {
+      if (event === 'PASSWORD_RECOVERY' && user) {
+        passwordRecoveryRef.current = true;
+        const profile = await authService.getUserProfile(user.id);
+        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        setCurrentUser({
+          id: user.id,
+          email: user.email,
+          username,
+        });
+        setScreen('reset-password');
+        return;
+      }
       if (event === 'SIGNED_OUT' || !user) {
+        passwordRecoveryRef.current = false;
         setCurrentUser(null);
         setUserGames([]);
         setSelectedGame(null);
-        if (screen === 'dashboard' || screen === 'host' || screen === 'play') {
-          setScreen('home');
-        }
+        setScreen((prev) =>
+          prev === 'dashboard' || prev === 'host' || prev === 'play' ? 'home' : prev
+        );
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (passwordRecoveryRef.current) {
+          return;
+        }
         const profile = await authService.getUserProfile(user.id);
         const username = profile?.username || user.email?.split('@')[0] || 'User';
         setCurrentUser({
@@ -90,6 +124,10 @@ export default function Mingo() {
         await loadUserGames(user.id);
       }
     });
+
+    queueMicrotask(() => {
+      checkAuth();
+    });
     
     return () => {
       subscription.unsubscribe();
@@ -97,7 +135,7 @@ export default function Mingo() {
   }, []); // Only run on mount
 
   const loadUserGames = async (userId) => {
-    if (!userId || !currentUser) {
+    if (!userId) {
       setUserGames([]);
       return;
     }
@@ -315,6 +353,35 @@ export default function Mingo() {
       }
       throw new Error(error.message || 'Login failed. Please try again.');
     }
+  };
+
+  const completePasswordReset = async (newPassword) => {
+    await authService.updatePassword(newPassword);
+    passwordRecoveryRef.current = false;
+    const user = await authService.getCurrentUser();
+    if (!user) {
+      throw new Error('Could not restore your session. Please log in again.');
+    }
+    const profile = await authService.getUserProfile(user.id);
+    const userUsername = profile?.username || user.email?.split('@')[0] || 'User';
+    setCurrentUser({
+      id: user.id,
+      email: user.email,
+      username: userUsername,
+    });
+    await loadUserGames(user.id);
+    setScreen('dashboard');
+  };
+
+  const cancelPasswordRecovery = async () => {
+    passwordRecoveryRef.current = false;
+    try {
+      await authService.signOut();
+    } catch (e) {
+      console.error('Sign out after cancel recovery:', e);
+    }
+    setCurrentUser(null);
+    setScreen('login');
   };
 
   const logoutUser = async () => {
@@ -1297,7 +1364,7 @@ export default function Mingo() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
       {/* User Profile Banner - top right */}
-      {currentUser && (
+      {currentUser && screen !== 'reset-password' && (
         <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-20">
           <button
             onClick={() => setScreen('dashboard')}
@@ -1361,6 +1428,15 @@ export default function Mingo() {
               </button>
             </form>
             <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setScreen('forgot-password')}
+                className="text-sm text-purple-600 font-semibold hover:text-purple-700"
+              >
+                Forgot your password?
+              </button>
+            </div>
+            <div className="text-center">
               <p className="text-gray-600 text-sm">Don't have an account?</p>
               <button
                 onClick={() => setScreen('register')}
@@ -1374,6 +1450,133 @@ export default function Mingo() {
               className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
             >
               Back
+            </button>
+          </div>
+        )}
+
+        {screen === 'forgot-password' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Reset password</h2>
+            <p className="text-gray-600 text-sm sm:text-base text-center">
+              Enter the email for your account. We will send you a link to choose a new password.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const email = formData.get('email');
+                try {
+                  await authService.requestPasswordReset(email);
+                  setScreen('forgot-password-sent');
+                } catch (error) {
+                  alert(error.message || 'Could not send reset email. Please try again.');
+                }
+              }}
+              className="space-y-4"
+            >
+              <input
+                name="email"
+                type="email"
+                placeholder="Email"
+                required
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <KeyRound size={20} /> Send reset link
+              </button>
+            </form>
+            <button
+              type="button"
+              onClick={() => setScreen('login')}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+            >
+              Back to login
+            </button>
+          </div>
+        )}
+
+        {screen === 'forgot-password-sent' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
+            <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+              <KeyRound size={32} className="text-purple-600" />
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Check your email</h2>
+            <p className="text-gray-600 text-sm sm:text-base">
+              If an account exists for that address, you will receive an email with a link to reset your password.
+              The link expires after a short time; if it stops working, request a new one from the login page.
+            </p>
+            <button
+              type="button"
+              onClick={() => setScreen('login')}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+            >
+              <LogIn size={20} /> Back to login
+            </button>
+          </div>
+        )}
+
+        {screen === 'reset-password' && (
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Choose a new password</h2>
+            {currentUser?.email && (
+              <p className="text-center text-sm text-gray-600">
+                Signed in as <span className="font-semibold text-gray-800">{currentUser.email}</span>
+              </p>
+            )}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const password = formData.get('password');
+                const confirmPassword = formData.get('confirmPassword');
+                if (password !== confirmPassword) {
+                  alert('Passwords do not match');
+                  return;
+                }
+                if (password.length < 6) {
+                  alert('Password must be at least 6 characters');
+                  return;
+                }
+                try {
+                  await completePasswordReset(password);
+                } catch (error) {
+                  alert(error.message || 'Could not update password. Please try again.');
+                }
+              }}
+              className="space-y-4"
+            >
+              <input
+                name="password"
+                type="password"
+                placeholder="New password (min 6 characters)"
+                required
+                minLength={6}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <input
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm new password"
+                required
+                minLength={6}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+              />
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+              >
+                <KeyRound size={20} /> Update password
+              </button>
+            </form>
+            <button
+              type="button"
+              onClick={cancelPasswordRecovery}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+            >
+              Cancel
             </button>
           </div>
         )}

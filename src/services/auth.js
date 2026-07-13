@@ -209,6 +209,52 @@ export const authService = {
       throw error
     }
   },
+
+  /**
+   * Base URL for auth email links (reset password, etc.).
+   * Must match an entry in Supabase Dashboard → Authentication → URL Configuration → Redirect URLs.
+   */
+  getAuthEmailRedirectUrl() {
+    if (typeof window === 'undefined') return undefined
+    const explicit = import.meta.env.VITE_SITE_URL
+    if (explicit && typeof explicit === 'string') {
+      return explicit.replace(/\/$/, '') + '/'
+    }
+    return `${window.location.origin}/`
+  },
+
+  /**
+   * Send a password reset email (Supabase does not reveal whether the email exists).
+   * @param {string} email
+   * @returns {Promise<void>}
+   */
+  async requestPasswordReset(email) {
+    try {
+      const redirectTo = this.getAuthEmailRedirectUrl()
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        ...(redirectTo ? { redirectTo } : {}),
+      })
+      if (error) throw error
+    } catch (error) {
+      console.error('Password reset request error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Set a new password while in a recovery session (after user follows email link).
+   * @param {string} newPassword
+   * @returns {Promise<void>}
+   */
+  async updatePassword(newPassword) {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+    } catch (error) {
+      console.error('Update password error:', error)
+      throw error
+    }
+  },
   
   /**
    * Sign out the current user
