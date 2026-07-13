@@ -1,0 +1,18 @@
+---
+description: Branch and commit from develop; keep master for version releases
+alwaysApply: true
+---
+
+# Git branching
+
+- Use **`develop`** as the integration branch for day-to-day work.
+- Do **not** commit or push feature work directly to **`master`**.
+- When starting work or committing/pushing:
+  1. Base new branches on up-to-date `develop` (e.g. `git checkout develop && git pull`, then `git checkout -b …`).
+  2. Commit and push on that feature branch (or `develop` when the user asks to land there).
+  3. Open PRs into **`develop`**, not `master`, unless the user explicitly asks otherwise.
+- **`master`** is for version / release management by the user. Only touch `master` when they explicitly request a release merge or version bump.
+
+```text
+feature/*  →  develop  →  master (user-managed releases)
+```
