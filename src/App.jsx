@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { authService } from './services/auth';
 import { gameService } from './services/game';
@@ -28,6 +28,9 @@ export default function Mingo() {
   const [gameTitle, setGameTitle] = useState('');
   const [generatingItems, setGeneratingItems] = useState(false);
   const [generateStatusIndex, setGenerateStatusIndex] = useState(0);
+  const [registering, setRegistering] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [authError, setAuthError] = useState(null);
   const [isHost, setIsHost] = useState(false);
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
@@ -249,6 +252,8 @@ export default function Mingo() {
 
   // Authentication functions (Supabase)
   const registerUser = async (username, email, password) => {
+    setAuthError(null);
+    setRegistering(true);
     try {
       // Create user in Supabase auth
       const user = await authService.signUp(username, email, password);
@@ -323,10 +328,14 @@ export default function Mingo() {
       }
       // Pass through the original error message for more specific errors
       throw error;
+    } finally {
+      setRegistering(false);
     }
   };
 
   const loginUser = async (email, password) => {
+    setAuthError(null);
+    setLoggingIn(true);
     try {
       // Sign in with Supabase
       const user = await authService.signIn(email, password);
@@ -355,6 +364,8 @@ export default function Mingo() {
         throw new Error('Please check your email to confirm your account.');
       }
       throw new Error(error.message || 'Login failed. Please try again.');
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -1420,6 +1431,42 @@ export default function Mingo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+      {(registering || loggingIn) && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-busy="true"
+          aria-labelledby="auth-loading-title"
+        >
+          <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
+            <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
+
+            <div className="relative p-6 sm:p-8 text-center">
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg">
+                <Loader2 size={36} className="text-white animate-spin" />
+              </div>
+
+              <h2 id="auth-loading-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+                {registering ? 'Creating your account' : 'Signing you in'}
+              </h2>
+              <p className="text-sm sm:text-base text-gray-600">
+                {registering
+                  ? 'Setting things up — you’ll be in the dashboard in a moment.'
+                  : 'Hang tight — loading your games next.'}
+              </p>
+
+              <div className="mt-6 flex items-center justify-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-purple-500 animate-pulse" />
+                <span className="h-2.5 w-2.5 rounded-full bg-pink-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+                <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" style={{ animationDelay: '0.4s' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {generatingItems && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
@@ -1493,18 +1540,26 @@ export default function Mingo() {
         </div>
 
         {screen === 'login' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+          <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${loggingIn ? 'pointer-events-none opacity-80' : ''}`}>
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Login</h2>
+            {authError && screen === 'login' && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
+                <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (loggingIn) return;
+                setAuthError(null);
                 const formData = new FormData(e.target);
                 const email = formData.get('email');
                 const password = formData.get('password');
                 try {
                   await loginUser(email, password);
                 } catch (error) {
-                  alert(error.message || 'Login failed. Please try again.');
+                  setAuthError(error.message || 'Login failed. Please try again.');
                 }
               }}
               className="space-y-4"
@@ -1514,27 +1569,42 @@ export default function Mingo() {
                 type="email"
                 placeholder="Email"
                 required
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={loggingIn}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <input
                 name="password"
                 type="password"
                 placeholder="Password"
                 required
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={loggingIn}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+                disabled={loggingIn}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <LogIn size={20} /> Login
+                {loggingIn ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" /> Signing in…
+                  </>
+                ) : (
+                  <>
+                    <LogIn size={20} /> Login
+                  </>
+                )}
               </button>
             </form>
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => setScreen('forgot-password')}
-                className="text-sm text-purple-600 font-semibold hover:text-purple-700"
+                onClick={() => {
+                  setAuthError(null);
+                  setScreen('forgot-password');
+                }}
+                disabled={loggingIn}
+                className="text-sm text-purple-600 font-semibold hover:text-purple-700 disabled:opacity-50"
               >
                 Forgot your password?
               </button>
@@ -1542,15 +1612,23 @@ export default function Mingo() {
             <div className="text-center">
               <p className="text-gray-600 text-sm">Don't have an account?</p>
               <button
-                onClick={() => setScreen('register')}
-                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2"
+                onClick={() => {
+                  setAuthError(null);
+                  setScreen('register');
+                }}
+                disabled={loggingIn}
+                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2 disabled:opacity-50"
               >
                 Register here
               </button>
             </div>
             <button
-              onClick={() => setScreen('home')}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+              onClick={() => {
+                setAuthError(null);
+                setScreen('home');
+              }}
+              disabled={loggingIn}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base disabled:opacity-50"
             >
               Back
             </button>
@@ -1685,11 +1763,19 @@ export default function Mingo() {
         )}
 
         {screen === 'register' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+          <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${registering ? 'pointer-events-none opacity-80' : ''}`}>
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
+            {authError && screen === 'register' && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
+                <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (registering) return;
+                setAuthError(null);
                 const formData = new FormData(e.target);
                 const username = formData.get('username');
                 const email = formData.get('email');
@@ -1697,24 +1783,24 @@ export default function Mingo() {
                 const confirmPassword = formData.get('confirmPassword');
                 
                 if (password !== confirmPassword) {
-                  alert('Passwords do not match');
+                  setAuthError('Passwords do not match');
                   return;
                 }
                 
                 if (password.length < 6) {
-                  alert('Password must be at least 6 characters');
+                  setAuthError('Password must be at least 6 characters');
                   return;
                 }
                 
                 if (username.length < 3) {
-                  alert('Username must be at least 3 characters');
+                  setAuthError('Username must be at least 3 characters');
                   return;
                 }
                 
                 try {
                   await registerUser(username, email, password);
                 } catch (error) {
-                  alert(error.message || 'Registration failed. Please try again.');
+                  setAuthError(error.message || 'Registration failed. Please try again.');
                 }
               }}
               className="space-y-4"
@@ -1725,14 +1811,16 @@ export default function Mingo() {
                 placeholder="Username (min 3 characters)"
                 required
                 minLength={3}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={registering}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <input
                 name="email"
                 type="email"
                 placeholder="Email"
                 required
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={registering}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <input
                 name="password"
@@ -1740,7 +1828,8 @@ export default function Mingo() {
                 placeholder="Password (min 6 characters)"
                 required
                 minLength={6}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={registering}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <input
                 name="confirmPassword"
@@ -1748,27 +1837,45 @@ export default function Mingo() {
                 placeholder="Confirm Password"
                 required
                 minLength={6}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+                disabled={registering}
+                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
               />
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+                disabled={registering}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <UserPlus size={20} /> Create Account
+                {registering ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" /> Creating account…
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={20} /> Create Account
+                  </>
+                )}
               </button>
             </form>
             <div className="text-center">
               <p className="text-gray-600 text-sm">Already have an account?</p>
               <button
-                onClick={() => setScreen('login')}
-                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2"
+                onClick={() => {
+                  setAuthError(null);
+                  setScreen('login');
+                }}
+                disabled={registering}
+                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2 disabled:opacity-50"
               >
                 Login here
               </button>
             </div>
             <button
-              onClick={() => setScreen('home')}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
+              onClick={() => {
+                setAuthError(null);
+                setScreen('home');
+              }}
+              disabled={registering}
+              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base disabled:opacity-50"
             >
               Back
             </button>
