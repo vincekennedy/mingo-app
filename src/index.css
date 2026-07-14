@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes mingo-orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+  }
+}
+
+@keyframes mingo-sparkle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mingo-tile-pop {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes mingo-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mingo-generate-orb {
+  animation: mingo-orb-pulse 2.2s ease-in-out infinite;
+}
+
+.mingo-generate-sparkle {
+  animation: mingo-sparkle-spin 3.5s linear infinite;
+}
+
+.mingo-generate-tile {
+  animation: mingo-tile-pop 1.4s ease-in-out infinite;
+}
+
+.mingo-generate-copy {
+  animation: mingo-fade-up 0.35s ease-out;
+}
