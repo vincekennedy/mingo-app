@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound } from 'lucide-react';
+import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { authService } from './services/auth';
 import { gameService } from './services/game';
 import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
 import { storageService } from './services/storage';
+import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 
 export default function Mingo() {
@@ -25,6 +26,8 @@ export default function Mingo() {
   const [copied, setCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
   const [gameTitle, setGameTitle] = useState('');
+  const [generatingItems, setGeneratingItems] = useState(false);
+  const [generateStatusIndex, setGenerateStatusIndex] = useState(0);
   const [isHost, setIsHost] = useState(false);
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
@@ -665,6 +668,60 @@ export default function Mingo() {
     // Adjust items array to match needed items
     if (items.length < neededItems) {
       setItems([...items, ...Array(neededItems - items.length).fill({ text: '', imageUrl: null })]);
+    }
+  };
+
+  const neededItemCount = useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
+
+  const generateLoadingMessages = (() => {
+    const theme = gameTitle.trim() || 'your theme';
+    return [
+      `Dreaming up squares for “${theme}”…`,
+      'Shuffling witty bingo prompts…',
+      'Keeping phrases short and punchy…',
+      `Almost ready — packing ${neededItemCount} items…`,
+    ];
+  })();
+
+  useEffect(() => {
+    if (!generatingItems) {
+      setGenerateStatusIndex(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setGenerateStatusIndex((i) => (i + 1) % 4);
+    }, 1600);
+    return () => clearInterval(id);
+  }, [generatingItems]);
+
+  const generateItemsFromGameTitle = async () => {
+    const title = gameTitle.trim();
+    if (!title) {
+      alert('Enter a game title first, then generate items.');
+      return;
+    }
+
+    const filledCount = items.filter((item) => {
+      if (typeof item === 'string') return item.trim() !== '';
+      return (item.text && item.text.trim() !== '') || item.imageUrl;
+    }).length;
+
+    if (filledCount > 0) {
+      const replace = window.confirm(
+        'This will replace your current bingo item texts (images on slots will be cleared). Continue?'
+      );
+      if (!replace) return;
+    }
+
+    setGeneratingItems(true);
+    try {
+      const generated = await generateItemsFromTitle(title, neededItemCount);
+      setItems(generated.map((text) => ({ text, imageUrl: null })));
+    } catch (error) {
+      console.error('Generate items error:', error);
+      alert(error.message || 'Could not generate items. Please try again.');
+    } finally {
+      setGeneratingItems(false);
     }
   };
 
@@ -1363,6 +1420,52 @@ export default function Mingo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+      {generatingItems && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-busy="true"
+          aria-labelledby="generate-items-title"
+        >
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
+            <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
+            <div className="absolute top-10 left-8 h-24 w-24 rounded-full bg-orange-300/30 mingo-generate-orb" style={{ animationDelay: '1.2s' }} />
+
+            <div className="relative p-6 sm:p-8 text-center">
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg mingo-generate-sparkle">
+                <Sparkles size={36} className="text-white" />
+              </div>
+
+              <h2 id="generate-items-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+                Cooking up bingo squares
+              </h2>
+              <p
+                key={generateStatusIndex}
+                className="mingo-generate-copy text-sm sm:text-base text-gray-600 min-h-[3rem] flex items-center justify-center px-2"
+              >
+                {generateLoadingMessages[generateStatusIndex % generateLoadingMessages.length]}
+              </p>
+
+              <div className="mt-6 mx-auto grid max-w-[180px] grid-cols-3 gap-2">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="mingo-generate-tile aspect-square rounded-lg bg-gradient-to-br from-purple-200 via-pink-200 to-orange-200 border border-white/80 shadow-sm"
+                    style={{ animationDelay: `${(i % 3) * 0.15 + Math.floor(i / 3) * 0.12}s` }}
+                  />
+                ))}
+              </div>
+
+              <p className="mt-6 text-xs text-gray-400 font-medium tracking-wide uppercase">
+                Hang tight — you can edit everything after
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* User Profile Banner - top right */}
       {currentUser && screen !== 'reset-password' && (
         <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-20">
@@ -1912,15 +2015,29 @@ export default function Mingo() {
           <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8">
             <div className="mb-6">
               <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
-                Game Title (Optional)
+                Game Title
               </label>
               <input
                 type="text"
                 value={gameTitle}
                 onChange={(e) => setGameTitle(e.target.value)}
-                placeholder="Enter a title for your game"
+                placeholder="Enter a title for your game (used to generate items)"
                 className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
               />
+              <button
+                type="button"
+                onClick={generateItemsFromGameTitle}
+                disabled={generatingItems || !gameTitle.trim()}
+                className="mt-3 w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={18} />
+                {generatingItems
+                  ? 'Generating…'
+                  : `Generate ${neededItemCount} items from title`}
+              </button>
+              <p className="mt-2 text-xs sm:text-sm text-gray-500">
+                Optional: AI fills the item list from your title. You can edit anything before creating the game.
+              </p>
             </div>
 
             <div className="mb-6">
