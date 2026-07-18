@@ -1,0 +1,17 @@
+# Supabase CLI config (minimal). Link a remote with:
+#   npx supabase login
+#   npx supabase link --project-ref <your-project-ref>
+# Apply migrations with:
+#   npx supabase db push
+
+[project]
+id = "mingo"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[studio]
+enabled = true
