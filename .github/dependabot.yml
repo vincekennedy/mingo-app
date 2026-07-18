@@ -1,0 +1,26 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    target-branch: develop
+    open-pull-requests-limit: 5
+    groups:
+      production-deps:
+        dependency-type: production
+        update-types:
+          - "minor"
+          - "patch"
+      development-deps:
+        dependency-type: development
+        update-types:
+          - "minor"
+          - "patch"
+      # Keep eslint + @eslint/js on the same major (avoids ERESOLVE peer conflicts)
+      eslint-ecosystem:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-*"

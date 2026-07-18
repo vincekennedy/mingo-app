@@ -78,12 +78,16 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `board.js` | Save/load `board_states` (board JSON, marked indices, has_won) |
 | `winClaims.js` | Submit / list pending / confirm / reject / user claim status / winners / pending map |
 | `storage.js` | Upload/delete images in `game-images` bucket (max 5MB, `image/*`) |
+| `generateItems.js` | Client call to `/api/generate-items` for AI bingo items from title |
+| `feedback.js` | Submit issue/feedback reports to `feedback_reports` (anon + authenticated) |
 
 ---
 
 ## Data model (Postgres)
 
-Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup trigger, storage).
+Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup trigger, storage, feedback).
+
+Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npx supabase link` → `npx supabase db push`). See [`supabase/README.md`](../supabase/README.md).
 
 | Table | Purpose / key fields |
 |-------|----------------------|
@@ -92,6 +96,7 @@ Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup
 | `public.game_participants` | `game_code`, `user_id`, `is_host`, UNIQUE(game_code, user_id) |
 | `public.board_states` | Per user per game: `board`, `marked_indices`, `has_won` |
 | `public.win_claims` | `claim_type`, claimed indices/items, `status` pending/confirmed/rejected, `incorrect_indices` |
+| `public.feedback_reports` | In-app reports: `category`, `email`, `subject`, `details`, required `app_version`; optional `user_id`, `screen`, `game_code`, `user_agent`. Client INSERT only (no SELECT). |
 
 **`games.config` shape** (written from setup):
 
@@ -108,7 +113,14 @@ Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup
 
 **Storage:** public bucket `game-images`; object path `{userId}/{gameCode}/{filename}` (temp code allowed during setup).
 
-If restoring without the single file, combine historically: `SUPABASE_SETUP.md` schema + `COMPLETE_USER_SETUP.sql` + `SETUP_STORAGE.sql` + `FIX_GAMES_UPDATE_POLICY.sql`. Prefer `FULL_SCHEMA_RESTORE.sql`.
+If restoring without the single file, combine historically: `SUPABASE_SETUP.md` schema + `COMPLETE_USER_SETUP.sql` + `SETUP_STORAGE.sql` + `FIX_GAMES_UPDATE_POLICY.sql`. Prefer `FULL_SCHEMA_RESTORE.sql` for greenfield; prefer `supabase db push` for incremental changes.
+
+### In-app reporting
+
+- Floating **Report** button (bottom-right) on every screen opens a modal (does not change `screen`).
+- Categories: `bug` \| `feature` \| `enhancement` \| `account` \| `other`.
+- Email required (prefilled when signed in); subject + details required; `app_version` always from `getVersion()`.
+- No independent anonymous session tracking — only Auth sessions plus auto-captured context at submit time.
 
 ---
 
@@ -150,7 +162,7 @@ Auth email redirect URLs in Supabase must include production Vercel origin and l
 
 ## Environment
 
-Local: `.env.local` (gitignored). Vite only exposes `VITE_*` to the client.
+Local: `.env.local` (gitignored). Vite only exposes `VITE_*` to the client. Local Vite should use **mingo-local** (`lmlzduwtrzzjaggqsulr`); production uses a separate project on Vercel. See `supabase/README.md`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
@@ -187,7 +199,9 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 
 | Path | Use |
 |------|-----|
-| `FULL_SCHEMA_RESTORE.sql` | Prefer for fresh projects |
+| `FULL_SCHEMA_RESTORE.sql` | Prefer for fresh projects (includes feedback_reports) |
+| `supabase/migrations/` | Incremental schema via CLI (`db push`) |
+| `supabase/README.md` | Link + push workflow |
 | `SUPABASE_SETUP.md` | Original schema + setup walkthrough |
 | `COMPLETE_USER_SETUP.sql` | Trigger + users RLS |
 | `SETUP_STORAGE.sql` | `game-images` bucket |
