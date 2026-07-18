@@ -11,8 +11,8 @@ alwaysApply: true
   1. Base new branches on up-to-date `develop` (e.g. `git checkout develop && git pull`, then `git checkout -b …`).
   2. Commit and push on that feature branch (or `develop` when the user asks to land there).
   3. Open PRs into **`develop`**, not `master`, unless the user explicitly asks otherwise.
-- **`master`** is for version / release management by the user. Only touch `master` when they explicitly request a release merge or version bump.
+- **`master`** is for version / release management. Merging into `master` triggers the CalVer release Action (version = production deploy date `YYYY.MM.DD`, git tag `vYYYY.MM.DD`). See `.cursor/rules/releases.mdc`.
 
 ```text
-feature/*  →  develop  →  master (user-managed releases)
+feature/*  →  develop  →  master (CalVer tagged on merge)
 ```
