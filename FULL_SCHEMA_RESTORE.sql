@@ -79,6 +79,34 @@ CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(gam
 CREATE INDEX IF NOT EXISTS idx_win_claims_game ON public.win_claims(game_code);
 CREATE INDEX IF NOT EXISTS idx_win_claims_status ON public.win_claims(status) WHERE status = 'pending';
 
+-- Feedback / issue reports (unauthenticated submit allowed via RLS INSERT)
+CREATE TABLE IF NOT EXISTS public.feedback_reports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  category TEXT NOT NULL,
+  email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  details TEXT NOT NULL,
+  user_id UUID NULL REFERENCES public.users(id) ON DELETE SET NULL,
+  screen TEXT NULL,
+  app_version TEXT NOT NULL,
+  game_code TEXT NULL,
+  user_agent TEXT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT feedback_reports_category_check CHECK (
+    category IN ('bug', 'feature', 'enhancement', 'account', 'other')
+  ),
+  CONSTRAINT feedback_reports_email_check CHECK (char_length(trim(email)) > 0),
+  CONSTRAINT feedback_reports_subject_check CHECK (char_length(trim(subject)) > 0),
+  CONSTRAINT feedback_reports_details_check CHECK (char_length(trim(details)) > 0),
+  CONSTRAINT feedback_reports_app_version_check CHECK (char_length(trim(app_version)) > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_reports_created_at
+  ON public.feedback_reports(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_reports_category
+  ON public.feedback_reports(category);
+
 -- -----------------------------------------------------------------------------
 -- Enable RLS
 -- -----------------------------------------------------------------------------
@@ -87,6 +115,7 @@ ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.board_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.win_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feedback_reports ENABLE ROW LEVEL SECURITY;
 
 -- -----------------------------------------------------------------------------
 -- Drop policies (idempotent re-run)
@@ -110,6 +139,7 @@ DROP POLICY IF EXISTS "Users can insert own board" ON public.board_states;
 DROP POLICY IF EXISTS "Participants can read claims" ON public.win_claims;
 DROP POLICY IF EXISTS "Players can create claims" ON public.win_claims;
 DROP POLICY IF EXISTS "Hosts can update claims" ON public.win_claims;
+DROP POLICY IF EXISTS "Anyone can submit feedback" ON public.feedback_reports;
 
 -- -----------------------------------------------------------------------------
 -- RLS: users
@@ -195,16 +225,36 @@ CREATE POLICY "Hosts can update claims" ON public.win_claims
   );
 
 -- -----------------------------------------------------------------------------
+-- RLS: feedback_reports (insert-only for clients)
+-- -----------------------------------------------------------------------------
+CREATE POLICY "Anyone can submit feedback" ON public.feedback_reports
+  FOR INSERT
+  TO anon, authenticated
+  WITH CHECK (
+    category IN ('bug', 'feature', 'enhancement', 'account', 'other')
+    AND char_length(trim(email)) > 0
+    AND char_length(trim(subject)) > 0
+    AND char_length(trim(details)) > 0
+    AND char_length(trim(app_version)) > 0
+    AND (user_id IS NULL OR user_id = auth.uid())
+  );
+
+-- -----------------------------------------------------------------------------
 -- Auth → public.users profile trigger (signup)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   v_username TEXT;
 BEGIN
   v_username := COALESCE(
-    NEW.raw_user_meta_data->>'username',
-    split_part(NEW.email, '@', 1)
+    NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''),
+    split_part(NEW.email, '@', 1),
+    'user'
   );
 
   INSERT INTO public.users (id, username, created_at, updated_at)
@@ -216,10 +266,10 @@ BEGIN
   RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
-    RAISE WARNING 'Error creating user profile: %', SQLERRM;
+    RAISE WARNING 'Error creating user profile for %: %', NEW.id, SQLERRM;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -259,7 +309,7 @@ CREATE POLICY "Users can delete own game images" ON storage.objects
 SELECT 'tables' AS check_type, tablename
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('users', 'games', 'game_participants', 'board_states', 'win_claims')
+  AND tablename IN ('users', 'games', 'game_participants', 'board_states', 'win_claims', 'feedback_reports')
 ORDER BY tablename;
 
 SELECT 'trigger' AS check_type, trigger_name, event_object_table

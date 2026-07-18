@@ -53,118 +53,71 @@ export const authService = {
       })
       
       if (!hasSession) {
-        console.warn('No session after signup - email confirmation may be required')
-        console.warn('The trigger should still fire, but RLS policies may block reads until email is confirmed')
+        // Email confirmation (or similar) left us without a JWT. The DB trigger still
+        // creates public.users, but RLS blocks client reads/inserts until login.
+        // Do not attempt a manual profile insert — it will always fail under RLS.
+        console.warn('No session after signup - confirm email (or disable confirmations on mingo-local), then log in')
+        return authData.user
       }
-      
+
       // Wait a moment for the trigger to create the profile
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Try multiple times to get the profile (trigger might need a moment)
-      // Also try direct query in case getUserProfile has RLS issues
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       let profile = null
       for (let i = 0; i < 5; i++) {
         try {
-          // First try the getUserProfile method
           profile = await this.getUserProfile(authData.user.id)
-          if (profile) {
-            console.log(`Profile found via getUserProfile on attempt ${i + 1}`)
-            break
-          }
-          
-          // If getUserProfile returns null, try direct query to check if profile exists
+          if (profile) break
+
           const { data: directProfile, error: directError } = await supabase
             .from('users')
             .select('*')
             .eq('id', authData.user.id)
             .single()
-          
+
           if (directProfile) {
-            console.log(`Profile found via direct query on attempt ${i + 1}`)
             profile = directProfile
             break
           }
-          
+
           if (directError && directError.code !== 'PGRST116') {
             console.warn(`Direct query error on attempt ${i + 1}:`, directError)
           }
-          
-          console.log(`Profile check attempt ${i + 1}: not found yet, waiting...`)
-          await new Promise(resolve => setTimeout(resolve, 500))
+
+          await new Promise(resolve => setTimeout(resolve, 400))
         } catch (err) {
           console.log(`Profile check attempt ${i + 1} failed:`, err.message)
         }
       }
-      
+
       if (!profile) {
-        // Profile not found - try manual insert as fallback
-        // If it fails with duplicate key, the profile exists but RLS is blocking reads
-        console.warn('Profile not found after 5 attempts, attempting manual insert...')
-        console.warn('If this fails with "duplicate key", the profile exists but RLS is blocking reads')
-        
+        // Session exists but profile not readable yet — try insert fallback once
         const { data: insertData, error: profileError } = await supabase
           .from('users')
-          .insert({
-            id: authData.user.id,
-            username,
-          })
+          .insert({ id: authData.user.id, username })
           .select()
           .single()
-        
+
         if (profileError) {
-          // Check if it's a duplicate key error (profile already exists)
-          if (profileError.code === '23505' || 
-              profileError.message?.includes('duplicate key') || 
-              profileError.message?.includes('already exists') ||
-              profileError.message?.includes('unique constraint')) {
-            console.log('Profile already exists (duplicate key error) - RLS may be blocking reads')
-            console.log('This means the trigger worked, but we cannot read the profile due to RLS')
-            
-            // Profile exists but we can't read it - this is an RLS SELECT policy issue
-            // The account was created successfully, so we should return success
-            // The user can log in and the profile will be accessible then
-            console.warn('Account created successfully, but profile cannot be read immediately')
-            console.warn('This is likely due to RLS SELECT policy or session not being fully established')
-            console.warn('User should be able to log in and access their profile')
-            
-            // Return the user anyway - the profile exists, we just can't read it yet
-            // The user can log in and it will work
+          if (
+            profileError.code === '23505' ||
+            profileError.message?.includes('duplicate key') ||
+            profileError.message?.includes('already exists') ||
+            profileError.message?.includes('unique constraint')
+          ) {
+            // Trigger won the race; profile exists
             return authData.user
-          } else if (profileError.message?.includes('row-level security') || profileError.code === '42501') {
-            // RLS is blocking the insert
-            console.error('Profile creation error details:', {
-              message: profileError.message,
-              code: profileError.code,
-              details: profileError.details,
-              hint: profileError.hint
-            })
-            
-            throw new Error(
-              'User profile creation failed. The trigger did not create the profile and manual insert was blocked by RLS.\n\n' +
-              'DIAGNOSIS:\n' +
-              '1. Run TEST_TRIGGER_SETUP.sql in Supabase SQL Editor to check setup\n' +
-              '2. Check if email confirmation is required (Settings → Authentication → Email Auth)\n' +
-              '3. Check Supabase Logs → Postgres Logs for trigger errors\n\n' +
-              'FIX:\n' +
-              '1. If email confirmation is enabled, either:\n' +
-              '   - Disable it temporarily for testing, OR\n' +
-              '   - Confirm your email first, then the trigger will fire\n' +
-              '2. If trigger errors appear in logs, fix the trigger function\n' +
-              '3. Ensure COMPLETE_USER_SETUP.sql was run successfully\n' +
-              '4. Run DIAGNOSE_USER_SETUP.sql to verify all policies exist'
-            )
-          } else {
-            throw profileError
           }
-        } else {
-          console.log('Manual profile insert succeeded:', insertData)
-          profile = insertData
+          if (profileError.message?.includes('row-level security') || profileError.code === '42501') {
+            // Auth succeeded; profile may still be created by trigger. Allow login path.
+            console.warn('Profile not readable yet after signup; try logging in', profileError)
+            return authData.user
+          }
+          throw profileError
         }
-      } else {
-        console.log('Profile created by trigger:', profile)
+        profile = insertData
       }
-      
-      console.log('User profile created successfully')
+
       return authData.user
     } catch (error) {
       console.error('Sign up error:', error)
