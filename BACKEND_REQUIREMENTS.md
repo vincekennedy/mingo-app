@@ -51,20 +51,7 @@ To enable true cross-device multiplayer for Mingo, we need to move from client-s
 4. Replace localStorage calls with Supabase client calls
 5. Use Supabase Realtime subscriptions for live updates
 
-### Option 2: Firebase (Firestore)
-**Pros:**
-- ✅ Real-time database (Firestore)
-- ✅ Built-in authentication
-- ✅ Free tier available
-- ✅ Good React integration
-- ✅ Google-backed reliability
-
-**Cons:**
-- NoSQL (different from SQL mindset)
-- Can get expensive at scale
-- Less flexible queries than SQL
-
-### Option 3: Node.js + Express + PostgreSQL + Socket.io
+### Option 2: Node.js + Express + PostgreSQL + Socket.io
 **Pros:**
 - ✅ Full control
 - ✅ Can use existing knowledge
@@ -77,7 +64,7 @@ To enable true cross-device multiplayer for Mingo, we need to move from client-s
 - Need to manage database
 - Need to deploy and maintain server
 
-### Option 4: Vercel Serverless Functions + Database (PlanetScale/Supabase)
+### Option 3: Vercel Serverless Functions + Database (PlanetScale/Supabase)
 **Pros:**
 - ✅ Works with existing Vercel deployment
 - ✅ Serverless (scales automatically)
@@ -218,7 +205,6 @@ CREATE TABLE win_claims (
 ## Estimated Effort
 
 - **Supabase Approach:** 1-2 days (fastest)
-- **Firebase Approach:** 2-3 days
 - **Custom Node.js Backend:** 5-7 days
 - **Vercel Functions + Database:** 3-4 days
 
