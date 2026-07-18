@@ -162,7 +162,7 @@ Auth email redirect URLs in Supabase must include production Vercel origin and l
 
 ## Environment
 
-Local: `.env.local` (gitignored). Vite only exposes `VITE_*` to the client.
+Local: `.env.local` (gitignored). Vite only exposes `VITE_*` to the client. Local Vite should use **mingo-local** (`lmlzduwtrzzjaggqsulr`); production uses a separate project on Vercel. See `supabase/README.md`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|

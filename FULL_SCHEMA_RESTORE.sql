@@ -243,13 +243,18 @@ CREATE POLICY "Anyone can submit feedback" ON public.feedback_reports
 -- Auth → public.users profile trigger (signup)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 DECLARE
   v_username TEXT;
 BEGIN
   v_username := COALESCE(
-    NEW.raw_user_meta_data->>'username',
-    split_part(NEW.email, '@', 1)
+    NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''),
+    split_part(NEW.email, '@', 1),
+    'user'
   );
 
   INSERT INTO public.users (id, username, created_at, updated_at)
@@ -261,10 +266,10 @@ BEGIN
   RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
-    RAISE WARNING 'Error creating user profile: %', SQLERRM;
+    RAISE WARNING 'Error creating user profile for %: %', NEW.id, SQLERRM;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created

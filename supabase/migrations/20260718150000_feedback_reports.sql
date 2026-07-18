@@ -1,6 +1,7 @@
 -- feedback_reports: unauthenticated issue / feedback submissions from the app
+-- Use gen_random_uuid() (pgcrypto) so migrations succeed when uuid-ossp is not on search_path
 CREATE TABLE IF NOT EXISTS public.feedback_reports (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   category TEXT NOT NULL,
   email TEXT NOT NULL,
   subject TEXT NOT NULL,
