@@ -18,3 +18,9 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # Keep eslint + @eslint/js on the same major (avoids ERESOLVE peer conflicts)
+      eslint-ecosystem:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-*"
