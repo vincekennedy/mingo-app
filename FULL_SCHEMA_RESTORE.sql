@@ -131,6 +131,7 @@ DROP POLICY IF EXISTS "Hosts can update their games" ON public.games;
 
 DROP POLICY IF EXISTS "Participants can read their games" ON public.game_participants;
 DROP POLICY IF EXISTS "Hosts can read participants of their games" ON public.game_participants;
+DROP POLICY IF EXISTS "Participants can read fellow participants" ON public.game_participants;
 DROP POLICY IF EXISTS "Users can join games" ON public.game_participants;
 
 DROP POLICY IF EXISTS "Users can update own board" ON public.board_states;
@@ -187,6 +188,31 @@ CREATE POLICY "Hosts can read participants of their games" ON public.game_partic
         AND g.host_id = auth.uid()
     )
   );
+
+-- Fellow participants (SECURITY DEFINER avoids recursive RLS on game_participants)
+CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.game_participants
+    WHERE game_code = p_game_code
+      AND user_id = auth.uid()
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
+
+CREATE POLICY "Participants can read fellow participants"
+  ON public.game_participants
+  FOR SELECT
+  TO authenticated
+  USING (public.is_participant_of(game_code));
 
 CREATE POLICY "Users can join games" ON public.game_participants
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
