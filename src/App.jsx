@@ -813,14 +813,30 @@ export default function Mingo() {
       return;
     }
 
-    if (!currentUser) {
-      alert('Please log in to join a game.');
-      return;
+    let user = currentUser;
+    if (!user) {
+      const desiredName = window.prompt('Enter a display name to join as guest:');
+      if (!desiredName || !desiredName.trim()) {
+        return;
+      }
+      try {
+        const guest = await authService.signInAsGuest(desiredName.trim());
+        user = {
+          id: guest.user.id,
+          email: guest.user.email || null,
+          username: guest.username,
+          isGuest: true,
+        };
+        setCurrentUser(user);
+      } catch (guestError) {
+        alert(guestError.message || 'Could not start guest session. Please log in or try again.');
+        return;
+      }
     }
 
     try {
       // Get game from Supabase
-      const game = await gameService.joinGame(code, currentUser.id);
+      const game = await gameService.joinGame(code, user.id);
       
       if (!game || !game.config) {
         alert('Game not found or invalid. Please check the code and try again.');
@@ -847,7 +863,7 @@ export default function Mingo() {
       setIsHost(false);
       
       // Try to load saved board state first
-      const boardState = await boardService.loadBoardState(code, currentUser.id);
+      const boardState = await boardService.loadBoardState(code, user.id);
       if (boardState && boardState.board && boardState.board.length > 0) {
         // Restore board state
         setBoard(boardState.board);
@@ -856,13 +872,13 @@ export default function Mingo() {
         setScreen('play');
         
         // Reload user games to update the list
-        await loadUserGames(currentUser.id);
+        await loadUserGames(user.id);
       } else {
         // Generate new board
-        await generateBoardFromConfig(config, code);
+        await generateBoardFromConfig(config, code, user);
         
         // Reload user games to update the list
-        await loadUserGames(currentUser.id);
+        await loadUserGames(user.id);
       }
     } catch (error) {
       console.error('Error joining game:', error);
@@ -877,7 +893,7 @@ export default function Mingo() {
     }
   };
 
-  const generateBoardFromConfig = async (config, gameCodeToUse = null) => {
+  const generateBoardFromConfig = async (config, gameCodeToUse = null, userForSave = null) => {
     const { items: validItems, boardSize: size, useFreeSpace: freeSpace } = config;
     const totalCells = size * size;
     const neededItems = freeSpace ? totalCells - 1 : totalCells;
@@ -938,9 +954,10 @@ export default function Mingo() {
     
     // Save generated board to Supabase
     const codeToSave = gameCodeToUse || gameCode;
-    if (currentUser && codeToSave) {
+    const saveUser = userForSave || currentUser;
+    if (saveUser && codeToSave) {
       try {
-        await boardService.saveGeneratedBoard(codeToSave, currentUser.id, config, newBoard, freeSpace ? new Set([centerIndex]) : new Set());
+        await boardService.saveGeneratedBoard(codeToSave, saveUser.id, config, newBoard, freeSpace ? new Set([centerIndex]) : new Set());
       } catch (error) {
         console.error('Error saving generated board:', error);
       }
