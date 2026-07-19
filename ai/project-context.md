@@ -12,7 +12,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 - **Backend:** Supabase (Auth, Postgres, Storage)  
 - **Intent:** Hands-on experiment in AI-assisted shipping (Cursor, Claude, Linear, Vercel) — see `README.md`
 
-**Product note:** README still says “no player accounts.” Hosts still need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project.
+**Product note:** README still says “no player accounts.” Hosts still need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project. Guests are ephemeral: after they are in **no active games** and idle **≥ 24 hours**, `cleanup_guest_users` (pg_cron daily + optional Edge Function) deletes the Auth user (cascades profile / game rows). See [`supabase/README.md`](../supabase/README.md#guest-user-retention).
 
 ---
 
