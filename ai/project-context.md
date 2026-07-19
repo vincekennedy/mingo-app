@@ -91,7 +91,7 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 
 | Table | Purpose / key fields |
 |-------|----------------------|
-| `public.users` | Profile: `id` → `auth.users`, `username` UNIQUE |
+| `public.users` | Profile: `id` → `auth.users`, `username` UNIQUE, optional `display_name` (guests: entered name; UI prefers this over unique `username`) |
 | `public.games` | `code` (5-char PK), `host_id`, `config` JSONB, `status` `active` \| `ended` |
 | `public.game_participants` | `game_code`, `user_id`, `is_host`, UNIQUE(game_code, user_id) |
 | `public.board_states` | Per user per game: `board`, `marked_indices`, `has_won` |
@@ -109,7 +109,7 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 }
 ```
 
-**Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback). Client also retries/fallback-inserts if needed.
+**Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback) and optional `display_name`. Client also retries/fallback-inserts if needed. Guests store unique `username` as `Name-xxxx` and `display_name` as the entered name.
 
 **Storage:** public bucket `game-images`; object path `{userId}/{gameCode}/{filename}` (temp code allowed during setup).
 

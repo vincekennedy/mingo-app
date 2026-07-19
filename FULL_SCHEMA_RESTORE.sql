@@ -23,9 +23,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username VARCHAR(50) UNIQUE NOT NULL,
+  display_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS display_name TEXT;
 
 CREATE TABLE IF NOT EXISTS public.games (
   code VARCHAR(5) PRIMARY KEY,
@@ -276,6 +280,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_username TEXT;
+  v_display_name TEXT;
 BEGIN
   v_username := COALESCE(
     NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''),
@@ -283,10 +288,13 @@ BEGIN
     'user'
   );
 
-  INSERT INTO public.users (id, username, created_at, updated_at)
-  VALUES (NEW.id, v_username, NOW(), NOW())
+  v_display_name := NULLIF(TRIM(NEW.raw_user_meta_data->>'display_name'), '');
+
+  INSERT INTO public.users (id, username, display_name, created_at, updated_at)
+  VALUES (NEW.id, v_username, v_display_name, NOW(), NOW())
   ON CONFLICT (id) DO UPDATE
   SET username = EXCLUDED.username,
+      display_name = COALESCE(EXCLUDED.display_name, public.users.display_name),
       updated_at = NOW();
 
   RETURN NEW;

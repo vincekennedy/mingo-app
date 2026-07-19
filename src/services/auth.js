@@ -1,5 +1,13 @@
 import { supabase } from '../lib/supabase'
 
+/** Prefer friendly display_name; fall back to unique username or other fallback. */
+export function resolveDisplayName(profile, fallback = 'User') {
+  const fromProfile = profile?.display_name || profile?.username
+  if (fromProfile && String(fromProfile).trim()) return String(fromProfile).trim()
+  if (fallback && String(fallback).trim()) return String(fallback).trim()
+  return 'User'
+}
+
 export const authService = {
   /**
    * Register a new user
@@ -179,7 +187,7 @@ export const authService = {
 
     const { data, error } = await supabase.auth.signInAnonymously({
       options: {
-        data: { username },
+        data: { username, display_name: base },
       },
     })
 
@@ -206,6 +214,7 @@ export const authService = {
       const { error: insertError } = await supabase.from('users').insert({
         id: data.user.id,
         username,
+        display_name: base,
       })
       if (
         insertError &&
@@ -214,10 +223,21 @@ export const authService = {
       ) {
         console.warn('Guest profile insert issue:', insertError)
       }
-      profile = (await this.getUserProfile(data.user.id)) || { username }
+      profile = (await this.getUserProfile(data.user.id)) || { username, display_name: base }
+    } else if (!profile.display_name) {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ display_name: base, updated_at: new Date().toISOString() })
+        .eq('id', data.user.id)
+      if (updateError) {
+        console.warn('Guest display_name update issue:', updateError)
+      } else {
+        profile = { ...profile, display_name: base }
+      }
     }
 
-    return { user: data.user, username: profile.username || username }
+    const resolved = resolveDisplayName(profile, base)
+    return { user: data.user, username: profile.username || username, displayName: resolved }
   },
 
   /**
