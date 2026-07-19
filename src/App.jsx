@@ -52,9 +52,16 @@ export default function Mingo() {
   const pollIntervalRef = useRef(null);
   const playerListIntervalRef = useRef(null);
   const passwordRecoveryRef = useRef(false);
+  const gamesLoadIdRef = useRef(0);
+  const authReadyRef = useRef(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [gamesLoading, setGamesLoading] = useState(false);
 
   // Authentication and user management - check on mount
   useEffect(() => {
+    let cancelled = false;
+    let hydratePromise = null;
+
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
       if (hash && new URLSearchParams(hash).get('type') === 'recovery') {
@@ -64,12 +71,45 @@ export default function Mingo() {
       /* ignore malformed hash */
     }
 
+    const markAuthReady = () => {
+      if (cancelled) return;
+      authReadyRef.current = true;
+      setAuthReady(true);
+    };
+
+    /** Full bootstrap: set user/dashboard and wait for games before revealing UI */
+    const hydrateLoggedInSession = (user) => {
+      if (authReadyRef.current || cancelled) return Promise.resolve();
+      if (hydratePromise) return hydratePromise;
+
+      hydratePromise = (async () => {
+        try {
+          const profile = await authService.getUserProfile(user.id);
+          if (cancelled) return;
+          const username = profile?.username || user.email?.split('@')[0] || 'User';
+          setCurrentUser({
+            id: user.id,
+            email: user.email,
+            username,
+          });
+          setScreen('dashboard');
+          await loadUserGames(user.id, { showLoading: true });
+        } finally {
+          markAuthReady();
+        }
+      })();
+
+      return hydratePromise;
+    };
+
     // Check if user is logged in on mount
     const checkAuth = async () => {
       try {
         const user = await authService.getCurrentUser();
+        if (cancelled) return;
         if (user && passwordRecoveryRef.current) {
           const profile = await authService.getUserProfile(user.id);
+          if (cancelled) return;
           const username = profile?.username || user.email?.split('@')[0] || 'User';
           setCurrentUser({
             id: user.id,
@@ -77,36 +117,27 @@ export default function Mingo() {
             username,
           });
           setScreen('reset-password');
+          markAuthReady();
           return;
         }
         if (user && !passwordRecoveryRef.current) {
-      // Get user profile with username
-      const profile = await authService.getUserProfile(user.id);
-      const username = profile?.username || user.email?.split('@')[0] || 'User';
-      
-      // Set current user state
-      setCurrentUser({
-        id: user.id,
-        email: user.email,
-        username,
-      });
-      
-      // Load user games
-      await loadUserGames(user.id);
-          
-          // Redirect to dashboard if on home screen
-          setScreen((prev) => (prev === 'home' ? 'dashboard' : prev));
+          await hydrateLoggedInSession(user);
+        } else {
+          markAuthReady();
         }
       } catch (error) {
         console.error('Error checking auth:', error);
+        markAuthReady();
       }
     };
     
     // Listen for auth state changes (e.g., token refresh, logout from another tab)
     const { data: { subscription } } = authService.onAuthStateChange(async (user, event) => {
+      if (cancelled) return;
       if (event === 'PASSWORD_RECOVERY' && user) {
         passwordRecoveryRef.current = true;
         const profile = await authService.getUserProfile(user.id);
+        if (cancelled) return;
         const username = profile?.username || user.email?.split('@')[0] || 'User';
         setCurrentUser({
           id: user.id,
@@ -114,29 +145,42 @@ export default function Mingo() {
           username,
         });
         setScreen('reset-password');
+        markAuthReady();
         return;
       }
       if (event === 'SIGNED_OUT' || !user) {
         passwordRecoveryRef.current = false;
+        hydratePromise = null;
         setCurrentUser(null);
         setUserGames([]);
         setSelectedGame(null);
         setScreen((prev) =>
           prev === 'dashboard' || prev === 'host' || prev === 'play' ? 'home' : prev
         );
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (passwordRecoveryRef.current) {
-          return;
-        }
+        markAuthReady();
+        return;
+      }
+
+      // Cold start: keep overlay until games are loaded
+      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !authReadyRef.current) {
+        if (passwordRecoveryRef.current) return;
+        await hydrateLoggedInSession(user);
+        return;
+      }
+
+      // After bootstrap: quiet updates only (no overlay flash)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (passwordRecoveryRef.current) return;
         const profile = await authService.getUserProfile(user.id);
+        if (cancelled) return;
         const username = profile?.username || user.email?.split('@')[0] || 'User';
         setCurrentUser({
           id: user.id,
           email: user.email,
           username,
         });
-        // Load user games
-        await loadUserGames(user.id);
+        setScreen((prev) => (prev === 'home' || prev === 'login' || prev === 'register' ? 'dashboard' : prev));
+        void loadUserGames(user.id, { showLoading: false });
       }
     });
 
@@ -145,16 +189,21 @@ export default function Mingo() {
     });
     
     return () => {
+      cancelled = true;
+      hydratePromise = null;
       subscription.unsubscribe();
     };
   }, []); // Only run on mount
 
-  const loadUserGames = async (userId) => {
+  const loadUserGames = async (userId, { showLoading = false } = {}) => {
     if (!userId) {
       setUserGames([]);
+      if (showLoading) setGamesLoading(false);
       return;
     }
-    
+
+    const loadId = ++gamesLoadIdRef.current;
+    if (showLoading) setGamesLoading(true);
     try {
       // Get games from Supabase
       const games = await gameService.getUserGames(userId);
@@ -180,11 +229,17 @@ export default function Mingo() {
           };
         })
       );
-      
+
+      if (loadId !== gamesLoadIdRef.current) return;
       setUserGames(gamesWithState);
     } catch (error) {
       console.error('Error loading user games:', error);
+      if (loadId !== gamesLoadIdRef.current) return;
       setUserGames([]);
+    } finally {
+      if (loadId === gamesLoadIdRef.current) {
+        setGamesLoading(false);
+      }
     }
   };
 
@@ -1207,8 +1262,8 @@ export default function Mingo() {
 
   // Poll for win claims and update dashboard if on dashboard
   useEffect(() => {
-    if (currentUser && screen === 'dashboard') {
-      // Poll user games for pending wins
+    if (currentUser && screen === 'dashboard' && authReady) {
+      // Poll user games for pending wins (start after interval so we don't race cold-start hydrate)
       const pollPendingWins = async () => {
         if (currentUser) {
           try {
@@ -1218,19 +1273,18 @@ export default function Mingo() {
               ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
               : {};
             
-            // Reload games to update pending win status
-            await loadUserGames(currentUser.id);
+            // Reload games to update pending win status (silent — no empty-state flash)
+            await loadUserGames(currentUser.id, { showLoading: false });
           } catch (error) {
             console.error('Error polling pending wins:', error);
           }
         }
       };
       
-      pollPendingWins();
       const interval = setInterval(pollPendingWins, 3000);
       return () => clearInterval(interval);
     }
-  }, [currentUser, screen]);
+  }, [currentUser, screen, authReady]);
 
   // Poll for win claims (host) or confirmation status (player)
   useEffect(() => {
@@ -1498,7 +1552,7 @@ export default function Mingo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
-      {(registering || loggingIn) && (
+      {(registering || loggingIn || !authReady) && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           role="alertdialog"
@@ -1516,12 +1570,18 @@ export default function Mingo() {
               </div>
 
               <h2 id="auth-loading-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-                {registering ? 'Creating your account' : 'Signing you in'}
+                {!authReady
+                  ? 'Loading'
+                  : registering
+                    ? 'Creating your account'
+                    : 'Signing you in'}
               </h2>
               <p className="text-sm sm:text-base text-gray-600">
-                {registering
-                  ? 'Setting things up — you’ll be in the dashboard in a moment.'
-                  : 'Hang tight — loading your games next.'}
+                {!authReady
+                  ? 'Checking your session…'
+                  : registering
+                    ? 'Setting things up — you’ll be in the dashboard in a moment.'
+                    : 'Hang tight — loading your games next.'}
               </p>
 
               <div className="mt-6 flex items-center justify-center gap-2">
@@ -2122,7 +2182,12 @@ export default function Mingo() {
               </button>
             </div>
 
-            {userGames.length === 0 ? (
+            {gamesLoading ? (
+              <div className="text-center py-8">
+                <Loader2 size={32} className="mx-auto text-purple-600 animate-spin mb-3" />
+                <p className="text-gray-600">Loading your games…</p>
+              </div>
+            ) : userGames.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-600 mb-4">You haven't joined any games yet.</p>
                 <button
