@@ -12,7 +12,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 - **Backend:** Supabase (Auth, Postgres, Storage)  
 - **Intent:** Hands-on experiment in AI-assisted shipping (Cursor, Claude, Linear, Vercel) — see `README.md`
 
-**Product note:** README still says “no player accounts.” Current app **requires login** to create or join games. The home screen “continue as guest” copy is cosmetic only; guest create/join is blocked.
+**Product note:** README still says “no player accounts.” Hosts still need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project.
 
 ---
 

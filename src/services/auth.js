@@ -164,6 +164,63 @@ export const authService = {
   },
 
   /**
+   * Create an anonymous Supabase session for guest play (join/play without email login).
+   * Requires Anonymous provider enabled in Supabase → Authentication → Providers.
+   * @param {string} displayName
+   * @returns {Promise<Object>} Auth user
+   */
+  async signInAsGuest(displayName) {
+    const base =
+      String(displayName || '')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .slice(0, 24) || 'Guest'
+    const username = `${base}-${Math.random().toString(36).slice(2, 6)}`
+
+    const { data, error } = await supabase.auth.signInAnonymously({
+      options: {
+        data: { username },
+      },
+    })
+
+    if (error) {
+      console.error('Guest sign-in error:', error)
+      const msg = error.message || ''
+      if (/anonymous|disabled|not enabled/i.test(msg)) {
+        throw new Error(
+          'Guest join is not enabled for this Supabase project. Enable Authentication → Providers → Anonymous, or log in.'
+        )
+      }
+      throw error
+    }
+
+    if (!data.user) {
+      throw new Error('Guest sign-in failed - no user returned')
+    }
+
+    // Allow handle_new_user trigger to create public.users
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    let profile = await this.getUserProfile(data.user.id)
+    if (!profile) {
+      const { error: insertError } = await supabase.from('users').insert({
+        id: data.user.id,
+        username,
+      })
+      if (
+        insertError &&
+        insertError.code !== '23505' &&
+        !insertError.message?.includes('duplicate')
+      ) {
+        console.warn('Guest profile insert issue:', insertError)
+      }
+      profile = (await this.getUserProfile(data.user.id)) || { username }
+    }
+
+    return { user: data.user, username: profile.username || username }
+  },
+
+  /**
    * Base URL for auth email links (reset password, etc.).
    * Must match an entry in Supabase Dashboard → Authentication → URL Configuration → Redirect URLs.
    */
