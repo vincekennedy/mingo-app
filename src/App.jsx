@@ -40,6 +40,10 @@ export default function Mingo() {
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportError, setReportError] = useState(null);
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [showGuestNameModal, setShowGuestNameModal] = useState(false);
+  const [guestDisplayName, setGuestDisplayName] = useState('');
+  const [guestJoinError, setGuestJoinError] = useState(null);
+  const [guestJoining, setGuestJoining] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
@@ -861,34 +865,7 @@ export default function Mingo() {
     setScreen('host');
   };
 
-  const joinGame = async () => {
-    const code = joinCode.toUpperCase().trim();
-    if (code.length !== 5) {
-      alert('Please enter a 5-character game code');
-      return;
-    }
-
-    let user = currentUser;
-    if (!user) {
-      const desiredName = window.prompt('Enter a display name to join as guest:');
-      if (!desiredName || !desiredName.trim()) {
-        return;
-      }
-      try {
-        const guest = await authService.signInAsGuest(desiredName.trim());
-        user = {
-          id: guest.user.id,
-          email: guest.user.email || null,
-          username: guest.displayName || desiredName.trim(),
-          isGuest: true,
-        };
-        setCurrentUser(user);
-      } catch (guestError) {
-        alert(guestError.message || 'Could not start guest session. Please log in or try again.');
-        return;
-      }
-    }
-
+  const joinGameAsUser = async (user, code) => {
     try {
       // Get game from Supabase
       const game = await gameService.joinGame(code, user.id);
@@ -941,10 +918,71 @@ export default function Mingo() {
         alert(`Game "${code}" not found. Please check the code and try again.`);
       } else if (error.message?.includes('already joined')) {
         // User already joined, just load the game
-        await joinGame(); // Retry to load existing state
+        await joinGameAsUser(user, code);
       } else {
         alert(`Error joining game: ${error.message || 'Please try again.'}`);
       }
+    }
+  };
+
+  const closeGuestNameModal = () => {
+    if (guestJoining) return;
+    setShowGuestNameModal(false);
+    setGuestDisplayName('');
+    setGuestJoinError(null);
+  };
+
+  const joinGame = async () => {
+    const code = joinCode.toUpperCase().trim();
+    if (code.length !== 5) {
+      alert('Please enter a 5-character game code');
+      return;
+    }
+
+    if (!currentUser) {
+      setGuestJoinError(null);
+      setGuestDisplayName('');
+      setShowGuestNameModal(true);
+      return;
+    }
+
+    await joinGameAsUser(currentUser, code);
+  };
+
+  const submitGuestJoin = async (e) => {
+    e.preventDefault();
+    const code = joinCode.toUpperCase().trim();
+    if (code.length !== 5) {
+      setGuestJoinError('Please enter a 5-character game code.');
+      return;
+    }
+
+    const desiredName = guestDisplayName.trim();
+    if (!desiredName) {
+      setGuestJoinError('Enter a display name to continue.');
+      return;
+    }
+
+    setGuestJoining(true);
+    setGuestJoinError(null);
+    try {
+      const guest = await authService.signInAsGuest(desiredName);
+      const user = {
+        id: guest.user.id,
+        email: guest.user.email || null,
+        username: guest.displayName || desiredName,
+        isGuest: true,
+      };
+      setCurrentUser(user);
+      setShowGuestNameModal(false);
+      setGuestDisplayName('');
+      await joinGameAsUser(user, code);
+    } catch (guestError) {
+      setGuestJoinError(
+        guestError.message || 'Could not start guest session. Please log in or try again.'
+      );
+    } finally {
+      setGuestJoining(false);
     }
   };
 
@@ -1814,6 +1852,93 @@ export default function Mingo() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {showGuestNameModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guest-name-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeGuestNameModal();
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h2 id="guest-name-modal-title" className="text-xl sm:text-2xl font-bold text-gray-800">
+                  Join as guest
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pick a display name so others can see you in the player list.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeGuestNameModal}
+                disabled={guestJoining}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={submitGuestJoin} className="space-y-4">
+              {guestJoinError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
+                  <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                  <span>{guestJoinError}</span>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="guest-display-name" className="block text-gray-700 font-semibold mb-2 text-sm">
+                  Display name
+                </label>
+                <input
+                  id="guest-display-name"
+                  type="text"
+                  value={guestDisplayName}
+                  onChange={(e) => setGuestDisplayName(e.target.value)}
+                  placeholder="Your name"
+                  required
+                  maxLength={24}
+                  autoFocus
+                  disabled={guestJoining}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={closeGuestNameModal}
+                  disabled={guestJoining}
+                  className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={guestJoining}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-60"
+                >
+                  {guestJoining ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" /> Joining…
+                    </>
+                  ) : (
+                    <>
+                      <Users size={18} /> Join game
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
