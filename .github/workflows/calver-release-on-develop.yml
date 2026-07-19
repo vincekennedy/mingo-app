@@ -1,15 +1,16 @@
-name: CalVer release on master
+name: CalVer release on develop
 
-# When a release lands on master (production), set package version to today's
-# date (America/New_York) and create an annotated-style lightweight tag vYYYY.MM.DD.
-# Same-day follow-up releases become vYYYY.MM.DD.1, .2, …
+# Stamp package.json with today's date (America/New_York) on develop, then
+# promote to production via the usual develop → master PR.
+# Same-day follow-ups become YYYY.MM.DD.1, .2, …
+#
+# Does not push to master (branch rules require PRs there).
 
 on:
-  push:
-    branches: [master]
+  workflow_dispatch:
 
 concurrency:
-  group: calver-release-master
+  group: calver-release-develop
   cancel-in-progress: false
 
 permissions:
@@ -18,12 +19,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Avoid re-entry when this workflow pushes the release commit
-    if: "${{ !startsWith(github.event.head_commit.message, 'chore: release ') }}"
     steps:
-      - name: Check out master
+      - name: Check out develop
         uses: actions/checkout@v4
         with:
+          ref: develop
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -41,7 +41,7 @@ jobs:
           chmod +x scripts/calver-release.sh
           ./scripts/calver-release.sh
 
-      - name: Push release commit and tag
+      - name: Push release commit and tag to develop
         run: |
-          git push origin HEAD:master
+          git push origin HEAD:develop
           git push origin --tags
