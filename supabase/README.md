@@ -163,11 +163,11 @@ Workflow: [`.github/workflows/supabase-db-push.yml`](../.github/workflows/supaba
 
 ### Required repository secrets
 
-Add under GitHub → Settings → Secrets and variables → Actions:
+Add under GitHub → Settings → Secrets and variables → Actions (these are **required** for CI; without them the workflow fails with “Access token not provided”):
 
 | Secret | Where to get it |
 |--------|-----------------|
-| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) — generate a personal access token |
 | `SUPABASE_DB_PASSWORD_LOCAL` | Mingo-local → Project Settings → Database → Database password |
 | `SUPABASE_DB_PASSWORD_PROD` | Production Mingo → Project Settings → Database → Database password |
 
