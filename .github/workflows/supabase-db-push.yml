@@ -19,9 +19,6 @@ concurrency:
   group: supabase-db-push-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 jobs:
   push-mingo-local:
     if: github.ref == 'refs/heads/develop'
