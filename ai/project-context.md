@@ -12,7 +12,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 - **Backend:** Supabase (Auth, Postgres, Storage)  
 - **Intent:** Hands-on experiment in AI-assisted shipping (Cursor, Claude, Linear, Vercel) — see `README.md`
 
-**Product note:** README still says “no player accounts.” Current app **requires login** to create or join games. The home screen “continue as guest” copy is cosmetic only; guest create/join is blocked.
+**Product note:** README still says “no player accounts.” Hosts still need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project.
 
 ---
 
@@ -87,7 +87,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 
 Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup trigger, storage, feedback).
 
-Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npx supabase link` → `npx supabase db push`). See [`supabase/README.md`](../supabase/README.md).
+Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm run db:link` → `npm run db:push`). See [`supabase/README.md`](../supabase/README.md). Do not paste routine schema fixes into the SQL Editor.
 
 | Table | Purpose / key fields |
 |-------|----------------------|
