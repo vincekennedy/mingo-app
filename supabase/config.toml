@@ -14,3 +14,8 @@ major_version = 17
 
 [studio]
 enabled = true
+
+# Invoked by ops / optional HTTP cron with service role or GUEST_CLEANUP_CRON_SECRET.
+# Daily deletion is primarily pg_cron → public.cleanup_guest_users().
+[functions.cleanup-guest-users]
+verify_jwt = false
