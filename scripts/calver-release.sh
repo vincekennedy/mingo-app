@@ -19,7 +19,17 @@ if [[ "$CURRENT" == "$VERSION" ]]; then
 fi
 
 echo "Releasing CalVer ${VERSION} (was ${CURRENT})"
-npm version "$VERSION" --no-git-tag-version --allow-same-version
+# Avoid `npm version` — it coerces CalVer like 2026.07.19 → 2026.7.19 (semver).
+VERSION="$VERSION" node <<'NODE'
+const fs = require('fs');
+const version = process.env.VERSION;
+for (const file of ['package.json', 'package-lock.json']) {
+  const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  pkg.version = version;
+  if (pkg.packages && pkg.packages['']) pkg.packages[''].version = version;
+  fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+}
+NODE
 
 git add package.json package-lock.json
 git commit -m "chore: release ${VERSION}"
