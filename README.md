@@ -1,17 +1,19 @@
-# 🎯 Mingo
+# Mingo
 
-**Mingo** is a browser-based bingo game creator built for **distributed play**. It allows anyone to create a bingo game from a custom list, share a short join code, and let participants receive randomized boards — no installs, no player accounts, just instant gameplay.
+**Mingo** is a browser-based bingo game creator built for **distributed play**. A host builds a game from a custom item list, shares a short join code, and each player gets a unique randomized board—no app install required.
+
+Hosts sign in to create and manage games. Players can join with a code as a **guest** (display name only) or while logged in.
 
 This project was intentionally built as a **hands-on experiment in modern, AI-assisted web development**, leveraging tools like **Claude**, **Cursor**, **Linear**, and **Vercel** to explore how they can accelerate ideation, execution, and iteration for a simple but complete product.
 
 ---
 
-## 🧠 Project Intent
+## Project Intent
 
 Mingo was created to:
 
-- Explore **AI-assisted development workflows** (“vibe coding”) end to end  
-- Practice shipping a **small, well-scoped web product** quickly  
+- Explore **AI-assisted development workflows** (“vibe coding”) end to end
+- Practice shipping a **small, well-scoped web product** quickly
 - Evaluate how modern tools can reduce friction across:
   - Product definition
   - Implementation
@@ -22,74 +24,82 @@ As a full-time mobile engineer with web experience, this project served as a foc
 
 ---
 
-## ✨ Features
+## Features
 
-- 🎲 **Custom Bingo Creation**  
-  Create a bingo game with a list of 8+ custom items (depending on board size).
-
-- 🔐 **Shareable Game Codes**  
-  Each game generates a short alphanumeric code players use to join.
-
-- 🧩 **Randomized Boards**  
-  Every participant receives a unique board generated from the same item pool.
-
-- 🌐 **Browser-Based & Distributed**  
-  Works seamlessly for remote or in-person groups.
-
-- ⚡ **Fast & Serverless**  
-  Deployed on Vercel for low-latency performance and simple scaling.
+- **Custom bingo creation** — Title, board size, optional free space, text items, and optional images
+- **Shareable game codes** — Short alphanumeric codes players use to join
+- **Host accounts & dashboard** — Create games, reopen active ones, and see pending win claims
+- **Guest join** — Join with a display name via Supabase Anonymous auth (no email required)
+- **Randomized boards** — Every participant gets a unique board from the same item pool
+- **Win claims** — Players claim bingo; hosts confirm or reject
+- **Optional AI items** — Generate a bingo list from a game title (Gemini; server-side key)
+- **Browser-based & serverless** — App on Vercel; Auth, Postgres, and Storage on Supabase
 
 ---
 
-## 🛠️ Tooling & Workflow
+## Tooling & Workflow
 
 This project emphasizes **tool integration and effective usage**, not just the final result.
 
-### 🤖 AI-Assisted Development
-- **Claude**  
-  - Feature ideation and product framing  
-  - Generating and refining logic for board randomization and game flow  
-  - Iterative problem-solving and refactoring
+### AI-Assisted Development
 
-- **Cursor**  
-  - AI-assisted coding directly in the editor  
-  - Rapid iteration on UI, state management, and edge cases  
-  - Used as a collaborative development partner rather than code generation alone
+- **Claude** — Feature ideation, product framing, game-flow logic, iterative problem-solving
+- **Cursor** — In-editor AI-assisted coding and rapid iteration on UI, state, and edge cases
 
-### 📋 Product & Planning
-- **Linear**  
-  - Lightweight issue tracking and task breakdown  
-  - Translating ideas into scoped, shippable units of work  
-  - Maintaining momentum without over-engineering
+### Product & Planning
 
-### 🚀 Deployment
-- **Vercel**  
-  - Zero-config deployment  
-  - Preview environments for fast iteration  
-  - Serverless-friendly architecture
+- **Linear** — Lightweight issue tracking and scoped, shippable units of work
+
+### Deployment
+
+- **Vercel** — Production and preview deploys
+- **Supabase** — Auth, database, storage, and migrations via CLI (see [`supabase/README.md`](supabase/README.md))
 
 ---
 
-## 📚 What This Project Demonstrates
+## What This Project Demonstrates
 
-- Ability to **scope and ship** a complete product independently  
-- Practical use of **AI tools as accelerators**, not replacements  
-- Comfort moving between **product thinking and implementation**  
-- Clear, maintainable execution of a simple but real-world web app  
+- Ability to **scope and ship** a complete product independently
+- Practical use of **AI tools as accelerators**, not replacements
+- Comfort moving between **product thinking and implementation**
+- Clear, maintainable execution of a simple but real-world web app
 - Willingness to experiment, evaluate tooling, and iterate quickly
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
-- Node.js
-- A modern web browser
 
-### Local Development
+- Node.js (current LTS recommended)
+- A [Supabase](https://supabase.com) project
+- Anonymous sign-ins enabled for guest join: **Authentication → Providers → Anonymous**
+
+### Local development
 
 ```bash
-git clone https://github.com/vincekennedy/mingo.git
-cd mingo
+git clone https://github.com/vincekennedy/mingo-app.git
+cd mingo-app
 npm install
+```
+
+Create `.env.local` in the repo root:
+
+```bash
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Optional (AI bingo item generation via the Vite/Vercel `/api/generate-items` route):
+
+```bash
+GEMINI_API_KEY=your-google-ai-studio-key
+```
+
+Then:
+
+```bash
 npm run dev
+```
+
+Schema and migrations: see [`supabase/README.md`](supabase/README.md) (`npm run db:link`, `npm run db:push`). Deeper architecture notes for contributors live in [`ai/project-context.md`](ai/project-context.md).
