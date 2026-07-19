@@ -87,11 +87,52 @@ npm run db:push
 ```bash
 npx supabase migration repair --status applied 20260718150000
 npx supabase migration repair --status applied 20260719010000
+npx supabase migration repair --status applied 20260719120000
 ```
 
 4. `npm run db:list` — should show local and remote in sync. Later migrations use `npm run db:push` only.
 
 If objects already exist and a push fails mid-way, use `migration repair` as above, then push again.
+
+## Guest user retention
+
+Anonymous guests (Authentication → Providers → **Anonymous** must be enabled) are cleaned up automatically:
+
+| Rule | Detail |
+|------|--------|
+| Who | `auth.users` with `is_anonymous = true` |
+| Eligible | Not a participant in any `games.status = 'active'` |
+| Grace | Last activity (`greatest(last_sign_in_at, updated_at, created_at)`) older than **24 hours** |
+| Action | `DELETE` from `auth.users` (cascades `public.users` → participants / boards / claims; feedback `user_id` → null) |
+| Batch | Up to 100 users per run |
+
+**Schedule:** `pg_cron` job `cleanup-guest-users-daily` at **06:00 UTC** runs `public.cleanup_guest_users(...)`.
+
+**SQL (service_role only):**
+
+```sql
+-- Preview
+SELECT * FROM public.cleanup_guest_users(interval '24 hours', 100, true);
+
+-- Delete
+SELECT * FROM public.cleanup_guest_users(interval '24 hours', 100, false);
+```
+
+**Edge Function** [`cleanup-guest-users`](functions/cleanup-guest-users/index.ts) for manual / HTTP dry-runs:
+
+```bash
+# Deploy (per project)
+npx supabase functions deploy cleanup-guest-users --project-ref lmlzduwtrzzjaggqsulr --use-api
+npx supabase functions deploy cleanup-guest-users --project-ref sngfoaosgskdmkngjglh --use-api
+
+# Dry-run (Bearer = service role key, or GUEST_CLEANUP_CRON_SECRET if set as a function secret)
+curl -sS -X POST "https://lmlzduwtrzzjaggqsulr.supabase.co/functions/v1/cleanup-guest-users" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"dry_run":true,"limit":100}'
+```
+
+Optional function secret: Dashboard → Edge Functions → secrets → `GUEST_CLEANUP_CRON_SECRET` (accepted as Bearer in place of the service role key). Never put the service role key in the Vite app.
 
 ## Local app env (Mingo-local)
 
@@ -122,11 +163,11 @@ Workflow: [`.github/workflows/supabase-db-push.yml`](../.github/workflows/supaba
 
 ### Required repository secrets
 
-Add under GitHub → Settings → Secrets and variables → Actions:
+Add under GitHub → Settings → Secrets and variables → Actions (these are **required** for CI; without them the workflow fails with “Access token not provided”):
 
 | Secret | Where to get it |
 |--------|-----------------|
-| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_ACCESS_TOKEN` | [Account → Access Tokens](https://supabase.com/dashboard/account/tokens) — generate a personal access token |
 | `SUPABASE_DB_PASSWORD_LOCAL` | Mingo-local → Project Settings → Database → Database password |
 | `SUPABASE_DB_PASSWORD_PROD` | Production Mingo → Project Settings → Database → Database password |
 

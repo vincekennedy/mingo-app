@@ -42,7 +42,7 @@ export const winClaimsService = {
         .from('win_claims')
         .select(`
           *,
-          user:users(username)
+          user:users(username, display_name)
         `)
         .eq('game_code', gameCode)
         .eq('status', 'pending')
@@ -53,7 +53,7 @@ export const winClaimsService = {
       return data.map(claim => ({
         id: claim.id,
         userId: claim.user_id,
-        username: claim.user?.username || 'Unknown',
+        username: claim.user?.display_name || claim.user?.username || 'Unknown',
         type: claim.claim_type,
         indices: claim.claimed_indices,
         items: claim.claimed_items,

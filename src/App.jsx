@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles, Loader2, MessageSquarePlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { authService } from './services/auth';
+import { authService, resolveDisplayName } from './services/auth';
 import { gameService } from './services/game';
 import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
@@ -40,6 +40,10 @@ export default function Mingo() {
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportError, setReportError] = useState(null);
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [showGuestNameModal, setShowGuestNameModal] = useState(false);
+  const [guestDisplayName, setGuestDisplayName] = useState('');
+  const [guestJoinError, setGuestJoinError] = useState(null);
+  const [guestJoining, setGuestJoining] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [pendingWinClaim, setPendingWinClaim] = useState(null);
   const [winConfirmed, setWinConfirmed] = useState(false);
@@ -52,9 +56,16 @@ export default function Mingo() {
   const pollIntervalRef = useRef(null);
   const playerListIntervalRef = useRef(null);
   const passwordRecoveryRef = useRef(false);
+  const gamesLoadIdRef = useRef(0);
+  const authReadyRef = useRef(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [gamesLoading, setGamesLoading] = useState(false);
 
   // Authentication and user management - check on mount
   useEffect(() => {
+    let cancelled = false;
+    let hydratePromise = null;
+
     try {
       const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
       if (hash && new URLSearchParams(hash).get('type') === 'recovery') {
@@ -64,79 +75,116 @@ export default function Mingo() {
       /* ignore malformed hash */
     }
 
+    const markAuthReady = () => {
+      if (cancelled) return;
+      authReadyRef.current = true;
+      setAuthReady(true);
+    };
+
+    /** Full bootstrap: set user/dashboard and wait for games before revealing UI */
+    const hydrateLoggedInSession = (user) => {
+      if (authReadyRef.current || cancelled) return Promise.resolve();
+      if (hydratePromise) return hydratePromise;
+
+      hydratePromise = (async () => {
+        try {
+          const profile = await authService.getUserProfile(user.id);
+          if (cancelled) return;
+          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
+          setCurrentUser({
+            id: user.id,
+            email: user.email,
+            username,
+          });
+          setScreen('dashboard');
+          await loadUserGames(user.id, { showLoading: true });
+        } finally {
+          markAuthReady();
+        }
+      })();
+
+      return hydratePromise;
+    };
+
     // Check if user is logged in on mount
     const checkAuth = async () => {
       try {
         const user = await authService.getCurrentUser();
+        if (cancelled) return;
         if (user && passwordRecoveryRef.current) {
           const profile = await authService.getUserProfile(user.id);
-          const username = profile?.username || user.email?.split('@')[0] || 'User';
+          if (cancelled) return;
+          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
             id: user.id,
             email: user.email,
             username,
           });
           setScreen('reset-password');
+          markAuthReady();
           return;
         }
         if (user && !passwordRecoveryRef.current) {
-      // Get user profile with username
-      const profile = await authService.getUserProfile(user.id);
-      const username = profile?.username || user.email?.split('@')[0] || 'User';
-      
-      // Set current user state
-      setCurrentUser({
-        id: user.id,
-        email: user.email,
-        username,
-      });
-      
-      // Load user games
-      await loadUserGames(user.id);
-          
-          // Redirect to dashboard if on home screen
-          setScreen((prev) => (prev === 'home' ? 'dashboard' : prev));
+          await hydrateLoggedInSession(user);
+        } else {
+          markAuthReady();
         }
       } catch (error) {
         console.error('Error checking auth:', error);
+        markAuthReady();
       }
     };
     
     // Listen for auth state changes (e.g., token refresh, logout from another tab)
     const { data: { subscription } } = authService.onAuthStateChange(async (user, event) => {
+      if (cancelled) return;
       if (event === 'PASSWORD_RECOVERY' && user) {
         passwordRecoveryRef.current = true;
         const profile = await authService.getUserProfile(user.id);
-        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        if (cancelled) return;
+        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
           id: user.id,
           email: user.email,
           username,
         });
         setScreen('reset-password');
+        markAuthReady();
         return;
       }
       if (event === 'SIGNED_OUT' || !user) {
         passwordRecoveryRef.current = false;
+        hydratePromise = null;
         setCurrentUser(null);
         setUserGames([]);
         setSelectedGame(null);
         setScreen((prev) =>
           prev === 'dashboard' || prev === 'host' || prev === 'play' ? 'home' : prev
         );
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (passwordRecoveryRef.current) {
-          return;
-        }
+        markAuthReady();
+        return;
+      }
+
+      // Cold start: keep overlay until games are loaded
+      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !authReadyRef.current) {
+        if (passwordRecoveryRef.current) return;
+        await hydrateLoggedInSession(user);
+        return;
+      }
+
+      // After bootstrap: quiet updates only (no overlay flash)
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (passwordRecoveryRef.current) return;
         const profile = await authService.getUserProfile(user.id);
-        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        if (cancelled) return;
+        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
           id: user.id,
           email: user.email,
           username,
         });
-        // Load user games
-        await loadUserGames(user.id);
+        setScreen((prev) => (prev === 'home' || prev === 'login' || prev === 'register' ? 'dashboard' : prev));
+        void loadUserGames(user.id, { showLoading: false });
       }
     });
 
@@ -145,16 +193,21 @@ export default function Mingo() {
     });
     
     return () => {
+      cancelled = true;
+      hydratePromise = null;
       subscription.unsubscribe();
     };
   }, []); // Only run on mount
 
-  const loadUserGames = async (userId) => {
+  const loadUserGames = async (userId, { showLoading = false } = {}) => {
     if (!userId) {
       setUserGames([]);
+      if (showLoading) setGamesLoading(false);
       return;
     }
-    
+
+    const loadId = ++gamesLoadIdRef.current;
+    if (showLoading) setGamesLoading(true);
     try {
       // Get games from Supabase
       const games = await gameService.getUserGames(userId);
@@ -180,11 +233,17 @@ export default function Mingo() {
           };
         })
       );
-      
+
+      if (loadId !== gamesLoadIdRef.current) return;
       setUserGames(gamesWithState);
     } catch (error) {
       console.error('Error loading user games:', error);
+      if (loadId !== gamesLoadIdRef.current) return;
       setUserGames([]);
+    } finally {
+      if (loadId === gamesLoadIdRef.current) {
+        setGamesLoading(false);
+      }
     }
   };
 
@@ -295,7 +354,7 @@ export default function Mingo() {
       }
       
       // Set current user state
-      const userUsername = profile?.username || username;
+      const userUsername = resolveDisplayName(profile, username);
       setCurrentUser({
         id: user.id,
         email: user.email,
@@ -353,7 +412,7 @@ export default function Mingo() {
       const profile = await authService.getUserProfile(user.id);
       
       // Set current user state
-      const userUsername = profile?.username || email.split('@')[0];
+      const userUsername = resolveDisplayName(profile, email.split('@')[0]);
       setCurrentUser({
         id: user.id,
         email: user.email,
@@ -386,7 +445,7 @@ export default function Mingo() {
       throw new Error('Could not restore your session. Please log in again.');
     }
     const profile = await authService.getUserProfile(user.id);
-    const userUsername = profile?.username || user.email?.split('@')[0] || 'User';
+    const userUsername = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
     setCurrentUser({
       id: user.id,
       email: user.email,
@@ -806,34 +865,7 @@ export default function Mingo() {
     setScreen('host');
   };
 
-  const joinGame = async () => {
-    const code = joinCode.toUpperCase().trim();
-    if (code.length !== 5) {
-      alert('Please enter a 5-character game code');
-      return;
-    }
-
-    let user = currentUser;
-    if (!user) {
-      const desiredName = window.prompt('Enter a display name to join as guest:');
-      if (!desiredName || !desiredName.trim()) {
-        return;
-      }
-      try {
-        const guest = await authService.signInAsGuest(desiredName.trim());
-        user = {
-          id: guest.user.id,
-          email: guest.user.email || null,
-          username: guest.username,
-          isGuest: true,
-        };
-        setCurrentUser(user);
-      } catch (guestError) {
-        alert(guestError.message || 'Could not start guest session. Please log in or try again.');
-        return;
-      }
-    }
-
+  const joinGameAsUser = async (user, code) => {
     try {
       // Get game from Supabase
       const game = await gameService.joinGame(code, user.id);
@@ -886,10 +918,71 @@ export default function Mingo() {
         alert(`Game "${code}" not found. Please check the code and try again.`);
       } else if (error.message?.includes('already joined')) {
         // User already joined, just load the game
-        await joinGame(); // Retry to load existing state
+        await joinGameAsUser(user, code);
       } else {
         alert(`Error joining game: ${error.message || 'Please try again.'}`);
       }
+    }
+  };
+
+  const closeGuestNameModal = () => {
+    if (guestJoining) return;
+    setShowGuestNameModal(false);
+    setGuestDisplayName('');
+    setGuestJoinError(null);
+  };
+
+  const joinGame = async () => {
+    const code = joinCode.toUpperCase().trim();
+    if (code.length !== 5) {
+      alert('Please enter a 5-character game code');
+      return;
+    }
+
+    if (!currentUser) {
+      setGuestJoinError(null);
+      setGuestDisplayName('');
+      setShowGuestNameModal(true);
+      return;
+    }
+
+    await joinGameAsUser(currentUser, code);
+  };
+
+  const submitGuestJoin = async (e) => {
+    e.preventDefault();
+    const code = joinCode.toUpperCase().trim();
+    if (code.length !== 5) {
+      setGuestJoinError('Please enter a 5-character game code.');
+      return;
+    }
+
+    const desiredName = guestDisplayName.trim();
+    if (!desiredName) {
+      setGuestJoinError('Enter a display name to continue.');
+      return;
+    }
+
+    setGuestJoining(true);
+    setGuestJoinError(null);
+    try {
+      const guest = await authService.signInAsGuest(desiredName);
+      const user = {
+        id: guest.user.id,
+        email: guest.user.email || null,
+        username: guest.displayName || desiredName,
+        isGuest: true,
+      };
+      setCurrentUser(user);
+      setShowGuestNameModal(false);
+      setGuestDisplayName('');
+      await joinGameAsUser(user, code);
+    } catch (guestError) {
+      setGuestJoinError(
+        guestError.message || 'Could not start guest session. Please log in or try again.'
+      );
+    } finally {
+      setGuestJoining(false);
     }
   };
 
@@ -1207,8 +1300,8 @@ export default function Mingo() {
 
   // Poll for win claims and update dashboard if on dashboard
   useEffect(() => {
-    if (currentUser && screen === 'dashboard') {
-      // Poll user games for pending wins
+    if (currentUser && screen === 'dashboard' && authReady) {
+      // Poll user games for pending wins (start after interval so we don't race cold-start hydrate)
       const pollPendingWins = async () => {
         if (currentUser) {
           try {
@@ -1218,19 +1311,18 @@ export default function Mingo() {
               ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
               : {};
             
-            // Reload games to update pending win status
-            await loadUserGames(currentUser.id);
+            // Reload games to update pending win status (silent — no empty-state flash)
+            await loadUserGames(currentUser.id, { showLoading: false });
           } catch (error) {
             console.error('Error polling pending wins:', error);
           }
         }
       };
       
-      pollPendingWins();
       const interval = setInterval(pollPendingWins, 3000);
       return () => clearInterval(interval);
     }
-  }, [currentUser, screen]);
+  }, [currentUser, screen, authReady]);
 
   // Poll for win claims (host) or confirmation status (player)
   useEffect(() => {
@@ -1498,7 +1590,7 @@ export default function Mingo() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
-      {(registering || loggingIn) && (
+      {(registering || loggingIn || !authReady) && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           role="alertdialog"
@@ -1516,12 +1608,18 @@ export default function Mingo() {
               </div>
 
               <h2 id="auth-loading-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-                {registering ? 'Creating your account' : 'Signing you in'}
+                {!authReady
+                  ? 'Loading'
+                  : registering
+                    ? 'Creating your account'
+                    : 'Signing you in'}
               </h2>
               <p className="text-sm sm:text-base text-gray-600">
-                {registering
-                  ? 'Setting things up — you’ll be in the dashboard in a moment.'
-                  : 'Hang tight — loading your games next.'}
+                {!authReady
+                  ? 'Checking your session…'
+                  : registering
+                    ? 'Setting things up — you’ll be in the dashboard in a moment.'
+                    : 'Hang tight — loading your games next.'}
               </p>
 
               <div className="mt-6 flex items-center justify-center gap-2">
@@ -1754,6 +1852,93 @@ export default function Mingo() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {showGuestNameModal && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="guest-name-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeGuestNameModal();
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h2 id="guest-name-modal-title" className="text-xl sm:text-2xl font-bold text-gray-800">
+                  Join as guest
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pick a display name so others can see you in the player list.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeGuestNameModal}
+                disabled={guestJoining}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={submitGuestJoin} className="space-y-4">
+              {guestJoinError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
+                  <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                  <span>{guestJoinError}</span>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="guest-display-name" className="block text-gray-700 font-semibold mb-2 text-sm">
+                  Display name
+                </label>
+                <input
+                  id="guest-display-name"
+                  type="text"
+                  value={guestDisplayName}
+                  onChange={(e) => setGuestDisplayName(e.target.value)}
+                  placeholder="Your name"
+                  required
+                  maxLength={24}
+                  autoFocus
+                  disabled={guestJoining}
+                  className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={closeGuestNameModal}
+                  disabled={guestJoining}
+                  className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={guestJoining}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-60"
+                >
+                  {guestJoining ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" /> Joining…
+                    </>
+                  ) : (
+                    <>
+                      <Users size={18} /> Join game
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -2122,7 +2307,12 @@ export default function Mingo() {
               </button>
             </div>
 
-            {userGames.length === 0 ? (
+            {gamesLoading ? (
+              <div className="text-center py-8">
+                <Loader2 size={32} className="mx-auto text-purple-600 animate-spin mb-3" />
+                <p className="text-gray-600">Loading your games…</p>
+              </div>
+            ) : userGames.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-600 mb-4">You haven't joined any games yet.</p>
                 <button
@@ -2305,21 +2495,6 @@ export default function Mingo() {
                 </div>
               </>
             )}
-            <button
-              onClick={() => setScreen('setup')}
-              className="w-full flex items-center justify-center gap-3 px-6 py-4 sm:py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg sm:text-xl rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-            >
-              <Play size={24} className="sm:w-7 sm:h-7" /> Create New Game
-            </button>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">or</span>
-              </div>
-            </div>
 
             <div className="space-y-3">
               <label className="block text-gray-700 font-semibold text-sm sm:text-base">
