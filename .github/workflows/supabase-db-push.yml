@@ -1,0 +1,56 @@
+name: Supabase db push
+
+# Apply pending supabase/migrations to remote projects.
+# develop → Mingo-local; master → production Mingo.
+# Requires: SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD_LOCAL, SUPABASE_DB_PASSWORD_PROD
+
+on:
+  push:
+    branches: [develop, master]
+    paths:
+      - "supabase/migrations/**"
+      - ".github/workflows/supabase-db-push.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-db-push-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  push-mingo-local:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_LOCAL }}
+      SUPABASE_PROJECT_ID: lmlzduwtrzzjaggqsulr
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Link Mingo-local and push migrations
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_ID"
+          supabase db push --yes
+
+  push-production:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_PROD }}
+      SUPABASE_PROJECT_ID: sngfoaosgskdmkngjglh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.109.1
+
+      - name: Link production and push migrations
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_ID"
+          supabase db push --yes

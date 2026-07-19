@@ -87,7 +87,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 
 Canonical greenfield restore: **`FULL_SCHEMA_RESTORE.sql`** (tables, RLS, signup trigger, storage, feedback).
 
-Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npx supabase link` → `npx supabase db push`). See [`supabase/README.md`](../supabase/README.md).
+Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm run db:link` → `npm run db:push`). See [`supabase/README.md`](../supabase/README.md). Do not paste routine schema fixes into the SQL Editor.
 
 | Table | Purpose / key fields |
 |-------|----------------------|
