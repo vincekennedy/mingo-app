@@ -2370,21 +2370,6 @@ export default function Mingo() {
                 </div>
               </>
             )}
-            <button
-              onClick={() => setScreen('setup')}
-              className="w-full flex items-center justify-center gap-3 px-6 py-4 sm:py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-lg sm:text-xl rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-            >
-              <Play size={24} className="sm:w-7 sm:h-7" /> Create New Game
-            </button>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">or</span>
-              </div>
-            </div>
 
             <div className="space-y-3">
               <label className="block text-gray-700 font-semibold text-sm sm:text-base">
