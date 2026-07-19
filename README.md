@@ -103,3 +103,5 @@ npm run dev
 ```
 
 Schema and migrations: see [`supabase/README.md`](supabase/README.md) (`npm run db:link`, `npm run db:push`). Deeper architecture notes for contributors live in [`ai/project-context.md`](ai/project-context.md).
+
+Pre-release smoke checklist (manual + Playwright): [`SMOKE.md`](SMOKE.md).

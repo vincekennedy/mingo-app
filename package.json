@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:landing": "playwright test e2e/landing.spec.js",
     "db:login": "supabase login",
     "db:link": "supabase link --project-ref lmlzduwtrzzjaggqsulr",
     "db:list": "supabase migration list",
@@ -36,6 +38,7 @@
     "postcss": "^8.5.19",
     "supabase": "^2.109.1",
     "tailwindcss": "^4.1.18",
-    "vite": "^8.1.5"
+    "vite": "^8.1.5",
+    "@playwright/test": "^1.54.2"
   }
 }
