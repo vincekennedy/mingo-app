@@ -180,7 +180,7 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 ## Git workflow
 
 - Feature work: branch from **`develop`**, PR into **`develop`**.  
-- **`master`**: user-managed releases / versions — don’t land day-to-day features there unless asked.  
+- **`master`**: production releases via PR from `develop`. CalVer is stamped on **`develop`** (Action **CalVer release on develop**), then included in the release PR — don’t land day-to-day features on `master` unless asked.  
 - Rule file: `.cursor/rules/git-branching.mdc`.
 
 ---
