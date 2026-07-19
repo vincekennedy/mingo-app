@@ -267,7 +267,7 @@ export const gameService = {
           user_id,
           is_host,
           joined_at,
-          user:users(username)
+          user:users(username, display_name)
         `)
         .eq('game_code', code)
         .order('joined_at', { ascending: true })
@@ -276,7 +276,7 @@ export const gameService = {
       
       return data.map(participant => ({
         id: participant.user_id,
-        username: participant.user?.username || 'Unknown',
+        username: participant.user?.display_name || participant.user?.username || 'Unknown',
         isHost: participant.is_host,
         joinedAt: participant.joined_at,
       }))

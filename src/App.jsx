@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles, Loader2, MessageSquarePlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { authService } from './services/auth';
+import { authService, resolveDisplayName } from './services/auth';
 import { gameService } from './services/game';
 import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
@@ -86,7 +86,7 @@ export default function Mingo() {
         try {
           const profile = await authService.getUserProfile(user.id);
           if (cancelled) return;
-          const username = profile?.username || user.email?.split('@')[0] || 'User';
+          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
             id: user.id,
             email: user.email,
@@ -110,7 +110,7 @@ export default function Mingo() {
         if (user && passwordRecoveryRef.current) {
           const profile = await authService.getUserProfile(user.id);
           if (cancelled) return;
-          const username = profile?.username || user.email?.split('@')[0] || 'User';
+          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
             id: user.id,
             email: user.email,
@@ -138,7 +138,7 @@ export default function Mingo() {
         passwordRecoveryRef.current = true;
         const profile = await authService.getUserProfile(user.id);
         if (cancelled) return;
-        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
           id: user.id,
           email: user.email,
@@ -173,7 +173,7 @@ export default function Mingo() {
         if (passwordRecoveryRef.current) return;
         const profile = await authService.getUserProfile(user.id);
         if (cancelled) return;
-        const username = profile?.username || user.email?.split('@')[0] || 'User';
+        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
           id: user.id,
           email: user.email,
@@ -350,7 +350,7 @@ export default function Mingo() {
       }
       
       // Set current user state
-      const userUsername = profile?.username || username;
+      const userUsername = resolveDisplayName(profile, username);
       setCurrentUser({
         id: user.id,
         email: user.email,
@@ -408,7 +408,7 @@ export default function Mingo() {
       const profile = await authService.getUserProfile(user.id);
       
       // Set current user state
-      const userUsername = profile?.username || email.split('@')[0];
+      const userUsername = resolveDisplayName(profile, email.split('@')[0]);
       setCurrentUser({
         id: user.id,
         email: user.email,
@@ -441,7 +441,7 @@ export default function Mingo() {
       throw new Error('Could not restore your session. Please log in again.');
     }
     const profile = await authService.getUserProfile(user.id);
-    const userUsername = profile?.username || user.email?.split('@')[0] || 'User';
+    const userUsername = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
     setCurrentUser({
       id: user.id,
       email: user.email,
@@ -879,7 +879,7 @@ export default function Mingo() {
         user = {
           id: guest.user.id,
           email: guest.user.email || null,
-          username: guest.username,
+          username: guest.displayName || desiredName.trim(),
           isGuest: true,
         };
         setCurrentUser(user);
