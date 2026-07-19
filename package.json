@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:e2e:landing": "playwright test e2e/landing.spec.js",
+    "test:e2e:api": "playwright test e2e/generate-items.spec.js",
     "db:login": "supabase login",
     "db:link": "supabase link --project-ref lmlzduwtrzzjaggqsulr",
     "db:list": "supabase migration list",

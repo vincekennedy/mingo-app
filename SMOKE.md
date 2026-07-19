@@ -50,7 +50,23 @@ Run on **mingo-local** (`npm run dev` + `.env.local`).
 - [ ] Register / login error messages (bad password, etc.).
 - [ ] Forgot-password email (check Supabase redirect URLs).
 - [ ] Report modal submit.
-- [ ] AI generate-items from title (`GEMINI_API_KEY` required).
+- [ ] AI generate-items from title (`GEMINI_API_KEY` on **Vercel** for production / `.env.local` for Vite).
+
+### API routing (production)
+
+After each production deploy, confirm serverless `/api` is live (not SPA HTML / HTTP 405):
+
+```bash
+curl -sS "$PROD_URL/api/health"
+# expect: {"ok":true,"service":"mingo-api"}
+
+curl -sS -X POST "$PROD_URL/api/generate-items" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Office bingo","count":8}'
+# expect: JSON {"items":[...]} or JSON {"error":"..."} — never HTML or 405
+```
+
+Playwright covers this in `e2e/generate-items.spec.js` (`npm run test:e2e:api`, or set `SMOKE_BASE_URL` to prod).
 
 ---
 
@@ -60,11 +76,11 @@ Run on **mingo-local** (`npm run dev` + `.env.local`).
 # One-time
 npx playwright install chromium
 
-# Always-on UI checks (no auth secrets)
+# Always-on UI + API checks (no host secrets; Gemini key optional)
 npm run test:e2e:landing
+npm run test:e2e:api
 
 # Full create → guest join → claim (needs host credentials + mingo-local)
-cp .env.local .env   # or export VITE_* already used by Vite
 export SMOKE_HOST_EMAIL='your-test-host@example.com'
 export SMOKE_HOST_PASSWORD='…'
 npm run test:e2e
@@ -74,7 +90,8 @@ npm run test:e2e
 |----------|----------------|---------|
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Full e2e | Same as local app (mingo-local) |
 | `SMOKE_HOST_EMAIL` / `SMOKE_HOST_PASSWORD` | Full e2e | Dedicated **test** host account on mingo-local |
-| `SMOKE_BASE_URL` | Optional | Defaults to `http://127.0.0.1:5173` (Playwright starts Vite) |
+| `GEMINI_API_KEY` | Successful generate-items (else JSON error is OK) | Server-side key for Vite middleware / Vercel |
+| `SMOKE_BASE_URL` | Optional | Defaults to `http://127.0.0.1:5173` (Playwright starts Vite); set to production URL to smoke deployed `/api` |
 
 Full e2e **skips** when host credentials are missing so CI without secrets still passes landing checks via `test:e2e:landing`.
 

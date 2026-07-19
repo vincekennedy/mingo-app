@@ -94,7 +94,11 @@ Optional (AI bingo item generation via the Vite/Vercel `/api/generate-items` rou
 
 ```bash
 GEMINI_API_KEY=your-google-ai-studio-key
+# optional override; default is gemini-flash-latest with fallbacks
+# GEMINI_BINGO_MODEL=gemini-3.5-flash
 ```
+
+On **Vercel**, set `GEMINI_API_KEY` for Production (and Preview if needed), then **redeploy**. This is a server env var (not `VITE_*`). Confirm `/api/health` returns JSON after deploy — see [`SMOKE.md`](SMOKE.md).
 
 Then:
 
