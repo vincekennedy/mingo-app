@@ -24,7 +24,7 @@ Conventions for Mingo. Prefer matching existing code over introducing new patter
 - Use `VITE_SUPABASE_*` only (never `NEXT_PUBLIC_*`)
 - Auth helpers live in `authService`; do not scatter raw `supabase.auth` calls without reason
 - Treat RLS as part of the product: new tables/columns need policies in SQL, not only client code
-- Schema changes: update `FULL_SCHEMA_RESTORE.sql` (and a focused migration note if useful) so fresh projects stay rebuildable
+- Schema changes: add a file under `supabase/migrations/`, update `FULL_SCHEMA_RESTORE.sql` for greenfield, then `npm run db:push` (see `supabase/README.md`). Do not paste routine fixes into the SQL Editor.
 
 ## Errors
 
