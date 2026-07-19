@@ -1,10 +1,20 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
-// Prefer current Gemini Flash for new AI Studio keys.
-// gemini-2.0-flash often has free quota 0; gemini-2.5-flash returns 404 for many new users.
+// Prefer a current Flash model. Override with GEMINI_BINGO_MODEL if needed.
+// gemini-2.5-flash returns 404 "no longer available to new users" for many AI Studio keys.
 const DEFAULT_MODEL = process.env.GEMINI_BINGO_MODEL || 'gemini-3.5-flash'
 const MAX_COUNT = 48
 const MIN_COUNT = 1
+
+const SYSTEM_PROMPT =
+  'You generate short, distinct bingo square prompts for a custom bingo game. ' +
+  'Return JSON only: {"items":["..."]}. Each item must be a concise phrase (ideally under 6 words), ' +
+  'family-friendly, specific to the theme, and unique. Do not number items. Do not include "FREE".'
+
+function normalizeKey(value) {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/^["']|["']$/g, '')
+}
 
 function extractJsonObject(text) {
   const trimmed = text.trim()
@@ -26,10 +36,12 @@ function extractJsonObject(text) {
  * @returns {Promise<string[]>}
  */
 export async function generateBingoItems({ title, count, apiKey }) {
-  const key =
+  const key = normalizeKey(
     apiKey ||
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  )
+  const modelName = process.env.GEMINI_BINGO_MODEL || DEFAULT_MODEL
 
   if (!key) {
     const err = new Error(
@@ -55,33 +67,35 @@ export async function generateBingoItems({ title, count, apiKey }) {
     throw err
   }
 
-  const genAI = new GoogleGenerativeAI(key)
-  const model = genAI.getGenerativeModel({
-    model: DEFAULT_MODEL,
-    generationConfig: {
-      temperature: 0.8,
-      responseMimeType: 'application/json',
-    },
-    systemInstruction:
-      'You generate short, distinct bingo square prompts for a custom bingo game. ' +
-      'Return JSON only: {"items":["..."]}. Each item must be a concise phrase (ideally under 6 words), ' +
-      'family-friendly, specific to the theme, and unique. Do not number items. Do not include "FREE".',
-  })
+  const ai = new GoogleGenAI({ apiKey: key })
 
-  let result
+  let content
   try {
-    result = await model.generateContent(
-      `Game title/theme: "${trimmedTitle}"\nGenerate exactly ${n} bingo items.`
-    )
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: `Game title/theme: "${trimmedTitle}"\nGenerate exactly ${n} bingo items.`,
+      config: {
+        temperature: 0.8,
+        responseMimeType: 'application/json',
+        systemInstruction: SYSTEM_PROMPT,
+      },
+    })
+    content = response?.text
   } catch (error) {
-    const err = new Error(
-      error?.message || 'Google AI request failed. Check your API key and quota.'
-    )
+    const raw = error?.message || String(error)
+    let message = raw || 'Google AI request failed. Check your API key and quota.'
+    if (/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication|UNAUTHENTICATED/i.test(raw)) {
+      message =
+        'Google AI rejected this API key (ACCESS_TOKEN_TYPE_UNSUPPORTED). Create a new key at https://aistudio.google.com/apikey, ensure the Generative Language API is enabled on that Google Cloud project, set GEMINI_API_KEY, and restart the server.'
+    } else if (/no longer available to new users|NOT_FOUND|is not found/i.test(raw)) {
+      message =
+        'That Gemini model is not available for this API key. Set GEMINI_BINGO_MODEL to a current model (e.g. gemini-3.5-flash) in .env.local and restart the server.'
+    }
+    const err = new Error(message)
     err.status = 502
     throw err
   }
 
-  const content = result?.response?.text?.()
   if (!content) {
     const err = new Error('No response from Google AI.')
     err.status = 502
