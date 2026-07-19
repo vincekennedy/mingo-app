@@ -12,6 +12,9 @@ on:
       - ".github/workflows/supabase-db-push.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: supabase-db-push-${{ github.ref }}
   cancel-in-progress: false
