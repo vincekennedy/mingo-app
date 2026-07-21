@@ -11,6 +11,10 @@ export default function SetupScreen({
   onUpdateBoardSize,
   useFreeSpace,
   onUpdateFreeSpace,
+  winMode,
+  onUpdateWinMode,
+  linesToWin,
+  onUpdateLinesToWin,
   items,
   onAddItem,
   onUpdateItem,
@@ -76,6 +80,42 @@ export default function SetupScreen({
           Include FREE space in center
         </label>
       </div>
+
+      <div className="mb-6">
+        <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+          Win mode
+        </label>
+        <select
+          value={winMode}
+          onChange={(e) => onUpdateWinMode(e.target.value)}
+          className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+        >
+          <option value="standard">Standard (lines)</option>
+          <option value="four_corners">Four corners</option>
+          <option value="x">X (both diagonals)</option>
+          <option value="blackout">Blackout (full board)</option>
+        </select>
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          One win rule per game. Players claim when that pattern is complete.
+        </p>
+      </div>
+
+      {winMode === 'standard' && (
+        <div className="mb-6">
+          <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+            Bingos required
+          </label>
+          <select
+            value={linesToWin}
+            onChange={(e) => onUpdateLinesToWin(Number(e.target.value))}
+            className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          >
+            <option value={1}>1 line</option>
+            <option value={2}>2 lines</option>
+            <option value={3}>3 lines</option>
+          </select>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2">

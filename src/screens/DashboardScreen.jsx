@@ -1,4 +1,5 @@
-import { AlertCircle, Loader2, LogOut, Play, X } from 'lucide-react';
+import { AlertCircle, Copy, Loader2, LogOut, Play, X } from 'lucide-react';
+import { describeWinRule } from '../lib/winDetection';
 
 export default function DashboardScreen({
   currentUser,
@@ -7,6 +8,7 @@ export default function DashboardScreen({
   onLogout,
   onSelectGame,
   onEndGame,
+  onDuplicateSetup,
   onCreateGame,
   onJoinWithCode,
 }) {
@@ -77,11 +79,22 @@ export default function DashboardScreen({
                   <p className="text-sm text-gray-600">
                     {game.isHost ? 'Host' : 'Player'} • {game.config?.boardSize}x{game.config?.boardSize} board
                   </p>
+                  <p className="text-xs text-purple-700 mt-1">{describeWinRule(game.config)}</p>
                 </div>
                 <Play size={20} className="text-purple-600 flex-shrink-0 ml-2" />
               </button>
               {game.isHost && (
-                <div className="mt-3 pt-3 border-t border-gray-300">
+                <div className="mt-3 pt-3 border-t border-gray-300 flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDuplicateSetup?.(game);
+                    }}
+                    className="flex-1 px-4 py-2 bg-purple-100 text-purple-800 text-sm font-semibold rounded-lg hover:bg-purple-200 transition flex items-center justify-center gap-2"
+                  >
+                    <Copy size={16} /> Reuse setup
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -89,7 +102,7 @@ export default function DashboardScreen({
                         onEndGame(game.gameCode);
                       }
                     }}
-                    className="w-full px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
+                    className="flex-1 px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
                   >
                     <X size={16} /> End Game
                   </button>

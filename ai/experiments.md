@@ -9,6 +9,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 | 2026-07 | Free Supabase project paused >90 days | Cannot dashboard-restore; recreated project | Ops | Use `FULL_SCHEMA_RESTORE.sql`; redeploy with new keys |
 | 2026-07 | Forgot-password via Supabase recovery | Implemented (`PASSWORD_RECOVERY` + reset screen) | Yes | Needs Auth redirect URLs on each environment |
 | 2026-07 | Realtime for win claims / roster instead of polling | Implemented (`src/lib/realtime.js` + publication migration) | Yes | Replaces 1–3s HTTP polls on host/play/dashboard |
+| 2026-07 | Win modes (N-line, corners, X, blackout) + toast + reuse setup | Implemented (`winDetection.js`, setup/host/play UI) | Yes | One mode per game; OR-combinable patterns deferred |
 
 ## How to add an entry
 
@@ -19,5 +20,5 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 ## Ideas backlog (not commitments)
 
 - Further split `App.jsx` handlers into domain hooks (`useAuth`, `useBoard`, `useWinClaims`) — screens/chrome already extracted
-- Shared toast/error UI instead of `alert`
 - Stricter TypeScript migration
+- OR-combinable custom win patterns (“any of selected”)
