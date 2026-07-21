@@ -1570,6 +1570,7 @@ export default function Mingo() {
           <ForgotPasswordScreen
             onSent={() => setScreen('forgot-password-sent')}
             onBack={() => setScreen('login')}
+            showToast={showToast}
           />
         )}
 
@@ -1582,6 +1583,7 @@ export default function Mingo() {
             currentUser={currentUser}
             onSubmit={completePasswordReset}
             onCancel={cancelPasswordRecovery}
+            showToast={showToast}
           />
         )}
 

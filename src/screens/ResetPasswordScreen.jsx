@@ -1,6 +1,6 @@
 import { KeyRound } from 'lucide-react';
 
-export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel }) {
+export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel, showToast }) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Choose a new password</h2>
@@ -16,17 +16,17 @@ export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel })
           const password = formData.get('password');
           const confirmPassword = formData.get('confirmPassword');
           if (password !== confirmPassword) {
-            alert('Passwords do not match');
+            showToast('Passwords do not match');
             return;
           }
           if (password.length < 6) {
-            alert('Password must be at least 6 characters');
+            showToast('Password must be at least 6 characters');
             return;
           }
           try {
             await onSubmit(password);
           } catch (error) {
-            alert(error.message || 'Could not update password. Please try again.');
+            showToast(error.message || 'Could not update password. Please try again.');
           }
         }}
         className="space-y-4"
