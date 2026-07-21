@@ -69,7 +69,7 @@ test.describe('Four corners win mode', () => {
 
       const confirmBtn = hostPage.getByRole('button', { name: /Confirm Win/i })
       await expect(confirmBtn).toBeVisible({ timeout: 60_000 })
-      await expect(hostPage.getByText(/Four corners/i)).toBeVisible()
+      await expect(hostPage.getByText(/Win Type:\s*Four corners/i)).toBeVisible()
       await confirmBtn.click()
 
       await expect(guestPage.getByText(/You won! Win confirmed|Win Confirmed|BINGO/i).first()).toBeVisible({
