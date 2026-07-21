@@ -80,7 +80,8 @@ npx playwright install chromium
 npm run test:e2e:smoke
 # equivalent: npm run test:e2e:landing && npm run test:e2e:api
 
-# Full create → guest join → claim (needs host credentials + mingo-local)
+# Full create → guest join → claim → end (needs host credentials + mingo-local).
+# Deletes the created game afterward (host DELETE RLS + cascade).
 export SMOKE_HOST_EMAIL='your-test-host@example.com'
 export SMOKE_HOST_PASSWORD='…'
 npm run test:e2e
