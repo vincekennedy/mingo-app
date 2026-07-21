@@ -18,6 +18,6 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 
 ## Ideas backlog (not commitments)
 
-- Extract screens out of monolith `App.jsx`
+- Further split `App.jsx` handlers into domain hooks (`useAuth`, `useBoard`, `useWinClaims`) — screens/chrome already extracted
 - Shared toast/error UI instead of `alert`
 - Stricter TypeScript migration
