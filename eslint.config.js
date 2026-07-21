@@ -41,6 +41,7 @@ export default defineConfig([
       'eslint.config.js',
       'api/**/*.{js,mjs,cjs}',
       'e2e/**/*.{js,mjs,cjs}',
+      'scripts/**/*.{js,mjs,cjs}',
     ],
     languageOptions: {
       globals: globals.node,

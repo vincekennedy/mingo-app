@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
+import { loadEnvLocal } from './e2e/loadEnvLocal.js'
+
+loadEnvLocal()
 
 const baseURL = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:5173'
 

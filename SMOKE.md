@@ -72,36 +72,48 @@ Playwright covers this in `e2e/generate-items.spec.js` (`npm run test:e2e:api`, 
 
 ## Automated smoke
 
+Three tiers:
+
+1. **Local (before push)** — `npm run test:e2e:prepush` runs **only newly added** `e2e/*.spec.js` in the push range (skips if none). Playwright loads `SMOKE_HOST_*` from gitignored `.env.local`.
+2. **PR → `develop`** — **PR Smoke Tests**: `npm run test:e2e:smoke` (landing + `/api` + lifecycle).
+3. **PR → `master`** — full suite: `npm run test:e2e` (all specs under `e2e/`).
+
 ```bash
 # One-time
 npx playwright install chromium
 
-# Always-on UI + API checks (no host secrets; Gemini key optional)
+# Develop smoke (landing + api + lifecycle). Needs host creds in .env.local or the shell.
 npm run test:e2e:smoke
-# equivalent: npm run test:e2e:landing && npm run test:e2e:api
 
-# Full create → guest join → claim → end (needs host credentials + mingo-local).
-# Deletes the created game afterward (host DELETE RLS + cascade).
-export SMOKE_HOST_EMAIL='your-test-host@example.com'
-export SMOKE_HOST_PASSWORD='…'
+# Subsets
+npm run test:e2e:landing
+npm run test:e2e:api
+npm run test:e2e:lifecycle
+
+# Full suite (all e2e specs) — used on master PRs
 npm run test:e2e
-# or lifecycle only: npm run test:e2e:lifecycle
+
+# Pre-push gate: only specs added since upstream (or origin/develop)
+npm run test:e2e:prepush
 ```
 
 | Variable | Required for | Purpose |
 |----------|----------------|---------|
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Full e2e | Same as local app (mingo-local) |
-| `SMOKE_HOST_EMAIL` / `SMOKE_HOST_PASSWORD` | Full e2e | Dedicated **test** host account on mingo-local |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Smoke / full e2e | Same as local app (mingo-local); usually already in `.env.local` |
+| `SMOKE_HOST_EMAIL` / `SMOKE_HOST_PASSWORD` | Smoke / full e2e | Dedicated **test** host on mingo-local (put in `.env.local`; never commit) |
 | `GEMINI_API_KEY` | Successful generate-items (else JSON error is OK) | Server-side key for Vite middleware / Vercel |
 | `SMOKE_BASE_URL` | Optional | Defaults to `http://127.0.0.1:5173` (Playwright starts Vite); set to production URL to smoke deployed `/api` |
 
-Locally, lifecycle **skips** when host credentials are missing (`npm run test:e2e:smoke` still runs). PR CI **requires** the secrets below and fails if they are unset.
+Locally, lifecycle **skips** when host credentials are missing. PR CI **requires** the secrets below and fails if they are unset.
 
 Anonymous auth must be enabled on the Supabase project used for guest join.
 
-## CI (pull requests)
+## CI
 
-Workflow: [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) — runs `npm run test:e2e` (landing + api + lifecycle) on every PR into **`develop`**.
+| Trigger | Workflow | Command |
+|---------|----------|---------|
+| PR → `develop` | [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) (**PR Smoke Tests**) | `npm run test:e2e:smoke` |
+| PR → `master` | [`.github/workflows/master-e2e.yml`](.github/workflows/master-e2e.yml) | `npm run test:e2e` |
 
 Repository secrets (Settings → Secrets and variables → Actions):
 
