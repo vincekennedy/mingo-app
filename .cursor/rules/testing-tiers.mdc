@@ -1,0 +1,23 @@
+---
+description: Three-tier e2e testing and secret hygiene for Mingo
+alwaysApply: true
+---
+
+# Testing tiers
+
+Mingo uses three layers of Playwright coverage. Prefer discovering failures locally, not on GitHub.
+
+## Tiers
+
+1. **Local (before `git push`)** — Run `npm run test:e2e:prepush` (or the relevant new/changed specs plus `npm run test:e2e:smoke`). Do **not** push e2e or product changes until those tests pass. Playwright loads `SMOKE_HOST_*` from gitignored `.env.local`.
+2. **PR → `develop`** — Smoke: `npm run test:e2e:smoke` (landing + `/api` + lifecycle). Workflow name: **PR Smoke Tests** (`.github/workflows/pr-smoke.yml`).
+3. **PR → `master`** — Full suite: `npm run test:e2e`. Workflow: `.github/workflows/master-e2e.yml`.
+
+When adding a new `e2e/*.spec.js`, run that file locally before the first push that includes it. Specs beyond smoke are not required on develop PRs but must be green before merging to master.
+
+## Secrets
+
+- Never commit `SMOKE_HOST_EMAIL`, `SMOKE_HOST_PASSWORD`, anon keys, or API keys.
+- Never put real credentials in `AGENTS.md`, rules, commit messages, PR bodies, or chat summaries.
+- Store local smoke host creds only in `.env.local` (gitignored). CI uses GitHub Actions secrets with the same names.
+- Prefer printing only whether a secret is present (`true`/`false`), never its value.
