@@ -5,7 +5,7 @@ export const gameService = {
    * Create a new game
    * @param {string} code - Game code (5 characters)
    * @param {string} hostId - User ID of the host
-   * @param {Object} config - Game configuration {items, boardSize, useFreeSpace}
+   * @param {Object} config - Game configuration {items, boardSize, useFreeSpace, title, winMode, linesToWin}
    * @returns {Promise<Object>} Created game data
    */
   async createGame(code, hostId, config) {
