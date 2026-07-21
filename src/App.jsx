@@ -32,7 +32,6 @@ export default function Mingo() {
   const [screen, setScreen] = useState('home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play
   const [currentUser, setCurrentUser] = useState(null);
   const [userGames, setUserGames] = useState([]);
-  const [selectedGame, setSelectedGame] = useState(null);
   const [items, setItems] = useState(Array(24).fill({ text: '', imageUrl: null }));
   const [boardSize, setBoardSize] = useState(5);
   const [board, setBoard] = useState([]);
@@ -89,6 +88,54 @@ export default function Mingo() {
     handleSubmitReport,
   } = useReportModal({ currentUser, screen, gameCode });
 
+  const loadUserGames = async (userId, { showLoading = false } = {}) => {
+    if (!userId) {
+      setUserGames([]);
+      if (showLoading) setGamesLoading(false);
+      return;
+    }
+
+    const loadId = ++gamesLoadIdRef.current;
+    if (showLoading) setGamesLoading(true);
+    try {
+      // Get games from Supabase
+      const games = await gameService.getUserGames(userId);
+      
+      // Check for pending wins (only for host games)
+      const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
+      const pendingWinsMap = hostGameCodes.length > 0 
+        ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
+        : {};
+      
+      // Load board state for each game
+      const gamesWithState = await Promise.all(
+        games.map(async (game) => {
+          const boardState = await boardService.loadBoardState(game.gameCode, userId);
+          return {
+            ...game,
+            boardState: boardState ? {
+              board: boardState.board,
+              marked: boardState.marked,
+              hasWon: boardState.hasWon,
+            } : null,
+            pendingWin: pendingWinsMap[game.gameCode] || false,
+          };
+        })
+      );
+
+      if (loadId !== gamesLoadIdRef.current) return;
+      setUserGames(gamesWithState);
+    } catch (error) {
+      console.error('Error loading user games:', error);
+      if (loadId !== gamesLoadIdRef.current) return;
+      setUserGames([]);
+    } finally {
+      if (loadId === gamesLoadIdRef.current) {
+        setGamesLoading(false);
+      }
+    }
+  };
+
   // Authentication and user management - check on mount
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +146,7 @@ export default function Mingo() {
       if (hash && new URLSearchParams(hash).get('type') === 'recovery') {
         passwordRecoveryRef.current = true;
       }
-    } catch (_) {
+    } catch {
       /* ignore malformed hash */
     }
 
@@ -185,7 +232,6 @@ export default function Mingo() {
         hydratePromise = null;
         setCurrentUser(null);
         setUserGames([]);
-        setSelectedGame(null);
         setScreen((prev) =>
           prev === 'dashboard' || prev === 'host' || prev === 'play' ? 'home' : prev
         );
@@ -227,54 +273,6 @@ export default function Mingo() {
     };
   }, []); // Only run on mount
 
-  const loadUserGames = async (userId, { showLoading = false } = {}) => {
-    if (!userId) {
-      setUserGames([]);
-      if (showLoading) setGamesLoading(false);
-      return;
-    }
-
-    const loadId = ++gamesLoadIdRef.current;
-    if (showLoading) setGamesLoading(true);
-    try {
-      // Get games from Supabase
-      const games = await gameService.getUserGames(userId);
-      
-      // Check for pending wins (only for host games)
-      const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
-      const pendingWinsMap = hostGameCodes.length > 0 
-        ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
-        : {};
-      
-      // Load board state for each game
-      const gamesWithState = await Promise.all(
-        games.map(async (game) => {
-          const boardState = await boardService.loadBoardState(game.gameCode, userId);
-          return {
-            ...game,
-            boardState: boardState ? {
-              board: boardState.board,
-              marked: boardState.marked,
-              hasWon: boardState.hasWon,
-            } : null,
-            pendingWin: pendingWinsMap[game.gameCode] || false,
-          };
-        })
-      );
-
-      if (loadId !== gamesLoadIdRef.current) return;
-      setUserGames(gamesWithState);
-    } catch (error) {
-      console.error('Error loading user games:', error);
-      if (loadId !== gamesLoadIdRef.current) return;
-      setUserGames([]);
-    } finally {
-      if (loadId === gamesLoadIdRef.current) {
-        setGamesLoading(false);
-      }
-    }
-  };
-
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
@@ -282,68 +280,6 @@ export default function Mingo() {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
-  };
-
-  // Storage helpers (move before useEffect that uses them)
-  const setStorage = async (key, value) => {
-    const valueToStore = typeof value === 'string' ? value : JSON.stringify(value);
-    
-    try {
-      // Always use localStorage as primary storage
-      localStorage.setItem(key, valueToStore);
-      
-      // Also try window.storage if available (Cursor-specific, for cross-tab sync)
-      if (window.storage && typeof window.storage.set === 'function') {
-        try {
-          await window.storage.set(key, valueToStore, true);
-        } catch (storageError) {
-          console.warn('window.storage.set error:', storageError);
-          // Continue even if window.storage fails, localStorage is primary
-        }
-      }
-    } catch (error) {
-      console.error('Storage set error:', error);
-      // If localStorage fails, try one more time
-      try {
-        localStorage.setItem(key, valueToStore);
-      } catch (e) {
-        console.error('localStorage set error:', e);
-        throw new Error('Failed to save to storage. Your browser may have storage disabled.');
-      }
-    }
-  };
-
-  const getStorage = async (key) => {
-    try {
-      // Always try localStorage first as it's the standard approach
-      const localValue = localStorage.getItem(key);
-      if (localValue !== null) {
-        return localValue;
-      }
-      
-      // Fallback to window.storage if available (Cursor-specific)
-      if (window.storage && typeof window.storage.get === 'function') {
-        try {
-          const result = await window.storage.get(key, true);
-          if (result?.value) {
-            return result.value;
-          }
-        } catch (storageError) {
-          console.warn('window.storage.get error:', storageError);
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Storage get error:', error);
-      // Final fallback to localStorage
-      try {
-        return localStorage.getItem(key);
-      } catch (e) {
-        console.error('localStorage.getItem error:', e);
-        return null;
-      }
-    }
   };
 
   // Authentication functions (Supabase)
@@ -502,7 +438,6 @@ export default function Mingo() {
       // Clear local state
       setCurrentUser(null);
       setUserGames([]);
-      setSelectedGame(null);
       resetToHome();
       setScreen('home');
     } catch (error) {
@@ -510,7 +445,6 @@ export default function Mingo() {
       // Even if logout fails, clear local state
       setCurrentUser(null);
       setUserGames([]);
-      setSelectedGame(null);
       resetToHome();
       setScreen('home');
     }
@@ -530,7 +464,6 @@ export default function Mingo() {
       
       // If we're currently viewing this game, go back to dashboard
       if (gameCode === gameCodeToEnd && (screen === 'host' || screen === 'play')) {
-        setSelectedGame(null);
         setGameCode('');
         setBoard([]);
         setMarked(new Set());
@@ -569,7 +502,9 @@ export default function Mingo() {
     }
   };
 
-  // Auto-save board state when marked changes or win state changes
+  // Auto-save board state when marked changes or win state changes.
+  // board.length / saveBoardState intentionally omitted from deps: length is gated in
+  // the body; saveBoardState is recreated each render and would thrash the debounce.
   useEffect(() => {
     if (currentUser && gameCode && board.length > 0 && (screen === 'play' || screen === 'host')) {
       const timeoutId = setTimeout(() => {
@@ -577,6 +512,7 @@ export default function Mingo() {
       }, 500); // Debounce saves
       return () => clearTimeout(timeoutId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
   }, [marked, hasWon, pendingWinClaim, winConfirmed, winRejected, currentUser, gameCode, screen]);
 
   const loadBoardState = async (gameCodeToLoad) => {
@@ -654,7 +590,6 @@ export default function Mingo() {
       await saveBoardState(gameCode);
     }
     
-    setSelectedGame(game);
     const loaded = await loadBoardState(game.gameCode);
     if (!loaded) {
       // If no saved state, set up game config
@@ -791,10 +726,7 @@ export default function Mingo() {
   })();
 
   useEffect(() => {
-    if (!generatingItems) {
-      setGenerateStatusIndex(0);
-      return;
-    }
+    if (!generatingItems) return undefined;
     const id = setInterval(() => {
       setGenerateStatusIndex((i) => (i + 1) % 4);
     }, 1600);
@@ -821,6 +753,7 @@ export default function Mingo() {
     }
 
     setGeneratingItems(true);
+    setGenerateStatusIndex(0);
     try {
       const generated = await generateItemsFromTitle(title, neededItemCount);
       setItems(generated.map((text) => ({ text, imageUrl: null })));
@@ -1121,7 +1054,6 @@ export default function Mingo() {
       
       // If we're currently viewing this game, go back to dashboard
       if (screen === 'host' || screen === 'play') {
-        setSelectedGame(null);
         setGameCode('');
         setBoard([]);
         setMarked(new Set());
@@ -1176,31 +1108,14 @@ export default function Mingo() {
     setSelectedIncorrectItems(newSelected);
   };
 
-  const toggleCell = (index) => {
-    if (board[index].isFree || hasWon || pendingWinClaim || winRejected) return;
-    
-    const newMarked = new Set(marked);
-    if (newMarked.has(index)) {
-      newMarked.delete(index);
-    } else {
-      newMarked.add(index);
-    }
-    setMarked(newMarked);
-    
-    // Save board state after marking if logged in
-    if (currentUser && gameCode) {
-      saveBoardState(gameCode);
-    }
-  };
-
-  const checkWin = () => {
+  const checkWin = (markedCells = marked) => {
     // Check rows
     for (let row = 0; row < boardSize; row++) {
       let win = true;
       const winIndices = [];
       for (let col = 0; col < boardSize; col++) {
         const index = row * boardSize + col;
-        if (!marked.has(index)) {
+        if (!markedCells.has(index)) {
           win = false;
           break;
         }
@@ -1218,7 +1133,7 @@ export default function Mingo() {
       const winIndices = [];
       for (let row = 0; row < boardSize; row++) {
         const index = row * boardSize + col;
-        if (!marked.has(index)) {
+        if (!markedCells.has(index)) {
           win = false;
           break;
         }
@@ -1235,7 +1150,7 @@ export default function Mingo() {
     const diag1Indices = [];
     for (let i = 0; i < boardSize; i++) {
       const index = i * boardSize + i;
-      if (!marked.has(index)) {
+      if (!markedCells.has(index)) {
         diagonal1 = false;
         break;
       }
@@ -1251,7 +1166,7 @@ export default function Mingo() {
     const diag2Indices = [];
     for (let i = 0; i < boardSize; i++) {
       const index = i * boardSize + (boardSize - 1 - i);
-      if (!marked.has(index)) {
+      if (!markedCells.has(index)) {
         diagonal2 = false;
         break;
       }
@@ -1265,22 +1180,42 @@ export default function Mingo() {
     return null;
   };
 
-  // Check for win condition
-  useEffect(() => {
-    if (screen === 'play' && !hasWon && !pendingWinClaim && !winConfirmed && !winRejected && board.length > 0 && boardSize > 0) {
-      const winResult = checkWin();
+  const toggleCell = (index) => {
+    if (board[index].isFree || hasWon || pendingWinClaim || winRejected) return;
+    
+    const newMarked = new Set(marked);
+    if (newMarked.has(index)) {
+      newMarked.delete(index);
+    } else {
+      newMarked.add(index);
+    }
+    setMarked(newMarked);
+    
+    // Save board state after marking if logged in
+    if (currentUser && gameCode) {
+      saveBoardState(gameCode);
+    }
+
+    // Evaluate win from the updated marks (avoid setState-in-effect)
+    if (
+      screen === 'play' &&
+      !hasWon &&
+      !pendingWinClaim &&
+      !winConfirmed &&
+      !winRejected &&
+      board.length > 0 &&
+      boardSize > 0
+    ) {
+      const winResult = checkWin(newMarked);
       if (winResult && !isHost) {
-        // Player won - submit claim for host verification
         const submitWinClaim = async () => {
           if (!currentUser) return;
-          
           try {
             const claimData = await winClaimsService.submitClaim(gameCode, currentUser.id, {
               type: winResult.type,
               items: winResult.items,
               indices: winResult.indices,
             });
-            
             setPendingWinClaim({
               type: winResult.type,
               items: winResult.items,
@@ -1295,12 +1230,13 @@ export default function Mingo() {
         };
         submitWinClaim();
       } else if (winResult && isHost) {
-        // Host won - auto-confirm for host (no verification needed)
         setHasWon(true);
         setWinConfirmed(true);
       }
     }
-  }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
+  };
+
+
 
   // Keep claim flags in refs so realtime handlers stay fresh without resubscribing
   useEffect(() => {
@@ -1381,7 +1317,6 @@ export default function Mingo() {
     };
 
     const leaveEndedGame = () => {
-      setSelectedGame(null);
       setGameCode('');
       setBoard([]);
       setMarked(new Set());
@@ -1545,7 +1480,6 @@ export default function Mingo() {
     setWinConfirmed(false);
     setWinRejected(false);
     setSelectedIncorrectItems(new Set());
-    setSelectedGame(null);
     setGamePlayers([]);
     setConfirmedWinners([]);
   };
@@ -1689,11 +1623,9 @@ export default function Mingo() {
             onSelectGame={selectGame}
             onEndGame={endGame}
             onCreateGame={() => {
-              setSelectedGame(null);
               setScreen('setup');
             }}
             onJoinWithCode={() => {
-              setSelectedGame(null);
               setJoinCode('');
               setScreen('home');
             }}
