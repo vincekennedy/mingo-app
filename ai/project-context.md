@@ -45,7 +45,7 @@ Almost all UI and game logic live in a **single screen state machine**:
 
 There is **no React Router**. Navigation is `setScreen(...)`.
 
-There is **no Supabase Realtime**. Multiplayer freshness is **HTTP polling** (see below).
+Multiplayer freshness uses **Supabase Realtime** (`postgres_changes` on `game_participants`, `win_claims`, `games`) via [`src/lib/realtime.js`](../src/lib/realtime.js). Board marks still persist over HTTP with a short debounce.
 
 Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused**; persistence is Supabase.
 
@@ -80,6 +80,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `storage.js` | Upload/delete images in `game-images` bucket (max 5MB, `image/*`) |
 | `generateItems.js` | Client call to `/api/generate-items` for AI bingo items from title |
 | `feedback.js` | Submit issue/feedback reports to `feedback_reports` (anon + authenticated) |
+| `../lib/realtime.js` | `subscribeGame` / `subscribeDashboard` Realtime channels for multiplayer freshness |
 
 ---
 
@@ -147,16 +148,20 @@ Auth email redirect URLs in Supabase must include production Vercel origin and l
 
 ---
 
-## Polling (not Realtime)
+## Realtime (multiplayer freshness)
 
-| Interval | When | What |
-|----------|------|------|
-| 3s | `play` / `host` | Participants + confirmed winners |
-| 3s | `dashboard` | Reload games / pending wins for hosts |
-| 2s | Host in-game | Pending win claims |
-| 1s | Player with pending claim | Own claim status |
+| Channel | When | Tables / events | App reaction |
+|---------|------|-----------------|--------------|
+| `game:{code}` | `play` / `host` | `game_participants` INSERT/DELETE; `win_claims` INSERT/UPDATE; `games` UPDATE | Refetch players/winners; host pending claims or player claim status; leave to dashboard if `status: ended` |
+| `dashboard:{userId}` | `dashboard` | `win_claims` INSERT/UPDATE (RLS-scoped, no filter) | Silent `loadUserGames` for pending-win badges |
+
+Initial hydrate still uses REST (`fetchGamePlayers`, `getPendingClaims`, etc.). Tables must be in `supabase_realtime` publication (see migration `20260721150000_realtime_publication.sql`).
+
+| Still local / HTTP | When | What |
+|--------------------|------|------|
 | ~500ms debounce | Board edits | Persist `board_states` |
 | confetti burst | Confirmed player win | Visual only |
+| ~1.6s | AI generate-items UI | Status copy rotation only |
 
 ---
 
