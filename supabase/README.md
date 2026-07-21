@@ -93,6 +93,7 @@ npx supabase migration repair --status applied 20260719010000
 npx supabase migration repair --status applied 20260719120000
 npx supabase migration repair --status applied 20260719140000
 npx supabase migration repair --status applied 20260721150000
+npx supabase migration repair --status applied 20260721180000
 ```
 
 Mark every migration already covered by the restore (list under `supabase/migrations/`).
