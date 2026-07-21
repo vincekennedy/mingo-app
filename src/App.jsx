@@ -10,6 +10,7 @@ import { storageService } from './services/storage';
 import { generateItemsFromTitle } from './services/generateItems';
 import { submitReport, FEEDBACK_CATEGORIES } from './services/feedback';
 import { supabase } from './lib/supabase';
+import { subscribeGame, subscribeDashboard } from './lib/realtime';
 
 export default function Mingo() {
   const [screen, setScreen] = useState('home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play
@@ -53,8 +54,9 @@ export default function Mingo() {
   const [gamePlayers, setGamePlayers] = useState([]);
   const [confirmedWinners, setConfirmedWinners] = useState([]);
   const confettiIntervalRef = useRef(null);
-  const pollIntervalRef = useRef(null);
-  const playerListIntervalRef = useRef(null);
+  const pendingWinClaimRef = useRef(null);
+  const winConfirmedRef = useRef(false);
+  const winRejectedRef = useRef(false);
   const passwordRecoveryRef = useRef(false);
   const gamesLoadIdRef = useRef(0);
   const authReadyRef = useRef(false);
@@ -1274,143 +1276,147 @@ export default function Mingo() {
     }
   }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
 
-  // Poll for player list updates when in a game
+  // Keep claim flags in refs so realtime handlers stay fresh without resubscribing
   useEffect(() => {
-    if (gameCode && (screen === 'play' || screen === 'host')) {
-      // Initial fetch
-      fetchGamePlayers(gameCode);
-      
-      // Poll every 3 seconds
-      playerListIntervalRef.current = setInterval(() => {
-        fetchGamePlayers(gameCode);
-      }, 3000);
-      
-      return () => {
-        if (playerListIntervalRef.current) {
-          clearInterval(playerListIntervalRef.current);
-          playerListIntervalRef.current = null;
+    pendingWinClaimRef.current = pendingWinClaim;
+  }, [pendingWinClaim]);
+  useEffect(() => {
+    winConfirmedRef.current = winConfirmed;
+  }, [winConfirmed]);
+  useEffect(() => {
+    winRejectedRef.current = winRejected;
+  }, [winRejected]);
+
+  // Realtime: player list, claims, and game ended while on host/play
+  useEffect(() => {
+    if (!gameCode || (screen !== 'play' && screen !== 'host') || !currentUser) {
+      return;
+    }
+
+    const code = gameCode;
+
+    const refreshHostClaims = async () => {
+      try {
+        const claims = await winClaimsService.getPendingClaims(code);
+        if (claims && claims.length > 0) {
+          const latestClaim = claims[0];
+          const prev = pendingWinClaimRef.current;
+          if (!prev || prev.claimId !== latestClaim.id) {
+            setPendingWinClaim({
+              type: latestClaim.type,
+              items: latestClaim.items,
+              indices: latestClaim.indices,
+              claimId: latestClaim.id,
+              userId: latestClaim.userId,
+              username: latestClaim.username,
+              timestamp: latestClaim.timestamp,
+            });
+            setSelectedIncorrectItems(new Set());
+          }
+        } else if (pendingWinClaimRef.current) {
+          setPendingWinClaim(null);
         }
-      };
-    } else {
-      // Clear players when not in a game
+      } catch (error) {
+        console.error('Error refreshing win claims:', error);
+      }
+    };
+
+    const refreshPlayerClaim = async () => {
+      try {
+        const claimStatus = await winClaimsService.getUserClaimStatus(code, currentUser.id);
+        if (!claimStatus) return;
+
+        if (claimStatus.status === 'confirmed' && !winConfirmedRef.current) {
+          setWinConfirmed(true);
+          setHasWon(true);
+          setPendingWinClaim(null);
+        } else if (claimStatus.status === 'rejected' && !winRejectedRef.current) {
+          if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
+            setMarked((prevMarked) => {
+              const newMarked = new Set(prevMarked);
+              claimStatus.incorrectIndices.forEach((boardIndex) => {
+                newMarked.delete(boardIndex);
+              });
+              return newMarked;
+            });
+          }
+
+          setWinRejected(true);
+          setPendingWinClaim(null);
+          setHasWon(false);
+
+          setTimeout(() => {
+            setWinRejected(false);
+          }, 4000);
+        }
+      } catch (error) {
+        console.error('Error refreshing claim status:', error);
+      }
+    };
+
+    const leaveEndedGame = () => {
+      setSelectedGame(null);
+      setGameCode('');
+      setBoard([]);
+      setMarked(new Set());
+      setGameConfig(null);
+      setPendingWinClaim(null);
       setGamePlayers([]);
       setConfirmedWinners([]);
-    }
-  }, [gameCode, screen]);
+      setIsHost(false);
+      setScreen('dashboard');
+      loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
+        console.error('Error reloading games after end:', error);
+      });
+    };
 
-  // Poll for win claims and update dashboard if on dashboard
-  useEffect(() => {
-    if (currentUser && screen === 'dashboard' && authReady) {
-      // Poll user games for pending wins (start after interval so we don't race cold-start hydrate)
-      const pollPendingWins = async () => {
-        if (currentUser) {
-          try {
-            const games = await gameService.getUserGames(currentUser.id);
-            const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
-            const pendingWinsMap = hostGameCodes.length > 0 
-              ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
-              : {};
-            
-            // Reload games to update pending win status (silent — no empty-state flash)
-            await loadUserGames(currentUser.id, { showLoading: false });
-          } catch (error) {
-            console.error('Error polling pending wins:', error);
-          }
-        }
-      };
-      
-      const interval = setInterval(pollPendingWins, 3000);
-      return () => clearInterval(interval);
+    fetchGamePlayers(code);
+    if (isHost) {
+      refreshHostClaims();
+    } else if (screen === 'play') {
+      refreshPlayerClaim();
     }
+
+    const unsubscribe = subscribeGame(code, {
+      onParticipantsChange: () => {
+        fetchGamePlayers(code);
+      },
+      onClaimsChange: () => {
+        fetchGamePlayers(code);
+        if (isHost) {
+          refreshHostClaims();
+        } else if (screen === 'play') {
+          refreshPlayerClaim();
+        }
+      },
+      onGameChange: (row) => {
+        if (row?.status === 'ended') {
+          leaveEndedGame();
+        }
+      },
+    });
+
+    return () => {
+      unsubscribe();
+      setGamePlayers([]);
+      setConfirmedWinners([]);
+    };
+  }, [gameCode, screen, isHost, currentUser]);
+
+  // Realtime: dashboard pending-win badges (RLS scopes win_claims events)
+  useEffect(() => {
+    if (!currentUser || screen !== 'dashboard' || !authReady) return;
+
+    const unsubscribe = subscribeDashboard(currentUser.id, {
+      onChange: () => {
+        loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
+          console.error('Error refreshing dashboard from realtime:', error);
+        });
+      },
+    });
+
+    return unsubscribe;
   }, [currentUser, screen, authReady]);
-
-  // Poll for win claims (host) or confirmation status (player)
-  useEffect(() => {
-    if (gameCode && isHost && (screen === 'host' || screen === 'play') && currentUser) {
-      // Host polls for win claims (even when playing)
-      const checkWinClaims = async () => {
-        try {
-          const claims = await winClaimsService.getPendingClaims(gameCode);
-          if (claims && claims.length > 0) {
-            const latestClaim = claims[0]; // Get most recent claim
-            if (!pendingWinClaim || pendingWinClaim.claimId !== latestClaim.id) {
-              setPendingWinClaim({
-                type: latestClaim.type,
-                items: latestClaim.items,
-                indices: latestClaim.indices,
-                claimId: latestClaim.id,
-                userId: latestClaim.userId,
-                username: latestClaim.username,
-                timestamp: latestClaim.timestamp,
-              });
-              setSelectedIncorrectItems(new Set()); // Reset selection for new claim
-            }
-          } else if (pendingWinClaim) {
-            // No pending claims, clear if we had one
-            setPendingWinClaim(null);
-          }
-        } catch (error) {
-          console.error('Error checking win claims:', error);
-        }
-      };
-
-      checkWinClaims();
-      pollIntervalRef.current = setInterval(checkWinClaims, 2000);
-
-      return () => {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      };
-    } else if (gameCode && screen === 'play' && !isHost && pendingWinClaim && currentUser) {
-      // Player polls for confirmation/rejection
-      const checkConfirmation = async () => {
-        try {
-          const claimStatus = await winClaimsService.getUserClaimStatus(gameCode, currentUser.id);
-          if (claimStatus) {
-            if (claimStatus.status === 'confirmed' && !winConfirmed) {
-              setWinConfirmed(true);
-              setHasWon(true);
-              setPendingWinClaim(null);
-            } else if (claimStatus.status === 'rejected' && !winRejected) {
-              // Unselect incorrect items from player's board
-              if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
-                setMarked(prevMarked => {
-                  const newMarked = new Set(prevMarked);
-                  claimStatus.incorrectIndices.forEach(boardIndex => {
-                    newMarked.delete(boardIndex);
-                  });
-                  return newMarked;
-                });
-              }
-              
-              setWinRejected(true);
-              setPendingWinClaim(null);
-              setHasWon(false);
-              
-              // Clear notification and reset after rejection - allow player to try again
-              setTimeout(() => {
-                setWinRejected(false);
-              }, 4000);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking confirmation:', error);
-        }
-      };
-
-      checkConfirmation();
-      pollIntervalRef.current = setInterval(checkConfirmation, 1000);
-
-      return () => {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      };
-    }
-  }, [gameCode, screen, isHost, pendingWinClaim, winConfirmed, winRejected]);
 
   // Trigger confetti when win is confirmed
   useEffect(() => {
@@ -1516,14 +1522,6 @@ export default function Mingo() {
     setSelectedGame(null);
     setGamePlayers([]);
     setConfirmedWinners([]);
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    if (playerListIntervalRef.current) {
-      clearInterval(playerListIntervalRef.current);
-      playerListIntervalRef.current = null;
-    }
   };
 
   // Get version info

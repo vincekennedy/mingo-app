@@ -410,6 +410,27 @@ GRANT EXECUTE ON FUNCTION public.list_guest_users_for_cleanup(interval, integer)
 GRANT EXECUTE ON FUNCTION public.cleanup_guest_users(interval, integer, boolean) TO service_role;
 
 -- -----------------------------------------------------------------------------
+-- Realtime publication (postgres_changes for host/play/dashboard)
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['win_claims', 'game_participants', 'games']
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;
+
+-- -----------------------------------------------------------------------------
 -- Quick verification
 -- -----------------------------------------------------------------------------
 SELECT 'tables' AS check_type, tablename
