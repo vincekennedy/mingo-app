@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Local gate before `git push`: run Playwright when the push range
- * touches app / e2e / Playwright config. Loads `.env.local` via playwright.config.
+ * Local gate before `git push`: run only *newly added* Playwright specs.
  *
- * - Touches only smoke specs (or shared setup): `test:e2e:smoke`
- * - Touches any other e2e spec (or package scripts): full `test:e2e`
- * - Docs-only / unrelated: skip
+ * PR Smoke Tests on develop cover the smoke suite; this gate exists so new
+ * specs are debugged locally before the first push that introduces them.
+ *
+ * Loads `.env.local` via playwright.config.js.
  */
 import { execSync, spawnSync } from 'node:child_process'
 
@@ -18,34 +18,33 @@ function sh(cmd) {
 }
 
 const upstream = sh('git rev-parse --abbrev-ref --symbolic-full-name @{u}')
-const range = upstream ? `${upstream}..HEAD` : 'HEAD'
-const files = sh(`git diff --name-only ${range}`)
-  .split(/\n/)
-  .filter(Boolean)
+// Prefer commits not yet on the tracking branch; otherwise vs develop (first push).
+const range = upstream
+  ? `${upstream}..HEAD`
+  : sh('git rev-parse --verify origin/develop')
+    ? 'origin/develop..HEAD'
+    : ''
 
-const interesting = files.filter(
-  (f) =>
-    /^(e2e\/|src\/|api\/|playwright\.config\.|package\.json|package-lock\.json|vite\.config\.|scripts\/e2e-)/.test(
-      f,
-    ),
-)
-
-if (interesting.length === 0) {
-  console.log('e2e-prepush: no app/e2e changes in push range — skipping Playwright.')
+if (!range) {
+  console.log('e2e-prepush: no push range to compare — skipping Playwright.')
   process.exit(0)
 }
 
-const e2eSpecs = interesting.filter((f) => /^e2e\/.+\.spec\.js$/.test(f))
-const smokeSpecs = new Set([
-  'e2e/landing.spec.js',
-  'e2e/generate-items.spec.js',
-  'e2e/lifecycle.spec.js',
-])
-const onlySmokeOrShared =
-  e2eSpecs.length === 0 || e2eSpecs.every((f) => smokeSpecs.has(f))
+const newSpecs = sh(`git diff --diff-filter=A --name-only ${range}`)
+  .split(/\n/)
+  .filter((f) => /^e2e\/.+\.spec\.js$/.test(f))
 
-const script = onlySmokeOrShared ? 'test:e2e:smoke' : 'test:e2e'
-console.log(`e2e-prepush: running npm run ${script} (changed: ${interesting.join(', ')})`)
+if (newSpecs.length === 0) {
+  console.log(
+    `e2e-prepush: no new e2e/*.spec.js in ${range} — skipping Playwright.`,
+  )
+  process.exit(0)
+}
 
-const result = spawnSync('npm', ['run', script], { stdio: 'inherit', shell: process.platform === 'win32' })
+console.log(`e2e-prepush: running new specs only: ${newSpecs.join(', ')}`)
+
+const result = spawnSync('npx', ['playwright', 'test', ...newSpecs], {
+  stdio: 'inherit',
+  shell: process.platform === 'win32',
+})
 process.exit(result.status ?? 1)

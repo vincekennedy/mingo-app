@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Gate agent `git push` on local Playwright when app/e2e changed.
-# Reads Cursor hook JSON from stdin; never prints secret values.
+# Gate agent `git push`: run only newly added e2e/*.spec.js (via test:e2e:prepush).
+# Smoke suite runs on develop PRs; do not print secret values.
 set -euo pipefail
 
 input=$(cat)

@@ -74,7 +74,7 @@ Playwright covers this in `e2e/generate-items.spec.js` (`npm run test:e2e:api`, 
 
 Three tiers:
 
-1. **Local (before push)** — `npm run test:e2e:prepush` (or changed specs + `npm run test:e2e:smoke`). Playwright loads `SMOKE_HOST_*` from gitignored `.env.local`.
+1. **Local (before push)** — `npm run test:e2e:prepush` runs **only newly added** `e2e/*.spec.js` in the push range (skips if none). Playwright loads `SMOKE_HOST_*` from gitignored `.env.local`.
 2. **PR → `develop`** — **PR Smoke Tests**: `npm run test:e2e:smoke` (landing + `/api` + lifecycle).
 3. **PR → `master`** — full suite: `npm run test:e2e` (all specs under `e2e/`).
 
@@ -90,9 +90,11 @@ npm run test:e2e:landing
 npm run test:e2e:api
 npm run test:e2e:lifecycle
 
-# Full suite (all e2e specs) — also the pre-push gate when non-smoke specs change
+# Full suite (all e2e specs) — used on master PRs
 npm run test:e2e
-# or: npm run test:e2e:prepush
+
+# Pre-push gate: only specs added since upstream (or origin/develop)
+npm run test:e2e:prepush
 ```
 
 | Variable | Required for | Purpose |
