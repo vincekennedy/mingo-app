@@ -9,7 +9,10 @@ Prefer migrations over one-off root `FIX_*.sql` / `ADD_*.sql` scripts. Keep thos
 | Environment | Supabase project | Project ref | App credentials |
 |-------------|------------------|-------------|-----------------|
 | Local Vite (`npm run dev`) | **Mingo-local** | `lmlzduwtrzzjaggqsulr` | `.env.local` only |
-| Production / Vercel | **Mingo** | `sngfoaosgskdmkngjglh` | Vercel `VITE_SUPABASE_*` |
+| Vercel **Preview** (`develop` / PRs) | **Mingo-local** | `lmlzduwtrzzjaggqsulr` | Vercel Preview `VITE_SUPABASE_*` |
+| Vercel **Production** (`master`) | **Mingo** | `sngfoaosgskdmkngjglh` | Vercel Production `VITE_SUPABASE_*` |
+
+Free tier allows two Supabase projects, so Preview shares **Mingo-local** with local Vite (same users/data). Keep Production on **Mingo** only. A dedicated `mingo-preview` project is optional later if you upgrade plans — see `PREVIEW_DEPLOYMENT_SETUP.md`.
 
 Never mix URL from one project with the anon key from another — that causes `Invalid API key`.
 
@@ -147,10 +150,15 @@ No `/rest/v1/` on the URL. Restart `npm run dev` after changing env.
 
 ### Auth redirects (Mingo-local)
 
-Authentication → URL Configuration:
+Authentication → URL Configuration (needed for both local Vite and Vercel Preview):
 
-- Site URL: `http://localhost:5173`
-- Redirect URLs: `http://localhost:5173/`, `http://localhost:5173/**`
+- Site URL: `http://localhost:5173` (local default is fine)
+- Redirect URLs:
+  - `http://localhost:5173/`
+  - `http://localhost:5173/**`
+  - `https://*.vercel.app/**` (Preview + password-reset / email links)
+
+Without the Vercel entries, login/session redirects from Preview URLs often fail even when credentials are correct.
 
 ## GitHub Actions (automatic deploy)
 
@@ -158,7 +166,7 @@ Workflow: [`.github/workflows/supabase-db-push.yml`](../.github/workflows/supaba
 
 | Branch | Target project |
 |--------|----------------|
-| `develop` | Mingo-local (`lmlzduwtrzzjaggqsulr`) |
+| `develop` | Mingo-local (`lmlzduwtrzzjaggqsulr`) — keeps local + Preview in sync |
 | `master` | Production Mingo (`sngfoaosgskdmkngjglh`) |
 
 ### Required repository secrets
