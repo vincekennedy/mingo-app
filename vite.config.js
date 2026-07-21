@@ -8,7 +8,7 @@ import { generateBingoItems } from './api/lib/generateBingoItems.js'
 function getCommitHash() {
   try {
     return execSync('git rev-parse HEAD').toString().trim()
-  } catch (error) {
+  } catch {
     return 'unknown'
   }
 }
@@ -18,7 +18,7 @@ function getPackageVersion() {
   try {
     const packageJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
     return packageJson.version || '0.0.0'
-  } catch (error) {
+  } catch {
     return '0.0.0'
   }
 }
