@@ -35,15 +35,21 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
 
+      # Anon key is a public client credential — accept Actions secret OR variable.
+      # Presence lines never print values (only true/false).
       - name: Require mingo-local smoke secrets
         env:
-          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           SMOKE_HOST_EMAIL: ${{ secrets.SMOKE_HOST_EMAIL }}
           SMOKE_HOST_PASSWORD: ${{ secrets.SMOKE_HOST_PASSWORD }}
         run: |
+          echo "VITE_SUPABASE_ANON_KEY present (secret): ${{ secrets.VITE_SUPABASE_ANON_KEY != '' }}"
+          echo "VITE_SUPABASE_ANON_KEY present (var):    ${{ vars.VITE_SUPABASE_ANON_KEY != '' }}"
+          echo "SMOKE_HOST_EMAIL present:               ${{ secrets.SMOKE_HOST_EMAIL != '' }}"
+          echo "SMOKE_HOST_PASSWORD present:            ${{ secrets.SMOKE_HOST_PASSWORD != '' }}"
           ok=1
           if [ -z "$SECRET_ANON" ]; then
-            echo "::error::VITE_SUPABASE_ANON_KEY is required (mingo-local anon key)."
+            echo "::error::VITE_SUPABASE_ANON_KEY is empty. Add it under Settings → Secrets and variables → Actions as a Repository secret OR variable named exactly VITE_SUPABASE_ANON_KEY (value only from .env.local, not the KEY= prefix). Environment secrets are ignored unless the job sets environment:."
             ok=0
           fi
           if [ -z "$SMOKE_HOST_EMAIL" ]; then
@@ -58,8 +64,8 @@ jobs:
 
       - name: Configure Vite env for smoke
         env:
-          SECRET_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SECRET_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           SECRET_GEMINI: ${{ secrets.GEMINI_API_KEY }}
         run: |
           echo "VITE_SUPABASE_URL=${SECRET_URL:-https://lmlzduwtrzzjaggqsulr.supabase.co}" >> "$GITHUB_ENV"

@@ -104,12 +104,14 @@ Workflow: [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) —
 
 Repository secrets (Settings → Secrets and variables → Actions):
 
-| Secret | Required | Purpose |
-|--------|----------|---------|
-| `VITE_SUPABASE_ANON_KEY` | Yes | Mingo-local anon key (login + guest join) |
-| `SMOKE_HOST_EMAIL` | Yes | Dedicated **test** host on mingo-local |
-| `SMOKE_HOST_PASSWORD` | Yes | Password for that host |
-| `VITE_SUPABASE_URL` | No | Defaults to mingo-local project URL if unset |
-| `GEMINI_API_KEY` | No | Without it, generate-items must still return JSON `{ error }` |
+| Name | Required | Where | Purpose |
+|------|----------|-------|---------|
+| `VITE_SUPABASE_ANON_KEY` | Yes | Repository **secret** or **variable** | Mingo-local anon key (public client key; login + guest join) |
+| `SMOKE_HOST_EMAIL` | Yes | Repository **secret** | Dedicated **test** host on mingo-local |
+| `SMOKE_HOST_PASSWORD` | Yes | Repository **secret** | Password for that host |
+| `VITE_SUPABASE_URL` | No | Secret or variable | Defaults to mingo-local project URL if unset |
+| `GEMINI_API_KEY` | No | Secret | Without it, generate-items must still return JSON `{ error }` |
+
+Use the **Repository** secrets/variables tabs (not an Environment, unless the workflow job sets `environment:`). Name must match exactly; paste the value only (no `VITE_SUPABASE_ANON_KEY=` prefix).
 
 Anonymous auth must be enabled on mingo-local. Make **Playwright smoke (landing + api + lifecycle)** a required status check on `develop` if you want PRs blocked until green.
