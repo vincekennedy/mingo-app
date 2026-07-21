@@ -8,7 +8,9 @@ import { storageService } from './services/storage';
 import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 import { subscribeGame, subscribeDashboard } from './lib/realtime';
+import { detectWin, normalizeWinConfig } from './lib/winDetection';
 import { useReportModal } from './hooks/useReportModal';
+import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
 import GeneratingItemsOverlay from './components/chrome/GeneratingItemsOverlay';
 import UserProfileBanner from './components/chrome/UserProfileBanner';
@@ -38,6 +40,8 @@ export default function Mingo() {
   const [marked, setMarked] = useState(new Set());
   const [hasWon, setHasWon] = useState(false);
   const [useFreeSpace, setUseFreeSpace] = useState(true);
+  const [winMode, setWinMode] = useState('standard');
+  const [linesToWin, setLinesToWin] = useState(1);
   const [gameCode, setGameCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
@@ -87,6 +91,7 @@ export default function Mingo() {
     closeReportModal,
     handleSubmitReport,
   } = useReportModal({ currentUser, screen, gameCode });
+  const { showToast, ToastHost } = useToast();
 
   const loadUserGames = async (userId, { showLoading = false } = {}) => {
     if (!userId) {
@@ -477,7 +482,7 @@ export default function Mingo() {
         code: error.code,
         details: error.details
       });
-      alert(error.message || 'Error ending game. Please try again.');
+      showToast(error.message || 'Error ending game. Please try again.');
     }
   };
 
@@ -528,6 +533,11 @@ export default function Mingo() {
       setGameCode(gameCodeToLoad);
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      {
+        const rules = normalizeWinConfig(config);
+        setWinMode(rules.winMode);
+        setLinesToWin(rules.linesToWin);
+      }
       
       // Check if user is host
       setIsHost(game.host_id === currentUser.id);
@@ -599,6 +609,11 @@ export default function Mingo() {
       setGameTitle(game.config?.title || '');
       setBoardSize(game.config.boardSize || 5);
       setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
+      {
+        const rules = normalizeWinConfig(game.config);
+        setWinMode(rules.winMode);
+        setLinesToWin(rules.linesToWin);
+      }
       if (!game.isHost) {
         // Player: generate board immediately
         await generateBoardFromConfig(game.config, game.gameCode);
@@ -645,7 +660,7 @@ export default function Mingo() {
 
   const updateItemImage = async (index, file) => {
     if (!file || !currentUser) {
-      alert('Please log in to upload images.');
+      showToast('Please log in to upload images.');
       return;
     }
 
@@ -674,7 +689,7 @@ export default function Mingo() {
       setItems(newItems);
     } catch (error) {
       console.error('Error uploading image:', error);
-      alert(error.message || 'Error uploading image. Please try again.');
+      showToast(error.message || 'Error uploading image. Please try again.');
     }
   };
 
@@ -713,6 +728,37 @@ export default function Mingo() {
     }
   };
 
+  const updateWinMode = (mode) => {
+    setWinMode(mode);
+    if (mode !== 'standard') setLinesToWin(1);
+  };
+
+  const updateLinesToWin = (n) => {
+    const value = Math.min(3, Math.max(1, Number(n) || 1));
+    setLinesToWin(value);
+  };
+
+  const duplicateSetupFromGame = (game) => {
+    const config = game?.config;
+    if (!config?.items || !Array.isArray(config.items) || config.items.length === 0) {
+      showToast('This game has no item list to reuse.');
+      return;
+    }
+    const size = config.boardSize || 5;
+    const free = config.useFreeSpace !== undefined ? config.useFreeSpace : true;
+    const rules = normalizeWinConfig(config);
+    const normalizedItems = config.items.map((item) =>
+      typeof item === 'string' ? { text: item, imageUrl: null } : { text: item.text || '', imageUrl: item.imageUrl || null }
+    );
+    setGameTitle(config.title || '');
+    setBoardSize(size);
+    setUseFreeSpace(free);
+    setWinMode(rules.winMode);
+    setLinesToWin(rules.linesToWin);
+    setItems(normalizedItems);
+    setScreen('setup');
+  };
+
   const neededItemCount = useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
 
   const generateLoadingMessages = (() => {
@@ -736,7 +782,7 @@ export default function Mingo() {
   const generateItemsFromGameTitle = async () => {
     const title = gameTitle.trim();
     if (!title) {
-      alert('Enter a game title first, then generate items.');
+      showToast('Enter a game title first, then generate items.');
       return;
     }
 
@@ -759,7 +805,7 @@ export default function Mingo() {
       setItems(generated.map((text) => ({ text, imageUrl: null })));
     } catch (error) {
       console.error('Generate items error:', error);
-      alert(error.message || 'Could not generate items. Please try again.');
+      showToast(error.message || 'Could not generate items. Please try again.');
     } finally {
       setGeneratingItems(false);
     }
@@ -780,7 +826,7 @@ export default function Mingo() {
     const neededItems = useFreeSpace ? totalCells - 1 : totalCells;
 
     if (validItems.length < neededItems) {
-      alert(`You need at least ${neededItems} items for a ${boardSize}x${boardSize} board${useFreeSpace ? ' (with free space)' : ''}`);
+      showToast(`You need at least ${neededItems} items for a ${boardSize}x${boardSize} board${useFreeSpace ? ' (with free space)' : ''}`);
       return;
     }
 
@@ -798,11 +844,13 @@ export default function Mingo() {
       items: normalizedItems,
       boardSize,
       useFreeSpace,
-      title: gameTitle.trim() || null
+      title: gameTitle.trim() || null,
+      winMode,
+      linesToWin: winMode === 'standard' ? linesToWin : 1,
     };
 
     if (!currentUser) {
-      alert('Please log in to create a game.');
+      showToast('Please log in to create a game.');
       return;
     }
 
@@ -819,7 +867,7 @@ export default function Mingo() {
       await loadUserGames(currentUser.id);
     } catch (error) {
       console.error('Storage error:', error);
-      alert(`Could not save game: ${error.message || 'Please try again.'}`);
+      showToast(`Could not save game: ${error.message || 'Please try again.'}`);
       return;
     }
 
@@ -832,13 +880,13 @@ export default function Mingo() {
       const game = await gameService.joinGame(code, user.id);
       
       if (!game || !game.config) {
-        alert('Game not found or invalid. Please check the code and try again.');
+        showToast('Game not found or invalid. Please check the code and try again.');
         return;
       }
 
       const config = game.config;
       if (!config.items || !Array.isArray(config.items) || config.items.length === 0) {
-        alert('Invalid game configuration. Please check the code and try again.');
+        showToast('Invalid game configuration. Please check the code and try again.');
         return;
       }
 
@@ -853,6 +901,11 @@ export default function Mingo() {
       setGameCode(code);
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      {
+        const rules = normalizeWinConfig(config);
+        setWinMode(rules.winMode);
+        setLinesToWin(rules.linesToWin);
+      }
       setIsHost(false);
       
       // Try to load saved board state first
@@ -876,12 +929,12 @@ export default function Mingo() {
     } catch (error) {
       console.error('Error joining game:', error);
       if (error.message?.includes('not found')) {
-        alert(`Game "${code}" not found. Please check the code and try again.`);
+        showToast(`Game "${code}" not found. Please check the code and try again.`);
       } else if (error.message?.includes('already joined')) {
         // User already joined, just load the game
         await joinGameAsUser(user, code);
       } else {
-        alert(`Error joining game: ${error.message || 'Please try again.'}`);
+        showToast(`Error joining game: ${error.message || 'Please try again.'}`);
       }
     }
   };
@@ -896,7 +949,7 @@ export default function Mingo() {
   const joinGame = async () => {
     const code = joinCode.toUpperCase().trim();
     if (code.length !== 5) {
-      alert('Please enter a 5-character game code');
+      showToast('Please enter a 5-character game code');
       return;
     }
 
@@ -1036,7 +1089,7 @@ export default function Mingo() {
       setShowEndGameDialog(true);
     } catch (error) {
       console.error('Error confirming win:', error);
-      alert('Error confirming win. Please try again.');
+      showToast('Error confirming win. Please try again.');
     }
   };
 
@@ -1062,7 +1115,7 @@ export default function Mingo() {
       }
     } catch (error) {
       console.error('Error ending game after win:', error);
-      alert('Error ending game. Please try again.');
+      showToast('Error ending game. Please try again.');
     }
   };
 
@@ -1094,7 +1147,7 @@ export default function Mingo() {
       }
     } catch (error) {
       console.error('Error rejecting win:', error);
-      alert('Error rejecting win. Please try again.');
+      showToast('Error rejecting win. Please try again.');
     }
   };
 
@@ -1109,75 +1162,16 @@ export default function Mingo() {
   };
 
   const checkWin = (markedCells = marked) => {
-    // Check rows
-    for (let row = 0; row < boardSize; row++) {
-      let win = true;
-      const winIndices = [];
-      for (let col = 0; col < boardSize; col++) {
-        const index = row * boardSize + col;
-        if (!markedCells.has(index)) {
-          win = false;
-          break;
-        }
-        winIndices.push(index);
-      }
-      if (win) {
-        const winItems = winIndices.map(idx => board[idx].text);
-        return { type: 'row', row, indices: winIndices, items: winItems };
-      }
-    }
-
-    // Check columns
-    for (let col = 0; col < boardSize; col++) {
-      let win = true;
-      const winIndices = [];
-      for (let row = 0; row < boardSize; row++) {
-        const index = row * boardSize + col;
-        if (!markedCells.has(index)) {
-          win = false;
-          break;
-        }
-        winIndices.push(index);
-      }
-      if (win) {
-        const winItems = winIndices.map(idx => board[idx].text);
-        return { type: 'column', column: col, indices: winIndices, items: winItems };
-      }
-    }
-
-    // Check diagonal 1 (top-left to bottom-right)
-    let diagonal1 = true;
-    const diag1Indices = [];
-    for (let i = 0; i < boardSize; i++) {
-      const index = i * boardSize + i;
-      if (!markedCells.has(index)) {
-        diagonal1 = false;
-        break;
-      }
-      diag1Indices.push(index);
-    }
-    if (diagonal1) {
-      const winItems = diag1Indices.map(idx => board[idx].text);
-      return { type: 'diagonal', diagonal: 1, indices: diag1Indices, items: winItems };
-    }
-
-    // Check diagonal 2 (top-right to bottom-left)
-    let diagonal2 = true;
-    const diag2Indices = [];
-    for (let i = 0; i < boardSize; i++) {
-      const index = i * boardSize + (boardSize - 1 - i);
-      if (!markedCells.has(index)) {
-        diagonal2 = false;
-        break;
-      }
-      diag2Indices.push(index);
-    }
-    if (diagonal2) {
-      const winItems = diag2Indices.map(idx => board[idx].text);
-      return { type: 'diagonal', diagonal: 2, indices: diag2Indices, items: winItems };
-    }
-
-    return null;
+    const { winMode: mode, linesToWin: needed } = normalizeWinConfig(
+      gameConfig || { winMode, linesToWin }
+    );
+    return detectWin({
+      marked: markedCells,
+      board,
+      boardSize,
+      winMode: mode,
+      linesToWin: needed,
+    });
   };
 
   const toggleCell = (index) => {
@@ -1225,7 +1219,7 @@ export default function Mingo() {
             });
           } catch (error) {
             console.error('Error submitting win claim:', error);
-            alert('Error submitting win claim. Please try again.');
+            showToast('Error submitting win claim. Please try again.');
           }
         };
         submitWinClaim();
@@ -1235,8 +1229,6 @@ export default function Mingo() {
       }
     }
   };
-
-
 
   // Keep claim flags in refs so realtime handlers stay fresh without resubscribing
   useEffect(() => {
@@ -1471,6 +1463,8 @@ export default function Mingo() {
     setMarked(new Set());
     setHasWon(false);
     setUseFreeSpace(true);
+    setWinMode('standard');
+    setLinesToWin(1);
     setGameCode('');
     setJoinCode('');
     setGameConfig(null);
@@ -1506,6 +1500,7 @@ export default function Mingo() {
       )}
       <VersionBadge />
       <ReportButton onClick={openReportModal} />
+      <ToastHost />
 
       {showReportModal && (
         <ReportModal
@@ -1622,7 +1617,10 @@ export default function Mingo() {
             onLogout={logoutUser}
             onSelectGame={selectGame}
             onEndGame={endGame}
+            onDuplicateSetup={duplicateSetupFromGame}
             onCreateGame={() => {
+              setWinMode('standard');
+              setLinesToWin(1);
               setScreen('setup');
             }}
             onJoinWithCode={() => {
@@ -1667,6 +1665,10 @@ export default function Mingo() {
             onUpdateBoardSize={updateBoardSize}
             useFreeSpace={useFreeSpace}
             onUpdateFreeSpace={updateFreeSpace}
+            winMode={winMode}
+            onUpdateWinMode={updateWinMode}
+            linesToWin={linesToWin}
+            onUpdateLinesToWin={updateLinesToWin}
             items={items}
             onAddItem={addItem}
             onUpdateItem={updateItem}
@@ -1708,7 +1710,7 @@ export default function Mingo() {
               } else if (gameConfig) {
                 await generateBoardFromConfig(gameConfig);
               } else {
-                alert('Game configuration not found. Please try selecting the game again.');
+                showToast('Game configuration not found. Please try selecting the game again.');
               }
             }}
             onResetToHome={resetToHome}

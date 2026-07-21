@@ -1,6 +1,7 @@
 import { AlertCircle, Home, RotateCcw, Shuffle, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
+import { describeWinRule } from '../lib/winDetection';
 
 export default function PlayScreen({
   gameCode,
@@ -24,6 +25,8 @@ export default function PlayScreen({
   onToggleCell,
   onNewBoard,
 }) {
+  const winRule = describeWinRule(gameConfig);
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
       <PlayerListSidebar
@@ -48,6 +51,7 @@ export default function PlayScreen({
             <div className="text-center mb-2">
               <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
               <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
+              <p className="mt-2 text-xs sm:text-sm text-purple-700 font-medium">{winRule}</p>
             </div>
             {currentUser && (
               <button

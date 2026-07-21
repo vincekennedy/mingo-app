@@ -1,4 +1,5 @@
 import { AlertCircle, Check, X } from 'lucide-react';
+import { formatClaimType } from '../../lib/winDetection';
 
 export default function WinVerificationModal({
   pendingWinClaim,
@@ -23,7 +24,9 @@ export default function WinVerificationModal({
           <p className="text-gray-600 mb-4">A player has claimed a bingo win. Please verify the selected items:</p>
 
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
+            <p className="font-semibold text-gray-700 mb-2">
+              Win Type: <span className="capitalize">{formatClaimType(pendingWinClaim.type)}</span>
+            </p>
             <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
             <p className="text-sm text-gray-600 mb-3">Select the incorrect items (if any) to reject:</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
