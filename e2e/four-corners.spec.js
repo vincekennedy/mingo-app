@@ -25,9 +25,8 @@ test.describe('Four corners win mode', () => {
 
       await hostPage.getByRole('button', { name: /Create New Game/i }).click()
       await hostPage.getByPlaceholder(/Enter a title/i).fill('Corners Smoke')
-      // Board size, then win mode
-      await hostPage.locator('select').nth(0).selectOption('3')
-      await hostPage.locator('select').nth(1).selectOption('four_corners')
+      await hostPage.getByLabel(/^Board Size$/i).selectOption('3')
+      await hostPage.getByLabel(/^Win mode$/i).selectOption('four_corners')
 
       const itemInputs = hostPage.locator('input[placeholder^="Item "]')
       for (let i = 0; i < 8; i++) {

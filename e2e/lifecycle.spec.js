@@ -27,7 +27,7 @@ test.describe('Game lifecycle smoke', () => {
 
       await hostPage.getByRole('button', { name: /Create New Game/i }).click()
       await hostPage.getByPlaceholder(/Enter a title/i).fill('Smoke Test Bingo')
-      await hostPage.locator('select').selectOption('3')
+      await hostPage.getByLabel(/^Board Size$/i).selectOption('3')
 
       const itemInputs = hostPage.locator('input[placeholder^="Item "]')
       for (let i = 0; i < 8; i++) {

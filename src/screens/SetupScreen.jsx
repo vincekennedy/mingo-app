@@ -54,10 +54,11 @@ export default function SetupScreen({
       </div>
 
       <div className="mb-6">
-        <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+        <label htmlFor="setup-board-size" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
           Board Size
         </label>
         <select
+          id="setup-board-size"
           value={boardSize}
           onChange={(e) => onUpdateBoardSize(Number(e.target.value))}
           className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
@@ -82,10 +83,11 @@ export default function SetupScreen({
       </div>
 
       <div className="mb-6">
-        <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+        <label htmlFor="setup-win-mode" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
           Win mode
         </label>
         <select
+          id="setup-win-mode"
           value={winMode}
           onChange={(e) => onUpdateWinMode(e.target.value)}
           className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
@@ -102,10 +104,11 @@ export default function SetupScreen({
 
       {winMode === 'standard' && (
         <div className="mb-6">
-          <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+          <label htmlFor="setup-lines-to-win" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
             Bingos required
           </label>
           <select
+            id="setup-lines-to-win"
             value={linesToWin}
             onChange={(e) => onUpdateLinesToWin(Number(e.target.value))}
             className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
