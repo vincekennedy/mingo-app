@@ -1,7 +1,7 @@
 {
   "name": "mingo",
   "private": true,
-  "version": "2026.07.21",
+  "version": "2026.07.21.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
