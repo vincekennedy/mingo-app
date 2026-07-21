@@ -77,8 +77,8 @@ Playwright covers this in `e2e/generate-items.spec.js` (`npm run test:e2e:api`, 
 npx playwright install chromium
 
 # Always-on UI + API checks (no host secrets; Gemini key optional)
-npm run test:e2e:landing
-npm run test:e2e:api
+npm run test:e2e:smoke
+# equivalent: npm run test:e2e:landing && npm run test:e2e:api
 
 # Full create → guest join → claim (needs host credentials + mingo-local)
 export SMOKE_HOST_EMAIL='your-test-host@example.com'
@@ -96,3 +96,17 @@ npm run test:e2e
 Full e2e **skips** when host credentials are missing so CI without secrets still passes landing checks via `test:e2e:landing`.
 
 Anonymous auth must be enabled on the Supabase project used for guest join.
+
+## CI (pull requests)
+
+Workflow: [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) — runs `npm run test:e2e:smoke` on every PR into **`develop`**.
+
+Optional repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+|--------|---------|
+| `VITE_SUPABASE_URL` | Prefer mingo-local URL (defaults to that ref if unset) |
+| `VITE_SUPABASE_ANON_KEY` | Mingo-local anon key (placeholder used if unset — UI smoke only) |
+| `GEMINI_API_KEY` | Optional; without it, generate-items must still return JSON `{ error }` |
+
+Make **Playwright smoke (landing + api)** a required status check on `develop` if you want PRs blocked until green.
