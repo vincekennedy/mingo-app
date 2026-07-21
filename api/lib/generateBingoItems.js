@@ -1,8 +1,9 @@
 import { GoogleGenAI } from '@google/genai'
 
 // Prefer a current Flash model. Override with GEMINI_BINGO_MODEL if needed.
-// gemini-2.5-flash returns 404 "no longer available to new users" for many AI Studio keys.
-const DEFAULT_MODEL = process.env.GEMINI_BINGO_MODEL || 'gemini-3.5-flash'
+// gemini-flash-latest tracks Google's current Flash GA and avoids stale model IDs.
+const DEFAULT_MODEL = process.env.GEMINI_BINGO_MODEL || 'gemini-flash-latest'
+const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash']
 const MAX_COUNT = 48
 const MIN_COUNT = 1
 
@@ -30,6 +31,12 @@ function extractJsonObject(text) {
   }
 }
 
+function isModelUnavailableError(raw) {
+  return /no longer available to new users|NOT_FOUND|is not found|not found for API version/i.test(
+    raw || ''
+  )
+}
+
 /**
  * Generate bingo square item strings from a game title using Google Gemini.
  * @param {{ title: string, count: number, apiKey?: string }} params
@@ -41,7 +48,11 @@ export async function generateBingoItems({ title, count, apiKey }) {
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_GENERATIVE_AI_API_KEY
   )
-  const modelName = process.env.GEMINI_BINGO_MODEL || DEFAULT_MODEL
+  const primaryModel = process.env.GEMINI_BINGO_MODEL || DEFAULT_MODEL
+  const modelsToTry = [
+    primaryModel,
+    ...FALLBACK_MODELS.filter((m) => m !== primaryModel),
+  ]
 
   if (!key) {
     const err = new Error(
@@ -70,28 +81,45 @@ export async function generateBingoItems({ title, count, apiKey }) {
   const ai = new GoogleGenAI({ apiKey: key })
 
   let content
-  try {
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: `Game title/theme: "${trimmedTitle}"\nGenerate exactly ${n} bingo items.`,
-      config: {
-        temperature: 0.8,
-        responseMimeType: 'application/json',
-        systemInstruction: SYSTEM_PROMPT,
-      },
-    })
-    content = response?.text
-  } catch (error) {
-    const raw = error?.message || String(error)
-    let message = raw || 'Google AI request failed. Check your API key and quota.'
-    if (/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication|UNAUTHENTICATED/i.test(raw)) {
-      message =
-        'Google AI rejected this API key (ACCESS_TOKEN_TYPE_UNSUPPORTED). Create a new key at https://aistudio.google.com/apikey, ensure the Generative Language API is enabled on that Google Cloud project, set GEMINI_API_KEY, and restart the server.'
-    } else if (/no longer available to new users|NOT_FOUND|is not found/i.test(raw)) {
-      message =
-        'That Gemini model is not available for this API key. Set GEMINI_BINGO_MODEL to a current model (e.g. gemini-3.5-flash) in .env.local and restart the server.'
+  let lastError = null
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: `Game title/theme: "${trimmedTitle}"\nGenerate exactly ${n} bingo items.`,
+        config: {
+          temperature: 0.8,
+          responseMimeType: 'application/json',
+          systemInstruction: SYSTEM_PROMPT,
+        },
+      })
+      content = response?.text
+      lastError = null
+      break
+    } catch (error) {
+      const raw = error?.message || String(error)
+      lastError = error
+      if (isModelUnavailableError(raw) && modelName !== modelsToTry[modelsToTry.length - 1]) {
+        console.warn(`Gemini model ${modelName} unavailable; trying next fallback.`)
+        continue
+      }
+
+      let message = raw || 'Google AI request failed. Check your API key and quota.'
+      if (/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication|UNAUTHENTICATED/i.test(raw)) {
+        message =
+          'Google AI rejected this API key (ACCESS_TOKEN_TYPE_UNSUPPORTED). Create a new key at https://aistudio.google.com/apikey, ensure the Generative Language API is enabled on that Google Cloud project, set GEMINI_API_KEY, and redeploy.'
+      } else if (isModelUnavailableError(raw)) {
+        message =
+          'That Gemini model is not available for this API key. Set GEMINI_BINGO_MODEL to a current model (e.g. gemini-flash-latest) and redeploy.'
+      }
+      const err = new Error(message)
+      err.status = 502
+      throw err
     }
-    const err = new Error(message)
+  }
+
+  if (lastError && !content) {
+    const err = new Error(lastError.message || 'Google AI request failed.')
     err.status = 502
     throw err
   }

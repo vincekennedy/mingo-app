@@ -1,0 +1,93 @@
+name: PR smoke
+
+# Playwright on PRs into develop: landing + /api smoke + full game lifecycle.
+# Requires mingo-local secrets (anon key + dedicated smoke host). Not for production.
+
+on:
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: pr-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  playwright-smoke:
+    name: Playwright smoke (landing + api + lifecycle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      # Anon key is a public client credential — accept Actions secret OR variable.
+      # Presence lines never print values (only true/false).
+      - name: Require mingo-local smoke secrets
+        env:
+          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          SMOKE_HOST_EMAIL: ${{ secrets.SMOKE_HOST_EMAIL }}
+          SMOKE_HOST_PASSWORD: ${{ secrets.SMOKE_HOST_PASSWORD }}
+        run: |
+          echo "VITE_SUPABASE_ANON_KEY present (secret): ${{ secrets.VITE_SUPABASE_ANON_KEY != '' }}"
+          echo "VITE_SUPABASE_ANON_KEY present (var):    ${{ vars.VITE_SUPABASE_ANON_KEY != '' }}"
+          echo "SMOKE_HOST_EMAIL present:               ${{ secrets.SMOKE_HOST_EMAIL != '' }}"
+          echo "SMOKE_HOST_PASSWORD present:            ${{ secrets.SMOKE_HOST_PASSWORD != '' }}"
+          ok=1
+          if [ -z "$SECRET_ANON" ]; then
+            echo "::error::VITE_SUPABASE_ANON_KEY is empty. Add it under Settings → Secrets and variables → Actions as a Repository secret OR variable named exactly VITE_SUPABASE_ANON_KEY (value only from .env.local, not the KEY= prefix). Environment secrets are ignored unless the job sets environment:."
+            ok=0
+          fi
+          if [ -z "$SMOKE_HOST_EMAIL" ]; then
+            echo "::error::SMOKE_HOST_EMAIL is required (dedicated mingo-local test host)."
+            ok=0
+          fi
+          if [ -z "$SMOKE_HOST_PASSWORD" ]; then
+            echo "::error::SMOKE_HOST_PASSWORD is required."
+            ok=0
+          fi
+          [ "$ok" = 1 ] || exit 1
+
+      - name: Configure Vite env for smoke
+        env:
+          SECRET_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
+          SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          SECRET_GEMINI: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          echo "VITE_SUPABASE_URL=${SECRET_URL:-https://lmlzduwtrzzjaggqsulr.supabase.co}" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_ANON_KEY=$SECRET_ANON" >> "$GITHUB_ENV"
+          if [ -n "$SECRET_GEMINI" ]; then
+            echo "GEMINI_API_KEY=$SECRET_GEMINI" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run Playwright e2e
+        run: npm run test:e2e
+        env:
+          CI: true
+          SMOKE_HOST_EMAIL: ${{ secrets.SMOKE_HOST_EMAIL }}
+          SMOKE_HOST_PASSWORD: ${{ secrets.SMOKE_HOST_PASSWORD }}
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

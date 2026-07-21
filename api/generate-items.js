@@ -1,5 +1,9 @@
 import { generateBingoItems } from './lib/generateBingoItems.js'
 
+export const config = {
+  maxDuration: 30,
+}
+
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')

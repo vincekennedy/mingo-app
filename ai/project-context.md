@@ -29,7 +29,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 
 **Not Next.js.** Do not apply `@supabase/ssr`, middleware cookie sessions, or `NEXT_PUBLIC_*` env vars.
 
-**Scripts:** `npm run dev` · `build` · `lint` · `preview`
+**Scripts:** `npm run dev` · `build` · `lint` · `preview` · `test:e2e` / `test:e2e:smoke` / `test:e2e:lifecycle` (Playwright — see [`SMOKE.md`](../SMOKE.md))
 
 **Build injects** (`vite.config.js`): `__COMMIT_HASH__`, `__APP_VERSION__` (from `package.json`), `__VERCEL_ENV__` (from `VERCEL_ENV`). Version chip in `App.jsx` uses these.
 
@@ -39,13 +39,17 @@ Living brief for humans and AI assistants. Update when architecture or product d
 
 Almost all UI and game logic live in a **single screen state machine**:
 
-- `src/App.jsx` — screens, game/board/claim UI, polling, auth wiring  
+- `src/App.jsx` — screen state machine, Realtime wiring, auth/game handlers  
+- `src/screens/*` — presentational screen components  
+- `src/components/*` — shared chrome, modals, game UI pieces  
+- `src/hooks/*` — extracted hooks (e.g. report modal)  
 - `src/services/*` — Supabase API wrappers  
 - `src/lib/supabase.js` — shared client  
+- `src/lib/version.js` — CalVer / commit version chip string  
 
 There is **no React Router**. Navigation is `setScreen(...)`.
 
-There is **no Supabase Realtime**. Multiplayer freshness is **HTTP polling** (see below).
+Multiplayer freshness uses **Supabase Realtime** (`postgres_changes` on `game_participants`, `win_claims`, `games`) via [`src/lib/realtime.js`](../src/lib/realtime.js). Board marks still persist over HTTP with a short debounce.
 
 Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused**; persistence is Supabase.
 
@@ -80,6 +84,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `storage.js` | Upload/delete images in `game-images` bucket (max 5MB, `image/*`) |
 | `generateItems.js` | Client call to `/api/generate-items` for AI bingo items from title |
 | `feedback.js` | Submit issue/feedback reports to `feedback_reports` (anon + authenticated) |
+| `../lib/realtime.js` | `subscribeGame` / `subscribeDashboard` Realtime channels for multiplayer freshness |
 
 ---
 
@@ -113,7 +118,7 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 
 **Storage:** public bucket `game-images`; object path `{userId}/{gameCode}/{filename}` (temp code allowed during setup).
 
-If restoring without the single file, combine historically: `SUPABASE_SETUP.md` schema + `COMPLETE_USER_SETUP.sql` + `SETUP_STORAGE.sql` + `FIX_GAMES_UPDATE_POLICY.sql`. Prefer `FULL_SCHEMA_RESTORE.sql` for greenfield; prefer `supabase db push` for incremental changes.
+Prefer `FULL_SCHEMA_RESTORE.sql` for greenfield; prefer `supabase db push` for incremental changes. Older piece-meal scripts live under `sql/archive/` (do not replay them on new projects).
 
 ### In-app reporting
 
@@ -147,16 +152,20 @@ Auth email redirect URLs in Supabase must include production Vercel origin and l
 
 ---
 
-## Polling (not Realtime)
+## Realtime (multiplayer freshness)
 
-| Interval | When | What |
-|----------|------|------|
-| 3s | `play` / `host` | Participants + confirmed winners |
-| 3s | `dashboard` | Reload games / pending wins for hosts |
-| 2s | Host in-game | Pending win claims |
-| 1s | Player with pending claim | Own claim status |
+| Channel | When | Tables / events | App reaction |
+|---------|------|-----------------|--------------|
+| `game:{code}` | `play` / `host` | `game_participants` INSERT/DELETE; `win_claims` INSERT/UPDATE; `games` UPDATE | Refetch players/winners; host pending claims or player claim status; leave to dashboard if `status: ended` |
+| `dashboard:{userId}` | `dashboard` | `win_claims` INSERT/UPDATE (RLS-scoped, no filter) | Silent `loadUserGames` for pending-win badges |
+
+Initial hydrate still uses REST (`fetchGamePlayers`, `getPendingClaims`, etc.). Tables must be in `supabase_realtime` publication (see migration `20260721150000_realtime_publication.sql`).
+
+| Still local / HTTP | When | What |
+|--------------------|------|------|
 | ~500ms debounce | Board edits | Persist `board_states` |
 | confetti burst | Confirmed player win | Visual only |
+| ~1.6s | AI generate-items UI | Status copy rotation only |
 
 ---
 
@@ -180,7 +189,7 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 ## Git workflow
 
 - Feature work: branch from **`develop`**, PR into **`develop`**.  
-- **`master`**: user-managed releases / versions — don’t land day-to-day features there unless asked.  
+- **`master`**: production releases via PR from `develop`. CalVer is stamped on **`develop`** (Action **CalVer release on develop**), then included in the release PR — don’t land day-to-day features on `master` unless asked.  
 - Rule file: `.cursor/rules/git-branching.mdc`.
 
 ---
@@ -189,7 +198,7 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 
 - Free Supabase paused **>90 days**: no one-click resume; recreate project → run `FULL_SCHEMA_RESTORE.sql` → new env keys → redeploy + Auth redirect URLs.  
 - URL must match anon key project ref (JWT `ref` claim).  
-- Ending games needs host **UPDATE** RLS on `games` (included in full restore / `FIX_GAMES_UPDATE_POLICY.sql`).  
+- Ending games needs host **UPDATE** RLS on `games` (included in `FULL_SCHEMA_RESTORE.sql`).  
 - Email confirmation + RLS can delay profile reads right after signup; client already retries.  
 - Don’t ship Next.js Supabase quickstarts into this Vite app.
 
@@ -205,12 +214,10 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 | `SUPABASE_SETUP.md` | Original schema + setup walkthrough |
 | `COMPLETE_USER_SETUP.sql` | Trigger + users RLS |
 | `SETUP_STORAGE.sql` | `game-images` bucket |
-| `FIX_GAMES_UPDATE_POLICY.sql` | Host end-game UPDATE |
+| `sql/archive/` | Historical `FIX_*` / `DEBUG_*` one-offs (do not re-run) |
 | `VERCEL_SETUP.md` / `TROUBLESHOOTING.md` | Deploy + NetworkError |
-| `GAME_MIGRATION_NOTES.md` | Auth required; polling; no guest |
+| `SMOKE.md` | Manual + Playwright smoke |
 | `ai/` | This context, standards, guardrails, checklists, experiments, prompts |
-
-Some root `FIX_*` / `DEBUG_*` / `TEST_*` SQL files are historical diagnostics — use full restore for new projects instead of replaying every fix.
 
 ---
 

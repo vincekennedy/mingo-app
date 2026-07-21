@@ -19,19 +19,17 @@ Your app requires Supabase environment variables to work. These need to be confi
 2. Click on your project (mingo)
 3. Click on **Settings** in the top navigation
 4. Click on **Environment Variables** in the left sidebar
-5. Add the following variables:
+5. Add the following variables (**per environment** — do not point Preview at Production):
 
-   **Variable 1:**
-   - **Name:** `VITE_SUPABASE_URL`
-   - **Value:** `https://your-project-id.supabase.co` (paste your actual URL)
-   - **Environments:** Select all (Production, Preview, Development)
+   **Production** (Mingo):
+   - `VITE_SUPABASE_URL` → production project URL — environment **Production** only
+   - `VITE_SUPABASE_ANON_KEY` → production anon key — **Production** only
 
-   **Variable 2:**
-   - **Name:** `VITE_SUPABASE_ANON_KEY`
-   - **Value:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (paste your actual key)
-   - **Environments:** Select all (Production, Preview, Development)
+   **Preview** (Mingo-local — free-tier sharing; see `PREVIEW_DEPLOYMENT_SETUP.md`):
+   - `VITE_SUPABASE_URL` → Mingo-local project URL — environment **Preview** only
+   - `VITE_SUPABASE_ANON_KEY` → Mingo-local anon key — **Preview** only
 
-6. Click **Save** for each variable
+6. Click **Save** for each variable. Redeploy Preview after changes.
 
 ### Step 3: Redeploy
 

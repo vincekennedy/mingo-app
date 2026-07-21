@@ -1,6 +1,4 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, Plus, Trash2, Play, RotateCcw, Trophy, Copy, Check, Users, X, AlertCircle, LogIn, UserPlus, LogOut, Home, User, KeyRound, Sparkles, Loader2, MessageSquarePlus } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { authService, resolveDisplayName } from './services/auth';
 import { gameService } from './services/game';
@@ -8,8 +6,27 @@ import { boardService } from './services/board';
 import { winClaimsService } from './services/winClaims';
 import { storageService } from './services/storage';
 import { generateItemsFromTitle } from './services/generateItems';
-import { submitReport, FEEDBACK_CATEGORIES } from './services/feedback';
 import { supabase } from './lib/supabase';
+import { subscribeGame, subscribeDashboard } from './lib/realtime';
+import { useReportModal } from './hooks/useReportModal';
+import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
+import GeneratingItemsOverlay from './components/chrome/GeneratingItemsOverlay';
+import UserProfileBanner from './components/chrome/UserProfileBanner';
+import VersionBadge from './components/chrome/VersionBadge';
+import ReportButton from './components/chrome/ReportButton';
+import ReportModal from './components/modals/ReportModal';
+import GuestJoinModal from './components/modals/GuestJoinModal';
+import LoginScreen from './screens/LoginScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import ForgotPasswordSentScreen from './screens/ForgotPasswordSentScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
+import RegisterScreen from './screens/RegisterScreen';
+import EmailConfirmationScreen from './screens/EmailConfirmationScreen';
+import HomeScreen from './screens/HomeScreen';
+import DashboardScreen from './screens/DashboardScreen';
+import SetupScreen from './screens/SetupScreen';
+import HostScreen from './screens/HostScreen';
+import PlayScreen from './screens/PlayScreen';
 
 export default function Mingo() {
   const [screen, setScreen] = useState('home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play
@@ -32,14 +49,6 @@ export default function Mingo() {
   const [registering, setRegistering] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [authError, setAuthError] = useState(null);
-  const [showReportModal, setShowReportModal] = useState(false);
-  const [reportCategory, setReportCategory] = useState('bug');
-  const [reportEmail, setReportEmail] = useState('');
-  const [reportSubject, setReportSubject] = useState('');
-  const [reportDetails, setReportDetails] = useState('');
-  const [reportSubmitting, setReportSubmitting] = useState(false);
-  const [reportError, setReportError] = useState(null);
-  const [reportSuccess, setReportSuccess] = useState(false);
   const [showGuestNameModal, setShowGuestNameModal] = useState(false);
   const [guestDisplayName, setGuestDisplayName] = useState('');
   const [guestJoinError, setGuestJoinError] = useState(null);
@@ -53,13 +62,32 @@ export default function Mingo() {
   const [gamePlayers, setGamePlayers] = useState([]);
   const [confirmedWinners, setConfirmedWinners] = useState([]);
   const confettiIntervalRef = useRef(null);
-  const pollIntervalRef = useRef(null);
-  const playerListIntervalRef = useRef(null);
+  const pendingWinClaimRef = useRef(null);
+  const winConfirmedRef = useRef(false);
+  const winRejectedRef = useRef(false);
   const passwordRecoveryRef = useRef(false);
   const gamesLoadIdRef = useRef(0);
   const authReadyRef = useRef(false);
   const [authReady, setAuthReady] = useState(false);
   const [gamesLoading, setGamesLoading] = useState(false);
+
+  const {
+    showReportModal,
+    reportCategory,
+    setReportCategory,
+    reportEmail,
+    setReportEmail,
+    reportSubject,
+    setReportSubject,
+    reportDetails,
+    setReportDetails,
+    reportSubmitting,
+    reportError,
+    reportSuccess,
+    openReportModal,
+    closeReportModal,
+    handleSubmitReport,
+  } = useReportModal({ currentUser, screen, gameCode });
 
   // Authentication and user management - check on mount
   useEffect(() => {
@@ -1274,143 +1302,147 @@ export default function Mingo() {
     }
   }, [marked, screen, hasWon, pendingWinClaim, winConfirmed, winRejected, board, boardSize, isHost, gameCode]);
 
-  // Poll for player list updates when in a game
+  // Keep claim flags in refs so realtime handlers stay fresh without resubscribing
   useEffect(() => {
-    if (gameCode && (screen === 'play' || screen === 'host')) {
-      // Initial fetch
-      fetchGamePlayers(gameCode);
-      
-      // Poll every 3 seconds
-      playerListIntervalRef.current = setInterval(() => {
-        fetchGamePlayers(gameCode);
-      }, 3000);
-      
-      return () => {
-        if (playerListIntervalRef.current) {
-          clearInterval(playerListIntervalRef.current);
-          playerListIntervalRef.current = null;
+    pendingWinClaimRef.current = pendingWinClaim;
+  }, [pendingWinClaim]);
+  useEffect(() => {
+    winConfirmedRef.current = winConfirmed;
+  }, [winConfirmed]);
+  useEffect(() => {
+    winRejectedRef.current = winRejected;
+  }, [winRejected]);
+
+  // Realtime: player list, claims, and game ended while on host/play
+  useEffect(() => {
+    if (!gameCode || (screen !== 'play' && screen !== 'host') || !currentUser) {
+      return;
+    }
+
+    const code = gameCode;
+
+    const refreshHostClaims = async () => {
+      try {
+        const claims = await winClaimsService.getPendingClaims(code);
+        if (claims && claims.length > 0) {
+          const latestClaim = claims[0];
+          const prev = pendingWinClaimRef.current;
+          if (!prev || prev.claimId !== latestClaim.id) {
+            setPendingWinClaim({
+              type: latestClaim.type,
+              items: latestClaim.items,
+              indices: latestClaim.indices,
+              claimId: latestClaim.id,
+              userId: latestClaim.userId,
+              username: latestClaim.username,
+              timestamp: latestClaim.timestamp,
+            });
+            setSelectedIncorrectItems(new Set());
+          }
+        } else if (pendingWinClaimRef.current) {
+          setPendingWinClaim(null);
         }
-      };
-    } else {
-      // Clear players when not in a game
+      } catch (error) {
+        console.error('Error refreshing win claims:', error);
+      }
+    };
+
+    const refreshPlayerClaim = async () => {
+      try {
+        const claimStatus = await winClaimsService.getUserClaimStatus(code, currentUser.id);
+        if (!claimStatus) return;
+
+        if (claimStatus.status === 'confirmed' && !winConfirmedRef.current) {
+          setWinConfirmed(true);
+          setHasWon(true);
+          setPendingWinClaim(null);
+        } else if (claimStatus.status === 'rejected' && !winRejectedRef.current) {
+          if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
+            setMarked((prevMarked) => {
+              const newMarked = new Set(prevMarked);
+              claimStatus.incorrectIndices.forEach((boardIndex) => {
+                newMarked.delete(boardIndex);
+              });
+              return newMarked;
+            });
+          }
+
+          setWinRejected(true);
+          setPendingWinClaim(null);
+          setHasWon(false);
+
+          setTimeout(() => {
+            setWinRejected(false);
+          }, 4000);
+        }
+      } catch (error) {
+        console.error('Error refreshing claim status:', error);
+      }
+    };
+
+    const leaveEndedGame = () => {
+      setSelectedGame(null);
+      setGameCode('');
+      setBoard([]);
+      setMarked(new Set());
+      setGameConfig(null);
+      setPendingWinClaim(null);
       setGamePlayers([]);
       setConfirmedWinners([]);
-    }
-  }, [gameCode, screen]);
+      setIsHost(false);
+      setScreen('dashboard');
+      loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
+        console.error('Error reloading games after end:', error);
+      });
+    };
 
-  // Poll for win claims and update dashboard if on dashboard
-  useEffect(() => {
-    if (currentUser && screen === 'dashboard' && authReady) {
-      // Poll user games for pending wins (start after interval so we don't race cold-start hydrate)
-      const pollPendingWins = async () => {
-        if (currentUser) {
-          try {
-            const games = await gameService.getUserGames(currentUser.id);
-            const hostGameCodes = games.filter(g => g.isHost).map(g => g.gameCode);
-            const pendingWinsMap = hostGameCodes.length > 0 
-              ? await winClaimsService.checkPendingWinsForGames(hostGameCodes)
-              : {};
-            
-            // Reload games to update pending win status (silent — no empty-state flash)
-            await loadUserGames(currentUser.id, { showLoading: false });
-          } catch (error) {
-            console.error('Error polling pending wins:', error);
-          }
-        }
-      };
-      
-      const interval = setInterval(pollPendingWins, 3000);
-      return () => clearInterval(interval);
+    fetchGamePlayers(code);
+    if (isHost) {
+      refreshHostClaims();
+    } else if (screen === 'play') {
+      refreshPlayerClaim();
     }
+
+    const unsubscribe = subscribeGame(code, {
+      onParticipantsChange: () => {
+        fetchGamePlayers(code);
+      },
+      onClaimsChange: () => {
+        fetchGamePlayers(code);
+        if (isHost) {
+          refreshHostClaims();
+        } else if (screen === 'play') {
+          refreshPlayerClaim();
+        }
+      },
+      onGameChange: (row) => {
+        if (row?.status === 'ended') {
+          leaveEndedGame();
+        }
+      },
+    });
+
+    return () => {
+      unsubscribe();
+      setGamePlayers([]);
+      setConfirmedWinners([]);
+    };
+  }, [gameCode, screen, isHost, currentUser]);
+
+  // Realtime: dashboard pending-win badges (RLS scopes win_claims events)
+  useEffect(() => {
+    if (!currentUser || screen !== 'dashboard' || !authReady) return;
+
+    const unsubscribe = subscribeDashboard(currentUser.id, {
+      onChange: () => {
+        loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
+          console.error('Error refreshing dashboard from realtime:', error);
+        });
+      },
+    });
+
+    return unsubscribe;
   }, [currentUser, screen, authReady]);
-
-  // Poll for win claims (host) or confirmation status (player)
-  useEffect(() => {
-    if (gameCode && isHost && (screen === 'host' || screen === 'play') && currentUser) {
-      // Host polls for win claims (even when playing)
-      const checkWinClaims = async () => {
-        try {
-          const claims = await winClaimsService.getPendingClaims(gameCode);
-          if (claims && claims.length > 0) {
-            const latestClaim = claims[0]; // Get most recent claim
-            if (!pendingWinClaim || pendingWinClaim.claimId !== latestClaim.id) {
-              setPendingWinClaim({
-                type: latestClaim.type,
-                items: latestClaim.items,
-                indices: latestClaim.indices,
-                claimId: latestClaim.id,
-                userId: latestClaim.userId,
-                username: latestClaim.username,
-                timestamp: latestClaim.timestamp,
-              });
-              setSelectedIncorrectItems(new Set()); // Reset selection for new claim
-            }
-          } else if (pendingWinClaim) {
-            // No pending claims, clear if we had one
-            setPendingWinClaim(null);
-          }
-        } catch (error) {
-          console.error('Error checking win claims:', error);
-        }
-      };
-
-      checkWinClaims();
-      pollIntervalRef.current = setInterval(checkWinClaims, 2000);
-
-      return () => {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      };
-    } else if (gameCode && screen === 'play' && !isHost && pendingWinClaim && currentUser) {
-      // Player polls for confirmation/rejection
-      const checkConfirmation = async () => {
-        try {
-          const claimStatus = await winClaimsService.getUserClaimStatus(gameCode, currentUser.id);
-          if (claimStatus) {
-            if (claimStatus.status === 'confirmed' && !winConfirmed) {
-              setWinConfirmed(true);
-              setHasWon(true);
-              setPendingWinClaim(null);
-            } else if (claimStatus.status === 'rejected' && !winRejected) {
-              // Unselect incorrect items from player's board
-              if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
-                setMarked(prevMarked => {
-                  const newMarked = new Set(prevMarked);
-                  claimStatus.incorrectIndices.forEach(boardIndex => {
-                    newMarked.delete(boardIndex);
-                  });
-                  return newMarked;
-                });
-              }
-              
-              setWinRejected(true);
-              setPendingWinClaim(null);
-              setHasWon(false);
-              
-              // Clear notification and reset after rejection - allow player to try again
-              setTimeout(() => {
-                setWinRejected(false);
-              }, 4000);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking confirmation:', error);
-        }
-      };
-
-      checkConfirmation();
-      pollIntervalRef.current = setInterval(checkConfirmation, 1000);
-
-      return () => {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      };
-    }
-  }, [gameCode, screen, isHost, pendingWinClaim, winConfirmed, winRejected]);
 
   // Trigger confetti when win is confirmed
   useEffect(() => {
@@ -1516,431 +1548,60 @@ export default function Mingo() {
     setSelectedGame(null);
     setGamePlayers([]);
     setConfirmedWinners([]);
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-    if (playerListIntervalRef.current) {
-      clearInterval(playerListIntervalRef.current);
-      playerListIntervalRef.current = null;
-    }
   };
 
-  // Get version info
-  const getVersion = () => {
-    // @ts-ignore - injected by Vite
-    const vercelEnv = typeof __VERCEL_ENV__ !== 'undefined' ? __VERCEL_ENV__ : (import.meta.env.MODE === 'development' ? 'development' : 'production')
-    // @ts-ignore - injected by Vite
-    const commitHash = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'dev'
-    // @ts-ignore - injected by Vite
-    const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : import.meta.env.VITE_APP_VERSION || '0.0.0'
-    
-    if (import.meta.env.MODE === 'development') {
-      // In local development, show first 5 chars of commit hash
-      return commitHash.substring(0, 5)
-    } else if (vercelEnv === 'preview') {
-      // In preview deployments, show CalVer + first 5 chars of commit hash
-      return `${appVersion}+${commitHash.substring(0, 5)}`
-    } else {
-      // In production, show CalVer version only
-      return appVersion
-    }
-  }
-
-  const openReportModal = () => {
-    setReportCategory('bug');
-    setReportEmail(currentUser?.email || '');
-    setReportSubject('');
-    setReportDetails('');
-    setReportError(null);
-    setReportSuccess(false);
-    setShowReportModal(true);
-  };
-
-  const closeReportModal = () => {
-    if (reportSubmitting) return;
-    setShowReportModal(false);
-    setReportError(null);
-    setReportSuccess(false);
-  };
-
-  const handleSubmitReport = async (e) => {
-    e.preventDefault();
-    if (reportSubmitting) return;
-    setReportError(null);
-    setReportSubmitting(true);
-    try {
-      await submitReport({
-        category: reportCategory,
-        email: reportEmail,
-        subject: reportSubject,
-        details: reportDetails,
-        appVersion: getVersion(),
-        screen,
-        gameCode: gameCode || null,
-        userId: currentUser?.id || null,
-      });
-      setReportSuccess(true);
-    } catch (error) {
-      setReportError(error.message || 'Could not submit your report. Please try again.');
-    } finally {
-      setReportSubmitting(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
       {(registering || loggingIn || !authReady) && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          role="alertdialog"
-          aria-modal="true"
-          aria-busy="true"
-          aria-labelledby="auth-loading-title"
-        >
-          <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
-            <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
-
-            <div className="relative p-6 sm:p-8 text-center">
-              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg">
-                <Loader2 size={36} className="text-white animate-spin" />
-              </div>
-
-              <h2 id="auth-loading-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-                {!authReady
-                  ? 'Loading'
-                  : registering
-                    ? 'Creating your account'
-                    : 'Signing you in'}
-              </h2>
-              <p className="text-sm sm:text-base text-gray-600">
-                {!authReady
-                  ? 'Checking your session…'
-                  : registering
-                    ? 'Setting things up — you’ll be in the dashboard in a moment.'
-                    : 'Hang tight — loading your games next.'}
-              </p>
-
-              <div className="mt-6 flex items-center justify-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-purple-500 animate-pulse" />
-                <span className="h-2.5 w-2.5 rounded-full bg-pink-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
-                <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" style={{ animationDelay: '0.4s' }} />
-              </div>
-            </div>
-          </div>
-        </div>
+        <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}
 
       {generatingItems && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          role="alertdialog"
-          aria-modal="true"
-          aria-busy="true"
-          aria-labelledby="generate-items-title"
-        >
-          <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
-            <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
-            <div className="absolute top-10 left-8 h-24 w-24 rounded-full bg-orange-300/30 mingo-generate-orb" style={{ animationDelay: '1.2s' }} />
-
-            <div className="relative p-6 sm:p-8 text-center">
-              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg mingo-generate-sparkle">
-                <Sparkles size={36} className="text-white" />
-              </div>
-
-              <h2 id="generate-items-title" className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-                Cooking up bingo squares
-              </h2>
-              <p
-                key={generateStatusIndex}
-                className="mingo-generate-copy text-sm sm:text-base text-gray-600 min-h-[3rem] flex items-center justify-center px-2"
-              >
-                {generateLoadingMessages[generateStatusIndex % generateLoadingMessages.length]}
-              </p>
-
-              <div className="mt-6 mx-auto grid max-w-[180px] grid-cols-3 gap-2">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="mingo-generate-tile aspect-square rounded-lg bg-gradient-to-br from-purple-200 via-pink-200 to-orange-200 border border-white/80 shadow-sm"
-                    style={{ animationDelay: `${(i % 3) * 0.15 + Math.floor(i / 3) * 0.12}s` }}
-                  />
-                ))}
-              </div>
-
-              <p className="mt-6 text-xs text-gray-400 font-medium tracking-wide uppercase">
-                Hang tight — you can edit everything after
-              </p>
-            </div>
-          </div>
-        </div>
+        <GeneratingItemsOverlay
+          generateStatusIndex={generateStatusIndex}
+          generateLoadingMessages={generateLoadingMessages}
+        />
       )}
 
-      {/* User Profile Banner - top right */}
       {currentUser && screen !== 'reset-password' && (
-        <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-20">
-          <button
-            onClick={() => setScreen('dashboard')}
-            className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200"
-          >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-              <User size={16} className="text-white sm:w-5 sm:h-5" />
-            </div>
-            <span className="text-sm sm:text-base font-semibold text-gray-800 max-w-[100px] sm:max-w-[150px] truncate">
-              {currentUser.username}
-            </span>
-          </button>
-        </div>
+        <UserProfileBanner
+          username={currentUser.username}
+          onOpenDashboard={() => setScreen('dashboard')}
+        />
       )}
-      {/* Version display - bottom left */}
-      <div className="fixed bottom-2 left-2 text-white text-xs opacity-60 font-mono z-10">
-        v{getVersion()}
-      </div>
-
-      {/* Report issue - bottom right (all screens) */}
-      <button
-        type="button"
-        onClick={openReportModal}
-        className="fixed bottom-3 right-3 sm:bottom-4 sm:right-4 z-20 flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-white/90 backdrop-blur-sm text-gray-800 text-sm font-semibold rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all duration-200"
-      >
-        <MessageSquarePlus size={16} className="text-purple-600" />
-        Report
-      </button>
+      <VersionBadge />
+      <ReportButton onClick={openReportModal} />
 
       {showReportModal && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="report-modal-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeReportModal();
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h2 id="report-modal-title" className="text-xl sm:text-2xl font-bold text-gray-800">
-                  Report an issue
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Bugs, ideas, and feedback — we’ll follow up by email.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeReportModal}
-                disabled={reportSubmitting}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {reportSuccess ? (
-              <div className="space-y-4 text-center py-4">
-                <div className="mx-auto w-14 h-14 bg-green-100 rounded-full flex items-center justify-center">
-                  <Check size={28} className="text-green-600" />
-                </div>
-                <p className="text-gray-800 font-semibold">Thanks — we got your report.</p>
-                <p className="text-sm text-gray-600">We’ll follow up at the email you provided if we need more detail.</p>
-                <button
-                  type="button"
-                  onClick={closeReportModal}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitReport} className="space-y-4">
-                {reportError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
-                    <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-                    <span>{reportError}</span>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 text-sm">Category</label>
-                  <select
-                    value={reportCategory}
-                    onChange={(e) => setReportCategory(e.target.value)}
-                    disabled={reportSubmitting}
-                    required
-                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-                  >
-                    {FEEDBACK_CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 text-sm">Email</label>
-                  <input
-                    type="email"
-                    value={reportEmail}
-                    onChange={(e) => setReportEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    required
-                    disabled={reportSubmitting}
-                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 text-sm">Subject</label>
-                  <input
-                    type="text"
-                    value={reportSubject}
-                    onChange={(e) => setReportSubject(e.target.value)}
-                    placeholder="Short summary"
-                    required
-                    maxLength={120}
-                    disabled={reportSubmitting}
-                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-gray-700 font-semibold mb-2 text-sm">Details</label>
-                  <textarea
-                    value={reportDetails}
-                    onChange={(e) => setReportDetails(e.target.value)}
-                    placeholder="What happened, or what would you like improved?"
-                    required
-                    rows={5}
-                    disabled={reportSubmitting}
-                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base resize-y disabled:bg-gray-100"
-                  />
-                </div>
-
-                <p className="text-xs text-gray-400">
-                  Includes app version v{getVersion()}
-                  {screen ? ` · screen: ${screen}` : ''}
-                  {gameCode ? ` · game: ${gameCode}` : ''}
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={closeReportModal}
-                    disabled={reportSubmitting}
-                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={reportSubmitting}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-60"
-                  >
-                    {reportSubmitting ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" /> Sending…
-                      </>
-                    ) : (
-                      <>
-                        <MessageSquarePlus size={18} /> Submit
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
+        <ReportModal
+          screen={screen}
+          gameCode={gameCode}
+          reportCategory={reportCategory}
+          setReportCategory={setReportCategory}
+          reportEmail={reportEmail}
+          setReportEmail={setReportEmail}
+          reportSubject={reportSubject}
+          setReportSubject={setReportSubject}
+          reportDetails={reportDetails}
+          setReportDetails={setReportDetails}
+          reportSubmitting={reportSubmitting}
+          reportError={reportError}
+          reportSuccess={reportSuccess}
+          onSubmit={handleSubmitReport}
+          onClose={closeReportModal}
+        />
       )}
 
       {showGuestNameModal && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="guest-name-modal-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeGuestNameModal();
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-md">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h2 id="guest-name-modal-title" className="text-xl sm:text-2xl font-bold text-gray-800">
-                  Join as guest
-                </h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Pick a display name so others can see you in the player list.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeGuestNameModal}
-                disabled={guestJoining}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-                aria-label="Close"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={submitGuestJoin} className="space-y-4">
-              {guestJoinError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
-                  <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-                  <span>{guestJoinError}</span>
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="guest-display-name" className="block text-gray-700 font-semibold mb-2 text-sm">
-                  Display name
-                </label>
-                <input
-                  id="guest-display-name"
-                  type="text"
-                  value={guestDisplayName}
-                  onChange={(e) => setGuestDisplayName(e.target.value)}
-                  placeholder="Your name"
-                  required
-                  maxLength={24}
-                  autoFocus
-                  disabled={guestJoining}
-                  className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-                />
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={closeGuestNameModal}
-                  disabled={guestJoining}
-                  className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={guestJoining}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-60"
-                >
-                  {guestJoining ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" /> Joining…
-                    </>
-                  ) : (
-                    <>
-                      <Users size={18} /> Join game
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <GuestJoinModal
+          guestDisplayName={guestDisplayName}
+          setGuestDisplayName={setGuestDisplayName}
+          guestJoinError={guestJoinError}
+          guestJoining={guestJoining}
+          onSubmit={submitGuestJoin}
+          onClose={closeGuestNameModal}
+        />
       )}
 
       <div className="max-w-4xl mx-auto">
@@ -1950,1163 +1611,207 @@ export default function Mingo() {
         </div>
 
         {screen === 'login' && (
-          <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${loggingIn ? 'pointer-events-none opacity-80' : ''}`}>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Login</h2>
-            {authError && screen === 'login' && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
-                <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-                <span>{authError}</span>
-              </div>
-            )}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (loggingIn) return;
-                setAuthError(null);
-                const formData = new FormData(e.target);
-                const email = formData.get('email');
-                const password = formData.get('password');
-                try {
-                  await loginUser(email, password);
-                } catch (error) {
-                  setAuthError(error.message || 'Login failed. Please try again.');
-                }
-              }}
-              className="space-y-4"
-            >
-              <input
-                name="email"
-                type="email"
-                placeholder="Email"
-                required
-                disabled={loggingIn}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Password"
-                required
-                disabled={loggingIn}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <button
-                type="submit"
-                disabled={loggingIn}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loggingIn ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" /> Signing in…
-                  </>
-                ) : (
-                  <>
-                    <LogIn size={20} /> Login
-                  </>
-                )}
-              </button>
-            </form>
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthError(null);
-                  setScreen('forgot-password');
-                }}
-                disabled={loggingIn}
-                className="text-sm text-purple-600 font-semibold hover:text-purple-700 disabled:opacity-50"
-              >
-                Forgot your password?
-              </button>
-            </div>
-            <div className="text-center">
-              <p className="text-gray-600 text-sm">Don't have an account?</p>
-              <button
-                onClick={() => {
-                  setAuthError(null);
-                  setScreen('register');
-                }}
-                disabled={loggingIn}
-                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2 disabled:opacity-50"
-              >
-                Register here
-              </button>
-            </div>
-            <button
-              onClick={() => {
-                setAuthError(null);
-                setScreen('home');
-              }}
-              disabled={loggingIn}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base disabled:opacity-50"
-            >
-              Back
-            </button>
-          </div>
+          <LoginScreen
+            loggingIn={loggingIn}
+            authError={authError}
+            onLogin={async (email, password) => {
+              setAuthError(null);
+              try {
+                await loginUser(email, password);
+              } catch (error) {
+                setAuthError(error.message || 'Login failed. Please try again.');
+              }
+            }}
+            onForgotPassword={() => {
+              setAuthError(null);
+              setScreen('forgot-password');
+            }}
+            onRegister={() => {
+              setAuthError(null);
+              setScreen('register');
+            }}
+            onBack={() => {
+              setAuthError(null);
+              setScreen('home');
+            }}
+          />
         )}
 
         {screen === 'forgot-password' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Reset password</h2>
-            <p className="text-gray-600 text-sm sm:text-base text-center">
-              Enter the email for your account. We will send you a link to choose a new password.
-            </p>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                const email = formData.get('email');
-                try {
-                  await authService.requestPasswordReset(email);
-                  setScreen('forgot-password-sent');
-                } catch (error) {
-                  alert(error.message || 'Could not send reset email. Please try again.');
-                }
-              }}
-              className="space-y-4"
-            >
-              <input
-                name="email"
-                type="email"
-                placeholder="Email"
-                required
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-              />
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-              >
-                <KeyRound size={20} /> Send reset link
-              </button>
-            </form>
-            <button
-              type="button"
-              onClick={() => setScreen('login')}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-            >
-              Back to login
-            </button>
-          </div>
+          <ForgotPasswordScreen
+            onSent={() => setScreen('forgot-password-sent')}
+            onBack={() => setScreen('login')}
+          />
         )}
 
         {screen === 'forgot-password-sent' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
-            <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-              <KeyRound size={32} className="text-purple-600" />
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Check your email</h2>
-            <p className="text-gray-600 text-sm sm:text-base">
-              If an account exists for that address, you will receive an email with a link to reset your password.
-              The link expires after a short time; if it stops working, request a new one from the login page.
-            </p>
-            <button
-              type="button"
-              onClick={() => setScreen('login')}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-            >
-              <LogIn size={20} /> Back to login
-            </button>
-          </div>
+          <ForgotPasswordSentScreen onBackToLogin={() => setScreen('login')} />
         )}
 
         {screen === 'reset-password' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Choose a new password</h2>
-            {currentUser?.email && (
-              <p className="text-center text-sm text-gray-600">
-                Signed in as <span className="font-semibold text-gray-800">{currentUser.email}</span>
-              </p>
-            )}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                const password = formData.get('password');
-                const confirmPassword = formData.get('confirmPassword');
-                if (password !== confirmPassword) {
-                  alert('Passwords do not match');
-                  return;
-                }
-                if (password.length < 6) {
-                  alert('Password must be at least 6 characters');
-                  return;
-                }
-                try {
-                  await completePasswordReset(password);
-                } catch (error) {
-                  alert(error.message || 'Could not update password. Please try again.');
-                }
-              }}
-              className="space-y-4"
-            >
-              <input
-                name="password"
-                type="password"
-                placeholder="New password (min 6 characters)"
-                required
-                minLength={6}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-              />
-              <input
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirm new password"
-                required
-                minLength={6}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-              />
-              <button
-                type="submit"
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-              >
-                <KeyRound size={20} /> Update password
-              </button>
-            </form>
-            <button
-              type="button"
-              onClick={cancelPasswordRecovery}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-            >
-              Cancel
-            </button>
-          </div>
+          <ResetPasswordScreen
+            currentUser={currentUser}
+            onSubmit={completePasswordReset}
+            onCancel={cancelPasswordRecovery}
+          />
         )}
 
         {screen === 'register' && (
-          <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${registering ? 'pointer-events-none opacity-80' : ''}`}>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
-            {authError && screen === 'register' && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
-                <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
-                <span>{authError}</span>
-              </div>
-            )}
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (registering) return;
-                setAuthError(null);
-                const formData = new FormData(e.target);
-                const username = formData.get('username');
-                const email = formData.get('email');
-                const password = formData.get('password');
-                const confirmPassword = formData.get('confirmPassword');
-                
-                if (password !== confirmPassword) {
-                  setAuthError('Passwords do not match');
-                  return;
-                }
-                
-                if (password.length < 6) {
-                  setAuthError('Password must be at least 6 characters');
-                  return;
-                }
-                
-                if (username.length < 3) {
-                  setAuthError('Username must be at least 3 characters');
-                  return;
-                }
-                
-                try {
-                  await registerUser(username, email, password);
-                } catch (error) {
-                  setAuthError(error.message || 'Registration failed. Please try again.');
-                }
-              }}
-              className="space-y-4"
-            >
-              <input
-                name="username"
-                type="text"
-                placeholder="Username (min 3 characters)"
-                required
-                minLength={3}
-                disabled={registering}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <input
-                name="email"
-                type="email"
-                placeholder="Email"
-                required
-                disabled={registering}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <input
-                name="password"
-                type="password"
-                placeholder="Password (min 6 characters)"
-                required
-                minLength={6}
-                disabled={registering}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <input
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirm Password"
-                required
-                minLength={6}
-                disabled={registering}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
-              />
-              <button
-                type="submit"
-                disabled={registering}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {registering ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" /> Creating account…
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={20} /> Create Account
-                  </>
-                )}
-              </button>
-            </form>
-            <div className="text-center">
-              <p className="text-gray-600 text-sm">Already have an account?</p>
-              <button
-                onClick={() => {
-                  setAuthError(null);
-                  setScreen('login');
-                }}
-                disabled={registering}
-                className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2 disabled:opacity-50"
-              >
-                Login here
-              </button>
-            </div>
-            <button
-              onClick={() => {
-                setAuthError(null);
-                setScreen('home');
-              }}
-              disabled={registering}
-              className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base disabled:opacity-50"
-            >
-              Back
-            </button>
-          </div>
+          <RegisterScreen
+            registering={registering}
+            authError={authError}
+            onValidationError={(msg) => setAuthError(msg)}
+            onRegister={async (username, email, password) => {
+              setAuthError(null);
+              try {
+                await registerUser(username, email, password);
+              } catch (error) {
+                setAuthError(error.message || 'Registration failed. Please try again.');
+              }
+            }}
+            onLogin={() => {
+              setAuthError(null);
+              setScreen('login');
+            }}
+            onBack={() => {
+              setAuthError(null);
+              setScreen('home');
+            }}
+          />
         )}
 
         {screen === 'dashboard' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 sm:space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Welcome, {currentUser?.username}!</h2>
-                <p className="text-sm text-gray-600">Your Games</p>
-              </div>
-              <button
-                onClick={logoutUser}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm"
-              >
-                <LogOut size={18} /> Logout
-              </button>
-            </div>
-
-            {gamesLoading ? (
-              <div className="text-center py-8">
-                <Loader2 size={32} className="mx-auto text-purple-600 animate-spin mb-3" />
-                <p className="text-gray-600">Loading your games…</p>
-              </div>
-            ) : userGames.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-600 mb-4">You haven't joined any games yet.</p>
-                <button
-                  onClick={() => {
-                    setScreen('setup');
-                  }}
-                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-                >
-                  Create Your First Game
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {userGames.map((game) => (
-                  <div
-                    key={game.gameCode}
-                    className={`w-full p-4 rounded-xl border-2 ${
-                      game.pendingWin && game.isHost
-                        ? 'border-yellow-500 bg-yellow-50'
-                        : game.isHost
-                        ? 'border-purple-300 bg-purple-50'
-                        : 'border-gray-300 bg-gray-50'
-                    }`}
-                  >
-                    <button
-                      onClick={() => selectGame(game)}
-                      className="w-full flex items-center justify-between text-left mb-2 hover:opacity-80 transition"
-                    >
-                      <div className="flex-1">
-                        {game.config?.title && (
-                          <h3 className="font-bold text-lg text-gray-800 mb-1">{game.config.title}</h3>
-                        )}
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="font-bold text-lg font-mono text-purple-600">{game.gameCode}</span>
-                          {game.isHost && (
-                            <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
-                              HOST
-                            </span>
-                          )}
-                          {game.pendingWin && game.isHost && (
-                            <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-semibold rounded flex items-center gap-1 animate-pulse">
-                              <AlertCircle size={12} /> Pending Win
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {game.isHost ? 'Host' : 'Player'} • {game.config?.boardSize}x{game.config?.boardSize} board
-                        </p>
-                      </div>
-                      <Play size={20} className="text-purple-600 flex-shrink-0 ml-2" />
-                    </button>
-                    {game.isHost && (
-                      <div className="mt-3 pt-3 border-t border-gray-300">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to end game ${game.gameCode}? This will remove it from your games list.`)) {
-                              endGame(game.gameCode);
-                            }
-                          }}
-                          className="w-full px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"
-                        >
-                          <X size={16} /> End Game
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
-              <button
-                onClick={() => {
-                  setSelectedGame(null);
-                  setScreen('setup');
-                }}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-              >
-                <Play size={20} /> Create New Game
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedGame(null);
-                  setJoinCode('');
-                  setScreen('home');
-                }}
-                className="flex-1 px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition"
-              >
-                Join Game with Code
-              </button>
-            </div>
-          </div>
+          <DashboardScreen
+            currentUser={currentUser}
+            gamesLoading={gamesLoading}
+            userGames={userGames}
+            onLogout={logoutUser}
+            onSelectGame={selectGame}
+            onEndGame={endGame}
+            onCreateGame={() => {
+              setSelectedGame(null);
+              setScreen('setup');
+            }}
+            onJoinWithCode={() => {
+              setSelectedGame(null);
+              setJoinCode('');
+              setScreen('home');
+            }}
+          />
         )}
 
         {screen === 'email-confirmation' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
-            <div className="mb-6">
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <Check size={32} className="text-green-600" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Check Your Email</h2>
-              <p className="text-gray-600 text-sm sm:text-base">
-                We've sent a confirmation email to
-              </p>
-              <p className="text-purple-600 font-semibold text-base sm:text-lg mt-1">
-                {currentUser?.email || 'your email address'}
-              </p>
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-gray-700 mb-2">
-                <strong>Next steps:</strong>
-              </p>
-              <ol className="text-sm text-gray-600 text-left space-y-1 list-decimal list-inside">
-                <li>Check your email inbox (and spam folder)</li>
-                <li>Click the confirmation link in the email</li>
-                <li>Return here and log in with your account</li>
-              </ol>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => setScreen('login')}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-              >
-                <LogIn size={20} /> Go to Login
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentUser(null);
-                  setScreen('home');
-                }}
-                className="w-full px-6 py-2 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-              >
-                Back to Home
-              </button>
-            </div>
-          </div>
+          <EmailConfirmationScreen
+            email={currentUser?.email}
+            onGoToLogin={() => setScreen('login')}
+            onBackHome={() => {
+              setCurrentUser(null);
+              setScreen('home');
+            }}
+          />
         )}
 
         {screen === 'home' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
-            {currentUser ? (
-              <>
-                <div className="text-center mb-4">
-                  <p className="text-gray-600 mb-2">Logged in as: <span className="font-bold text-purple-600">{currentUser.username}</span></p>
-                  <button
-                    onClick={() => setScreen('dashboard')}
-                    className="text-purple-600 font-semibold hover:text-purple-700 text-sm"
-                  >
-                    Go to Dashboard →
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-center mb-4">
-                  <p className="text-gray-600 mb-4">Sign in to save your games and play multiple boards</p>
-                </div>
-                <button
-                  onClick={() => setScreen('login')}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-                >
-                  <LogIn size={20} /> Login
-                </button>
-                <button
-                  onClick={() => setScreen('register')}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
-                >
-                  <UserPlus size={20} /> Create Account
-                </button>
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-white text-gray-500">or continue as guest</span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="space-y-3">
-              <label className="block text-gray-700 font-semibold text-sm sm:text-base">
-                Join Existing Game
-              </label>
-              <input
-                type="text"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="Enter 5-digit code"
-                maxLength={5}
-                className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-center text-xl sm:text-2xl font-mono uppercase"
-              />
-              <button
-                onClick={joinGame}
-                className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
-              >
-                <Users size={20} className="sm:w-6 sm:h-6" /> Join Game
-              </button>
-            </div>
-          </div>
+          <HomeScreen
+            currentUser={currentUser}
+            joinCode={joinCode}
+            setJoinCode={setJoinCode}
+            onOpenDashboard={() => setScreen('dashboard')}
+            onLogin={() => setScreen('login')}
+            onRegister={() => setScreen('register')}
+            onJoinGame={joinGame}
+          />
         )}
 
         {screen === 'setup' && (
-          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8">
-            <div className="mb-6">
-              <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
-                Game Title
-              </label>
-              <input
-                type="text"
-                value={gameTitle}
-                onChange={(e) => setGameTitle(e.target.value)}
-                placeholder="Enter a title for your game (used to generate items)"
-                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-              />
-              <button
-                type="button"
-                onClick={generateItemsFromGameTitle}
-                disabled={generatingItems || !gameTitle.trim()}
-                className="mt-3 w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Sparkles size={18} />
-                {generatingItems
-                  ? 'Generating…'
-                  : `Generate ${neededItemCount} items from title`}
-              </button>
-              <p className="mt-2 text-xs sm:text-sm text-gray-500">
-                Optional: AI fills the item list from your title. You can edit anything before creating the game.
-              </p>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
-                Board Size
-              </label>
-              <select
-                value={boardSize}
-                onChange={(e) => updateBoardSize(Number(e.target.value))}
-                className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
-              >
-                <option value={3}>3x3</option>
-                <option value={4}>4x4</option>
-                <option value={5}>5x5</option>
-                <option value={6}>6x6</option>
-              </select>
-            </div>
-
-            <div className="mb-6">
-              <label className="flex items-center gap-2 text-gray-700 font-semibold text-sm sm:text-base">
-                <input
-                  type="checkbox"
-                  checked={useFreeSpace}
-                  onChange={(e) => updateFreeSpace(e.target.checked)}
-                  className="w-4 h-4 sm:w-5 sm:h-5"
-                />
-                Include FREE space in center
-              </label>
-            </div>
-
-            <div className="mb-6">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2">
-                <label className="text-gray-700 font-semibold text-sm sm:text-base">
-                  Bingo Items ({items.filter(i => {
-                    if (typeof i === 'string') return i.trim() !== '';
-                    return (i.text && i.text.trim() !== '') || i.imageUrl;
-                  }).length} of {useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize} filled)
-                </label>
-                <button
-                  onClick={addItem}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-sm sm:text-base"
-                >
-                  <Plus size={18} className="sm:w-5 sm:h-5" /> Add Extra Item
-                </button>
-              </div>
-              
-              <div className="space-y-2 max-h-64 sm:max-h-96 overflow-y-auto">
-                {items.map((item, index) => {
-                  const itemValue = typeof item === 'string' ? item : (item?.text || '');
-                  const itemImageUrl = typeof item === 'string' ? null : (item?.imageUrl || null);
-                  
-                  return (
-                    <div key={index} className="flex flex-col gap-2 p-2 border-2 border-gray-200 rounded-lg">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={itemValue}
-                          onChange={(e) => updateItem(index, e.target.value)}
-                          placeholder={`Item ${index + 1} (text)`}
-                          disabled={!!itemImageUrl}
-                          className={`flex-1 p-2 sm:p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base ${
-                            itemImageUrl ? 'bg-gray-100 cursor-not-allowed' : ''
-                          }`}
-                        />
-                        <label className="flex items-center justify-center px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer text-sm">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                updateItemImage(index, file);
-                              }
-                            }}
-                            disabled={!currentUser}
-                          />
-                          📷 Image
-                        </label>
-                        {index >= (useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize) && (
-                          <button
-                            onClick={() => removeItem(index)}
-                            className="px-2 sm:px-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                          >
-                            <Trash2 size={18} className="sm:w-5 sm:h-5" />
-                          </button>
-                        )}
-                      </div>
-                      {itemImageUrl && (
-                        <div className="relative">
-                          <img
-                            src={itemImageUrl}
-                            alt={`Item ${index + 1}`}
-                            className="w-full h-32 object-contain rounded border-2 border-purple-300"
-                          />
-                          <button
-                            onClick={() => removeItemImage(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <button
-                onClick={() => {
-                  if (currentUser) {
-                    setScreen('dashboard');
-                  } else {
-                    setScreen('home');
-                  }
-                }}
-                className="px-6 py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-              >
-                Back
-              </button>
-              <button
-                onClick={createGame}
-                className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
-              >
-                <Play size={20} className="sm:w-6 sm:h-6" /> Create Game
-              </button>
-            </div>
-          </div>
+          <SetupScreen
+            currentUser={currentUser}
+            gameTitle={gameTitle}
+            setGameTitle={setGameTitle}
+            generatingItems={generatingItems}
+            neededItemCount={neededItemCount}
+            onGenerateItems={generateItemsFromGameTitle}
+            boardSize={boardSize}
+            onUpdateBoardSize={updateBoardSize}
+            useFreeSpace={useFreeSpace}
+            onUpdateFreeSpace={updateFreeSpace}
+            items={items}
+            onAddItem={addItem}
+            onUpdateItem={updateItem}
+            onUpdateItemImage={updateItemImage}
+            onRemoveItem={removeItem}
+            onRemoveItemImage={removeItemImage}
+            onBack={() => {
+              if (currentUser) {
+                setScreen('dashboard');
+              } else {
+                setScreen('home');
+              }
+            }}
+            onCreateGame={createGame}
+          />
         )}
 
         {screen === 'host' && gameCode && (
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-            {/* Player List Sidebar */}
-            <div className="lg:w-64 flex-shrink-0">
-              <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">
-                <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <Users size={20} className="text-purple-600" />
-                  Players ({gamePlayers.length})
-                </h3>
-                {gamePlayers.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No players yet...</p>
-                ) : (
-                  <ul className="space-y-2 max-h-96 overflow-y-auto">
-                    {gamePlayers.map((player) => {
-                      const hasWon = confirmedWinners.includes(player.id);
-                      return (
-                        <li
-                          key={player.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
-                            hasWon
-                              ? 'bg-yellow-100 border-2 border-yellow-400'
-                              : player.isHost
-                              ? 'bg-purple-100 border border-purple-300'
-                              : 'bg-gray-100 border border-gray-200'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-semibold truncate ${
-                              hasWon ? 'text-yellow-800' : 'text-gray-800'
-                            }`}>
-                              {player.username}
-                            </p>
-                            {player.isHost && (
-                              <span className="text-xs text-purple-600 font-medium">Host</span>
-                            )}
-                          </div>
-                          {hasWon && (
-                            <div className="flex items-center gap-1 text-yellow-600" title="Bingo Winner!">
-                              <Trophy size={18} className="flex-shrink-0" />
-                              <span className="text-xs font-bold hidden sm:inline">BINGO!</span>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1 space-y-4 sm:space-y-6">
-            {/* Win Verification Modal */}
-            {pendingWinClaim && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
-                      <AlertCircle className="text-yellow-500" size={32} />
-                      Bingo Win Claim!
-                    </h2>
-                  </div>
-                  
-                  <div className="mb-6">
-                    <p className="text-gray-600 mb-4">A player has claimed a bingo win. Please verify the selected items:</p>
-                    
-                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                      <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
-                      <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
-                      <p className="text-sm text-gray-600 mb-3">Select the incorrect items (if any) to reject:</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {pendingWinClaim.items?.map((item, idx) => (
-                          <label
-                            key={idx}
-                            className={`bg-white border-2 rounded-lg p-2 text-sm font-semibold cursor-pointer transition-all ${
-                              selectedIncorrectItems.has(idx)
-                                ? 'border-red-500 bg-red-50 text-red-900'
-                                : 'border-purple-300 text-gray-800 hover:border-purple-500'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedIncorrectItems.has(idx)}
-                                onChange={() => toggleIncorrectItem(idx)}
-                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                              />
-                              <span>{item}</span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                      {selectedIncorrectItems.size > 0 && (
-                        <p className="text-sm text-red-600 mt-2 font-semibold">
-                          {selectedIncorrectItems.size} item(s) marked as incorrect
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                    <button
-                      onClick={rejectWin}
-                      disabled={selectedIncorrectItems.size === 0}
-                      className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition shadow-lg ${
-                        selectedIncorrectItems.size === 0
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-red-500 hover:bg-red-600'
-                      }`}
-                    >
-                      <X size={20} /> Reject {selectedIncorrectItems.size > 0 && `(${selectedIncorrectItems.size} incorrect)`}
-                    </button>
-                    <button
-                      onClick={confirmWin}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition shadow-lg"
-                    >
-                      <Check size={20} /> Confirm Win
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {showEndGameDialog && isHost && (
-              <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
-                <div className="mb-4">
-                  <Trophy size={48} className="mx-auto mb-3 text-yellow-500" />
-                  <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">Win Confirmed!</h2>
-                  <p className="text-gray-600 text-sm sm:text-base">
-                    A player has won. Would you like to end the game or continue playing?
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  <button
-                    onClick={handleContinueAfterWin}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg"
-                  >
-                    <Play size={20} /> Continue Playing
-                  </button>
-                  <button
-                    onClick={handleEndGameAfterWin}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-500 text-white font-semibold rounded-xl hover:bg-red-600 transition shadow-lg"
-                  >
-                    <X size={20} /> End Game
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 text-center space-y-4 sm:space-y-6">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
-                {gameConfig?.title && (
-                  <h3 className="text-lg sm:text-xl font-semibold text-purple-600 mb-2">{gameConfig.title}</h3>
-                )}
-                <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
-              </div>
-
-              <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 sm:p-6 rounded-xl">
-                <div className="text-3xl sm:text-5xl font-bold font-mono text-purple-600 mb-3 sm:mb-4 tracking-wider">
-                  {gameCode}
-                </div>
-                <button
-                  onClick={copyCode}
-                  className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm sm:text-base"
-                >
-                  {copied ? <Check size={18} className="sm:w-5 sm:h-5" /> : <Copy size={18} className="sm:w-5 sm:h-5" />}
-                  {copied ? 'Copied!' : 'Copy Code'}
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={async () => {
-                    // Generate board for host and switch to play screen
-                    if (gameConfig && gameCode) {
-                      await generateBoardFromConfig(gameConfig, gameCode);
-                    } else if (gameConfig) {
-                      await generateBoardFromConfig(gameConfig);
-                    } else {
-                      alert('Game configuration not found. Please try selecting the game again.');
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
-                >
-                  <Play size={20} className="sm:w-6 sm:h-6" /> Start Playing
-                </button>
-                <button
-                  onClick={resetToHome}
-                  className="w-full px-6 py-2 sm:py-3 bg-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-400 transition text-sm sm:text-base"
-                >
-                  {currentUser ? 'Back to Dashboard' : 'Back to Home'}
-                </button>
-              </div>
-            </div>
-            </div>
-          </div>
+          <HostScreen
+            gameCode={gameCode}
+            gameConfig={gameConfig}
+            gamePlayers={gamePlayers}
+            confirmedWinners={confirmedWinners}
+            pendingWinClaim={pendingWinClaim}
+            selectedIncorrectItems={selectedIncorrectItems}
+            showEndGameDialog={showEndGameDialog}
+            isHost={isHost}
+            copied={copied}
+            currentUser={currentUser}
+            onToggleIncorrectItem={toggleIncorrectItem}
+            onRejectWin={rejectWin}
+            onConfirmWin={confirmWin}
+            onContinueAfterWin={handleContinueAfterWin}
+            onEndGameAfterWin={handleEndGameAfterWin}
+            onCopyCode={copyCode}
+            onStartPlaying={async () => {
+              if (gameConfig && gameCode) {
+                await generateBoardFromConfig(gameConfig, gameCode);
+              } else if (gameConfig) {
+                await generateBoardFromConfig(gameConfig);
+              } else {
+                alert('Game configuration not found. Please try selecting the game again.');
+              }
+            }}
+            onResetToHome={resetToHome}
+          />
         )}
 
         {screen === 'play' && (
-          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
-            {/* Player List Sidebar */}
-            <div className="lg:w-64 flex-shrink-0">
-              <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">
-                <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <Users size={20} className="text-purple-600" />
-                  Players ({gamePlayers.length})
-                </h3>
-                {gamePlayers.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">Loading players...</p>
-                ) : (
-                  <ul className="space-y-2 max-h-96 overflow-y-auto">
-                    {gamePlayers.map((player) => {
-                      const hasWon = confirmedWinners.includes(player.id);
-                      return (
-                        <li
-                          key={player.id}
-                          className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${
-                            hasWon
-                              ? 'bg-yellow-100 border-2 border-yellow-400'
-                              : player.isHost
-                              ? 'bg-purple-100 border border-purple-300'
-                              : 'bg-gray-100 border border-gray-200'
-                          }`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-semibold truncate ${
-                              hasWon ? 'text-yellow-800' : 'text-gray-800'
-                            }`}>
-                              {player.username}
-                            </p>
-                            {player.isHost && (
-                              <span className="text-xs text-purple-600 font-medium">Host</span>
-                            )}
-                          </div>
-                          {hasWon && (
-                            <div className="flex items-center gap-1 text-yellow-600" title="Bingo Winner!">
-                              <Trophy size={18} className="flex-shrink-0" />
-                              <span className="text-xs font-bold hidden sm:inline">BINGO!</span>
-                            </div>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            {/* Main Game Content */}
-            <div className="flex-1 space-y-4 sm:space-y-6">
-            {/* Win Verification Modal for Host */}
-            {isHost && pendingWinClaim && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
-                      <AlertCircle className="text-yellow-500" size={32} />
-                      Bingo Win Claim!
-                    </h2>
-                  </div>
-                  
-                  <div className="mb-6">
-                    <p className="text-gray-600 mb-4">A player has claimed a bingo win. Please verify the selected items:</p>
-                    
-                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                      <p className="font-semibold text-gray-700 mb-2">Win Type: <span className="capitalize">{pendingWinClaim.type}</span></p>
-                      <p className="font-semibold text-gray-700 mb-3">Selected Items ({pendingWinClaim.items?.length || 0}):</p>
-                      <p className="text-sm text-gray-600 mb-3">Select the incorrect items (if any) to reject:</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {pendingWinClaim.items?.map((item, idx) => (
-                          <label
-                            key={idx}
-                            className={`bg-white border-2 rounded-lg p-2 text-sm font-semibold cursor-pointer transition-all ${
-                              selectedIncorrectItems.has(idx)
-                                ? 'border-red-500 bg-red-50 text-red-900'
-                                : 'border-purple-300 text-gray-800 hover:border-purple-500'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedIncorrectItems.has(idx)}
-                                onChange={() => toggleIncorrectItem(idx)}
-                                className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                              />
-                              <span>{item}</span>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                      {selectedIncorrectItems.size > 0 && (
-                        <p className="text-sm text-red-600 mt-2 font-semibold">
-                          {selectedIncorrectItems.size} item(s) marked as incorrect
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                    <button
-                      onClick={rejectWin}
-                      disabled={selectedIncorrectItems.size === 0}
-                      className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-semibold rounded-xl transition shadow-lg ${
-                        selectedIncorrectItems.size === 0
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-red-500 hover:bg-red-600'
-                      }`}
-                    >
-                      <X size={20} /> Reject {selectedIncorrectItems.size > 0 && `(${selectedIncorrectItems.size} incorrect)`}
-                    </button>
-                    <button
-                      onClick={confirmWin}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-xl hover:bg-green-600 transition shadow-lg"
-                    >
-                      <Check size={20} /> Confirm Win
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-
-            {gameCode && (
-              <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
-                <div className="text-center mb-2">
-                  <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
-                  <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
-                </div>
-                {currentUser && (
-                  <button
-                    onClick={resetToHome}
-                    className="w-full mt-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
-                  >
-                    <Home size={16} /> Back to Dashboard
-                  </button>
-                )}
-              </div>
-            )}
-
-            {pendingWinClaim && !winConfirmed && !winRejected && (
-              <div className="bg-yellow-400 text-gray-900 p-4 sm:p-6 rounded-2xl text-center shadow-2xl animate-pulse">
-                <AlertCircle size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
-                <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
-                <p className="text-base sm:text-lg mt-2">Waiting for host verification...</p>
-                <p className="text-sm mt-1 opacity-75">Your win claim has been submitted. Please wait.</p>
-              </div>
-            )}
-
-            {winRejected && (
-              <div className="bg-red-400 text-white p-4 sm:p-6 rounded-2xl text-center shadow-2xl">
-                <X size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
-                <h2 className="text-2xl sm:text-3xl font-bold">Win Rejected</h2>
-                <p className="text-base sm:text-lg mt-2">Your win claim was not verified by the host.</p>
-                <p className="text-sm mt-1 opacity-90">Incorrect items have been unselected. Please continue playing.</p>
-              </div>
-            )}
-
-            {hasWon && winConfirmed && (
-              <div className="bg-yellow-400 text-gray-900 p-4 sm:p-6 rounded-2xl text-center shadow-2xl animate-pulse">
-                <Trophy size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
-                <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
-                <p className="text-base sm:text-lg">You won! Win confirmed!</p>
-              </div>
-            )}
-
-            {gameConfig?.title && (
-              <div className="text-center mb-4">
-                <h2 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">{gameConfig.title}</h2>
-              </div>
-            )}
-
-            <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-8">
-              <div 
-                className="grid gap-1.5 sm:gap-2 mx-auto"
-                style={{
-                  gridTemplateColumns: `repeat(${boardSize}, 1fr)`,
-                  maxWidth: `min(100%, ${boardSize * 120}px)`
-                }}
-              >
-                {board.map((cell, index) => (
-                  <button
-                    key={index}
-                    onClick={() => toggleCell(index)}
-                    className={`
-                      aspect-square p-1 sm:p-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center text-center transition-all
-                      ${cell.isFree 
-                        ? 'bg-gradient-to-br from-yellow-400 to-orange-400 text-gray-900 cursor-default' 
-                        : marked.has(index)
-                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white scale-95'
-                        : 'bg-gradient-to-br from-purple-100 to-pink-100 text-gray-800 hover:scale-105 hover:shadow-lg active:scale-95'
-                      }
-                    `}
-                  >
-                    {cell.imageUrl ? (
-                      <img
-                        src={cell.imageUrl}
-                        alt={cell.text || 'Bingo item'}
-                        className="w-full h-full object-cover rounded"
-                      />
-                    ) : (
-                      <span className="break-words leading-tight">{cell.text}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <button
-                onClick={async () => {
-                  if (gameConfig && gameCode) {
-                    await generateBoardFromConfig(gameConfig, gameCode);
-                  } else if (gameConfig) {
-                    await generateBoardFromConfig(gameConfig);
-                  }
-                }}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg text-sm sm:text-base"
-              >
-                <Shuffle size={18} className="sm:w-5 sm:h-5" /> New Board
-              </button>
-              <button
-                onClick={resetToHome}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 transition shadow-lg text-sm sm:text-base"
-              >
-                <RotateCcw size={18} className="sm:w-5 sm:h-5" /> {currentUser ? 'Back to Dashboard' : 'End Game'}
-              </button>
-            </div>
-            </div>
-          </div>
+          <PlayScreen
+            gameCode={gameCode}
+            gameConfig={gameConfig}
+            gamePlayers={gamePlayers}
+            confirmedWinners={confirmedWinners}
+            isHost={isHost}
+            pendingWinClaim={pendingWinClaim}
+            selectedIncorrectItems={selectedIncorrectItems}
+            winConfirmed={winConfirmed}
+            winRejected={winRejected}
+            hasWon={hasWon}
+            board={board}
+            boardSize={boardSize}
+            marked={marked}
+            currentUser={currentUser}
+            onToggleIncorrectItem={toggleIncorrectItem}
+            onRejectWin={rejectWin}
+            onConfirmWin={confirmWin}
+            onResetToHome={resetToHome}
+            onToggleCell={toggleCell}
+            onNewBoard={async () => {
+              if (gameConfig && gameCode) {
+                await generateBoardFromConfig(gameConfig, gameCode);
+              } else if (gameConfig) {
+                await generateBoardFromConfig(gameConfig);
+              }
+            }}
+          />
         )}
       </div>
     </div>

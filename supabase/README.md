@@ -2,14 +2,17 @@
 
 Schema changes for Mingo live in `supabase/migrations/`. Apply them with the CLI — **do not** paste new SQL into the Dashboard for routine work.
 
-Prefer migrations over one-off root `FIX_*.sql` / `ADD_*.sql` scripts. Keep those root files only as historical one-offs already applied by hand.
+Prefer migrations over one-off `FIX_*.sql` / `ADD_*.sql` scripts. Historical root one-offs live in [`sql/archive/`](../sql/archive/) — do not re-run them on new projects.
 
 ## Projects
 
 | Environment | Supabase project | Project ref | App credentials |
 |-------------|------------------|-------------|-----------------|
 | Local Vite (`npm run dev`) | **Mingo-local** | `lmlzduwtrzzjaggqsulr` | `.env.local` only |
-| Production / Vercel | **Mingo** | `sngfoaosgskdmkngjglh` | Vercel `VITE_SUPABASE_*` |
+| Vercel **Preview** (`develop` / PRs) | **Mingo-local** | `lmlzduwtrzzjaggqsulr` | Vercel Preview `VITE_SUPABASE_*` |
+| Vercel **Production** (`master`) | **Mingo** | `sngfoaosgskdmkngjglh` | Vercel Production `VITE_SUPABASE_*` |
+
+Free tier allows two Supabase projects, so Preview shares **Mingo-local** with local Vite (same users/data). Keep Production on **Mingo** only. A dedicated `mingo-preview` project is optional later if you upgrade plans — see `PREVIEW_DEPLOYMENT_SETUP.md`.
 
 Never mix URL from one project with the anon key from another — that causes `Invalid API key`.
 
@@ -88,7 +91,11 @@ npm run db:push
 npx supabase migration repair --status applied 20260718150000
 npx supabase migration repair --status applied 20260719010000
 npx supabase migration repair --status applied 20260719120000
+npx supabase migration repair --status applied 20260719140000
+npx supabase migration repair --status applied 20260721150000
 ```
+
+Mark every migration already covered by the restore (list under `supabase/migrations/`).
 
 4. `npm run db:list` — should show local and remote in sync. Later migrations use `npm run db:push` only.
 
@@ -147,10 +154,15 @@ No `/rest/v1/` on the URL. Restart `npm run dev` after changing env.
 
 ### Auth redirects (Mingo-local)
 
-Authentication → URL Configuration:
+Authentication → URL Configuration (needed for both local Vite and Vercel Preview):
 
-- Site URL: `http://localhost:5173`
-- Redirect URLs: `http://localhost:5173/`, `http://localhost:5173/**`
+- Site URL: `http://localhost:5173` (local default is fine)
+- Redirect URLs:
+  - `http://localhost:5173/`
+  - `http://localhost:5173/**`
+  - `https://*.vercel.app/**` (Preview + password-reset / email links)
+
+Without the Vercel entries, login/session redirects from Preview URLs often fail even when credentials are correct.
 
 ## GitHub Actions (automatic deploy)
 
@@ -158,7 +170,7 @@ Workflow: [`.github/workflows/supabase-db-push.yml`](../.github/workflows/supaba
 
 | Branch | Target project |
 |--------|----------------|
-| `develop` | Mingo-local (`lmlzduwtrzzjaggqsulr`) |
+| `develop` | Mingo-local (`lmlzduwtrzzjaggqsulr`) — keeps local + Preview in sync |
 | `master` | Production Mingo (`sngfoaosgskdmkngjglh`) |
 
 ### Required repository secrets

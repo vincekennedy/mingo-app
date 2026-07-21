@@ -48,6 +48,21 @@ function generateItemsDevApi() {
   return {
     name: 'generate-items-dev-api',
     configureServer(server) {
+      server.middlewares.use('/api/health', (req, res, next) => {
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.end()
+          return
+        }
+        if (req.method !== 'GET') {
+          next()
+          return
+        }
+        res.setHeader('Content-Type', 'application/json')
+        res.statusCode = 200
+        res.end(JSON.stringify({ ok: true, service: 'mingo-api' }))
+      })
+
       server.middlewares.use('/api/generate-items', async (req, res, next) => {
         if (req.method === 'OPTIONS') {
           res.statusCode = 204

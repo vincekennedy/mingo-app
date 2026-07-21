@@ -1,12 +1,13 @@
 ---
-description: CalVer releases on merge to master
+description: CalVer releases prepared on develop, then merged to master
 alwaysApply: true
 ---
 
 # Releases (CalVer)
 
 - Production releases are merges into **`master`** (usually from `develop`).
-- On push to `master`, GitHub Action **CalVer release on master** sets `package.json` version to **today’s date** in `America/New_York` as `YYYY.MM.DD`, commits `chore: release …`, and tags `vYYYY.MM.DD`.
+- Before (or as part of) cutting a production release, run GitHub Action **CalVer release on develop** (`workflow_dispatch`). It sets `package.json` to **today’s date** in `America/New_York` as `YYYY.MM.DD`, commits `chore: release …` on **`develop`**, and tags `vYYYY.MM.DD`.
 - Same calendar day, additional releases use `YYYY.MM.DD.1`, `.2`, …
-- Do **not** hand-bump `package.json` for production releases unless the user asks; let the Action own it.
+- Promote that commit to production with a normal **`develop` → `master`** PR. Do **not** push CalVer commits directly to `master` (rules require PRs).
+- Do **not** hand-bump `package.json` for production releases unless the user asks; prefer the Action on `develop`.
 - Feature work stays on `develop`; do not open routine feature PRs into `master`.
