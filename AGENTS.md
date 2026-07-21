@@ -83,8 +83,7 @@ Guest join uses Supabase Anonymous auth, which is off by default locally. It is 
 
 ### Running the tests
 
-- Lint: `npm run lint`. Note the repo currently has **pre-existing** eslint errors in `vite.config.js`
-  and `src/App.jsx`; they are unrelated to environment setup.
+- Lint: `npm run lint` (also runs on PRs into `develop` via the PR smoke workflow).
 - Playwright smoke: `npx playwright install chromium` once, then `npm run test:e2e:smoke`
   (landing + api — no account needed). The full `npm run test:e2e` (adds the create→join→win
   lifecycle) needs a confirmed host account on the local Supabase and its creds exported:
