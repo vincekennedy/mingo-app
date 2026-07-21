@@ -29,7 +29,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 
 **Not Next.js.** Do not apply `@supabase/ssr`, middleware cookie sessions, or `NEXT_PUBLIC_*` env vars.
 
-**Scripts:** `npm run dev` · `build` · `lint` · `preview` · `test:e2e` / `test:e2e:landing` (Playwright smoke — see [`SMOKE.md`](../SMOKE.md))
+**Scripts:** `npm run dev` · `build` · `lint` · `preview` · `test:e2e` / `test:e2e:smoke` / `test:e2e:lifecycle` (Playwright — see [`SMOKE.md`](../SMOKE.md))
 
 **Build injects** (`vite.config.js`): `__COMMIT_HASH__`, `__APP_VERSION__` (from `package.json`), `__VERCEL_ENV__` (from `VERCEL_ENV`). Version chip in `App.jsx` uses these.
 

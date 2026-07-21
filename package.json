@@ -12,6 +12,7 @@
     "test:e2e:landing": "playwright test e2e/landing.spec.js",
     "test:e2e:api": "playwright test e2e/generate-items.spec.js",
     "test:e2e:smoke": "playwright test e2e/landing.spec.js e2e/generate-items.spec.js",
+    "test:e2e:lifecycle": "playwright test e2e/lifecycle.spec.js",
     "db:login": "supabase login",
     "db:link": "supabase link --project-ref lmlzduwtrzzjaggqsulr",
     "db:list": "supabase migration list",

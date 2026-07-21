@@ -84,6 +84,7 @@ npm run test:e2e:smoke
 export SMOKE_HOST_EMAIL='your-test-host@example.com'
 export SMOKE_HOST_PASSWORD='…'
 npm run test:e2e
+# or lifecycle only: npm run test:e2e:lifecycle
 ```
 
 | Variable | Required for | Purpose |
@@ -93,20 +94,24 @@ npm run test:e2e
 | `GEMINI_API_KEY` | Successful generate-items (else JSON error is OK) | Server-side key for Vite middleware / Vercel |
 | `SMOKE_BASE_URL` | Optional | Defaults to `http://127.0.0.1:5173` (Playwright starts Vite); set to production URL to smoke deployed `/api` |
 
-Full e2e **skips** when host credentials are missing so CI without secrets still passes landing checks via `test:e2e:landing`.
+Locally, lifecycle **skips** when host credentials are missing (`npm run test:e2e:smoke` still runs). PR CI **requires** the secrets below and fails if they are unset.
 
 Anonymous auth must be enabled on the Supabase project used for guest join.
 
 ## CI (pull requests)
 
-Workflow: [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) — runs `npm run test:e2e:smoke` on every PR into **`develop`**.
+Workflow: [`.github/workflows/pr-smoke.yml`](.github/workflows/pr-smoke.yml) — runs `npm run test:e2e` (landing + api + lifecycle) on every PR into **`develop`**.
 
-Optional repository secrets (Settings → Secrets and variables → Actions):
+Repository secrets (Settings → Secrets and variables → Actions):
 
-| Secret | Purpose |
-|--------|---------|
-| `VITE_SUPABASE_URL` | Prefer mingo-local URL (defaults to that ref if unset) |
-| `VITE_SUPABASE_ANON_KEY` | Mingo-local anon key (placeholder used if unset — UI smoke only) |
-| `GEMINI_API_KEY` | Optional; without it, generate-items must still return JSON `{ error }` |
+| Name | Required | Where | Purpose |
+|------|----------|-------|---------|
+| `VITE_SUPABASE_ANON_KEY` | Yes | Repository **secret** or **variable** | Mingo-local anon key (public client key; login + guest join) |
+| `SMOKE_HOST_EMAIL` | Yes | Repository **secret** | Dedicated **test** host on mingo-local |
+| `SMOKE_HOST_PASSWORD` | Yes | Repository **secret** | Password for that host |
+| `VITE_SUPABASE_URL` | No | Secret or variable | Defaults to mingo-local project URL if unset |
+| `GEMINI_API_KEY` | No | Secret | Without it, generate-items must still return JSON `{ error }` |
 
-Make **Playwright smoke (landing + api)** a required status check on `develop` if you want PRs blocked until green.
+Use the **Repository** secrets/variables tabs (not an Environment, unless the workflow job sets `environment:`). Name must match exactly; paste the value only (no `VITE_SUPABASE_ANON_KEY=` prefix).
+
+Anonymous auth must be enabled on mingo-local. Make **Playwright smoke (landing + api + lifecycle)** a required status check on `develop` if you want PRs blocked until green.
