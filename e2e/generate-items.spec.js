@@ -27,11 +27,14 @@ test.describe('API route smoke', () => {
     expect(text.trim().startsWith('<!doctype'), 'SPA HTML served instead of API').toBe(false)
 
     const body = JSON.parse(text)
-    if (res.ok) {
+    // Playwright APIResponse.ok is a method (res.ok is always truthy as a function)
+    if (res.ok()) {
       expect(Array.isArray(body.items)).toBe(true)
       expect(body.items.length).toBeGreaterThanOrEqual(8)
     } else {
-      expect(typeof body.error).toBe('string')
+      expect(typeof body.error, `status ${res.status()}: ${text.slice(0, 300)}`).toBe(
+        'string'
+      )
       expect(body.error.length).toBeGreaterThan(0)
     }
   })
