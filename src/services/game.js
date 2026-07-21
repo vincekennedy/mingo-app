@@ -237,7 +237,7 @@ export const gameService = {
         if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
           throw new Error(
             'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
-            'FIX: Run FIX_GAMES_UPDATE_POLICY.sql in Supabase SQL Editor to add the UPDATE policy for games table.'
+            'FIX: Ensure "Hosts can update their games" RLS exists (FULL_SCHEMA_RESTORE.sql), or apply sql/archive/FIX_GAMES_UPDATE_POLICY.sql on a legacy project.'
           )
         }
         
@@ -315,7 +315,7 @@ export const gameService = {
         if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
           throw new Error(
             'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
-            'FIX: Run FIX_GAMES_UPDATE_POLICY.sql in Supabase SQL Editor to add the UPDATE policy for games table.'
+            'FIX: Ensure "Hosts can update their games" RLS exists (FULL_SCHEMA_RESTORE.sql), or apply sql/archive/FIX_GAMES_UPDATE_POLICY.sql on a legacy project.'
           )
         }
         

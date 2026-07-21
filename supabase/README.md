@@ -2,7 +2,7 @@
 
 Schema changes for Mingo live in `supabase/migrations/`. Apply them with the CLI — **do not** paste new SQL into the Dashboard for routine work.
 
-Prefer migrations over one-off root `FIX_*.sql` / `ADD_*.sql` scripts. Keep those root files only as historical one-offs already applied by hand.
+Prefer migrations over one-off `FIX_*.sql` / `ADD_*.sql` scripts. Historical root one-offs live in [`sql/archive/`](../sql/archive/) — do not re-run them on new projects.
 
 ## Projects
 
@@ -91,7 +91,11 @@ npm run db:push
 npx supabase migration repair --status applied 20260718150000
 npx supabase migration repair --status applied 20260719010000
 npx supabase migration repair --status applied 20260719120000
+npx supabase migration repair --status applied 20260719140000
+npx supabase migration repair --status applied 20260721150000
 ```
+
+Mark every migration already covered by the restore (list under `supabase/migrations/`).
 
 4. `npm run db:list` — should show local and remote in sync. Later migrations use `npm run db:push` only.
 

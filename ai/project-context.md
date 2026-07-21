@@ -39,7 +39,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 
 Almost all UI and game logic live in a **single screen state machine**:
 
-- `src/App.jsx` — screens, game/board/claim UI, polling, auth wiring  
+- `src/App.jsx` — screens, game/board/claim UI, Realtime wiring, auth  
 - `src/services/*` — Supabase API wrappers  
 - `src/lib/supabase.js` — shared client  
 
@@ -114,7 +114,7 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 
 **Storage:** public bucket `game-images`; object path `{userId}/{gameCode}/{filename}` (temp code allowed during setup).
 
-If restoring without the single file, combine historically: `SUPABASE_SETUP.md` schema + `COMPLETE_USER_SETUP.sql` + `SETUP_STORAGE.sql` + `FIX_GAMES_UPDATE_POLICY.sql`. Prefer `FULL_SCHEMA_RESTORE.sql` for greenfield; prefer `supabase db push` for incremental changes.
+Prefer `FULL_SCHEMA_RESTORE.sql` for greenfield; prefer `supabase db push` for incremental changes. Older piece-meal scripts live under `sql/archive/` (do not replay them on new projects).
 
 ### In-app reporting
 
@@ -194,7 +194,7 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 
 - Free Supabase paused **>90 days**: no one-click resume; recreate project → run `FULL_SCHEMA_RESTORE.sql` → new env keys → redeploy + Auth redirect URLs.  
 - URL must match anon key project ref (JWT `ref` claim).  
-- Ending games needs host **UPDATE** RLS on `games` (included in full restore / `FIX_GAMES_UPDATE_POLICY.sql`).  
+- Ending games needs host **UPDATE** RLS on `games` (included in `FULL_SCHEMA_RESTORE.sql`).  
 - Email confirmation + RLS can delay profile reads right after signup; client already retries.  
 - Don’t ship Next.js Supabase quickstarts into this Vite app.
 
@@ -210,12 +210,10 @@ Also set the same vars for Preview if preview deploys are used (`PREVIEW_DEPLOYM
 | `SUPABASE_SETUP.md` | Original schema + setup walkthrough |
 | `COMPLETE_USER_SETUP.sql` | Trigger + users RLS |
 | `SETUP_STORAGE.sql` | `game-images` bucket |
-| `FIX_GAMES_UPDATE_POLICY.sql` | Host end-game UPDATE |
+| `sql/archive/` | Historical `FIX_*` / `DEBUG_*` one-offs (do not re-run) |
 | `VERCEL_SETUP.md` / `TROUBLESHOOTING.md` | Deploy + NetworkError |
-| `GAME_MIGRATION_NOTES.md` | Auth required; polling; no guest |
+| `SMOKE.md` | Manual + Playwright smoke |
 | `ai/` | This context, standards, guardrails, checklists, experiments, prompts |
-
-Some root `FIX_*` / `DEBUG_*` / `TEST_*` SQL files are historical diagnostics — use full restore for new projects instead of replaying every fix.
 
 ---
 

@@ -34,5 +34,5 @@ WHERE pu.id IS NULL
 ORDER BY au.created_at DESC;
 
 -- If you see users without profiles, you need to either:
--- 1. Re-run the trigger setup (FIX_TRIGGER_FINAL.sql)
--- 2. Manually create the missing profiles (see FIX_MISSING_PROFILES.sql)
+-- 1. Re-run handle_new_user from FULL_SCHEMA_RESTORE.sql / COMPLETE_USER_SETUP.sql
+-- 2. Or manually create missing profiles (see sql/archive/FIX_MISSING_PROFILES.sql)

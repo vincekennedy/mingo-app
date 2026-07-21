@@ -42,33 +42,9 @@ The INSERT policy for the `users` table is either missing or not working correct
 
 If Solution 1 doesn't work, use a database trigger to automatically create user profiles:
 
-1. **Run the trigger SQL** from `ALTERNATIVE_FIX_TRIGGER.sql`
+1. **Ensure `handle_new_user` + `on_auth_user_created` exist** — prefer [`FULL_SCHEMA_RESTORE.sql`](FULL_SCHEMA_RESTORE.sql) or [`COMPLETE_USER_SETUP.sql`](COMPLETE_USER_SETUP.sql). (Legacy one-offs: `ALTERNATIVE_FIX_TRIGGER.sql`, `sql/archive/FIX_TRIGGER_FINAL.sql`.)
 
-2. **Update `src/services/auth.js`** to pass username in metadata instead of manually inserting:
-
-   Change the `signUp` function to:
-   ```javascript
-   async signUp(username, email, password) {
-     // Create auth user with username in metadata
-     const { data: authData, error: authError } = await supabase.auth.signUp({
-       email,
-       password,
-       options: {
-         data: {
-           username: username
-         }
-       }
-     })
-     
-     if (authError) throw authError
-     if (!authData.user) throw new Error('Failed to create user')
-     
-     // Trigger will automatically create the profile, but wait a moment
-     await new Promise(resolve => setTimeout(resolve, 500))
-     
-     return authData.user
-   }
-   ```
+2. **Confirm `src/services/auth.js`** passes username in signup metadata so the trigger can create `public.users` (current code already does this).
 
 ## Solution 3: Temporarily Disable RLS (NOT Recommended for Production)
 
@@ -117,10 +93,4 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 ## Recommended Fix
 
-I recommend **Solution 2 (Database Trigger)** because:
-- More reliable (doesn't depend on client-side timing)
-- Automatically handles user profile creation
-- More secure (runs with elevated privileges)
-- Standard pattern in Supabase applications
-
-If you use Solution 2, you'll need to update the `signUp` function in `src/services/auth.js` as shown above.
+Prefer **Solution 2 (Database Trigger)** — it is already the shipped pattern (`handle_new_user` in `FULL_SCHEMA_RESTORE.sql` / `COMPLETE_USER_SETUP.sql`, and signup metadata in `src/services/auth.js`). Use Solution 1 only if the INSERT policy is missing on an older project.
