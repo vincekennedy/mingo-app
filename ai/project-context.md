@@ -39,9 +39,13 @@ Living brief for humans and AI assistants. Update when architecture or product d
 
 Almost all UI and game logic live in a **single screen state machine**:
 
-- `src/App.jsx` — screens, game/board/claim UI, Realtime wiring, auth  
+- `src/App.jsx` — screen state machine, Realtime wiring, auth/game handlers  
+- `src/screens/*` — presentational screen components  
+- `src/components/*` — shared chrome, modals, game UI pieces  
+- `src/hooks/*` — extracted hooks (e.g. report modal)  
 - `src/services/*` — Supabase API wrappers  
 - `src/lib/supabase.js` — shared client  
+- `src/lib/version.js` — CalVer / commit version chip string  
 
 There is **no React Router**. Navigation is `setScreen(...)`.
 

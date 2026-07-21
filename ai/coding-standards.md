@@ -6,7 +6,7 @@ Conventions for Mingo. Prefer matching existing code over introducing new patter
 
 - Change only what the task needs; avoid drive-by refactors and unrelated files
 - Keep solutions simple; no speculative abstractions
-- Match naming, imports, and UI patterns already in `src/App.jsx` and `src/services/`
+- Match naming, imports, and UI patterns already in `src/App.jsx`, `src/screens/`, and `src/services/`
 - Do not commit secrets (`.env.local`, keys, OIDC tokens)
 - Do not create markdown docs unless asked (except when the task is to create docs)
 
