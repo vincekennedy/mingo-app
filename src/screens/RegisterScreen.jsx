@@ -53,7 +53,7 @@ export default function RegisterScreen({
           required
           minLength={3}
           disabled={registering}
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base disabled:bg-gray-100"
         />
         <input
           name="email"
@@ -61,7 +61,7 @@ export default function RegisterScreen({
           placeholder="Email"
           required
           disabled={registering}
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base disabled:bg-gray-100"
         />
         <input
           name="password"
@@ -70,7 +70,7 @@ export default function RegisterScreen({
           required
           minLength={6}
           disabled={registering}
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base disabled:bg-gray-100"
         />
         <input
           name="confirmPassword"
@@ -79,12 +79,12 @@ export default function RegisterScreen({
           required
           minLength={6}
           disabled={registering}
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base disabled:bg-gray-100"
         />
         <button
           type="submit"
           disabled={registering}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {registering ? (
             <>
@@ -102,7 +102,7 @@ export default function RegisterScreen({
         <button
           onClick={onLogin}
           disabled={registering}
-          className="text-purple-600 font-semibold hover:text-purple-700 text-sm sm:text-base mt-2 disabled:opacity-50"
+          className="mingo-link-brand font-semibold text-sm sm:text-base mt-2 disabled:opacity-50"
         >
           Login here
         </button>

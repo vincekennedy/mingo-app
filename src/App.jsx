@@ -9,6 +9,7 @@ import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 import { subscribeGame, subscribeDashboard } from './lib/realtime';
 import { detectWin, normalizeWinConfig } from './lib/winDetection';
+import { DEFAULT_THEME } from './lib/theme';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
@@ -1494,7 +1495,7 @@ export default function Mingo() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+    <div data-theme={DEFAULT_THEME} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
       {(registering || loggingIn || !authReady) && (
         <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}
