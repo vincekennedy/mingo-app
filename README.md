@@ -93,7 +93,10 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 Optional (AI bingo item generation via the Vite/Vercel `/api/generate-items` route):
 
 ```bash
-GEMINI_API_KEY=your-google-ai-studio-key
+# Prefer a classic Generative Language API key (starts with AIza…) from
+# Google Cloud Console → APIs & Services → Credentials. AI Studio "AQ." auth
+# keys often fail with ACCESS_TOKEN_TYPE_UNSUPPORTED.
+GEMINI_API_KEY=your-AIza-key
 # optional override; default is gemini-flash-latest with fallbacks
 # GEMINI_BINGO_MODEL=gemini-3.5-flash
 ```
