@@ -39,7 +39,7 @@ test.describe('Game lifecycle smoke', () => {
         timeout: 45_000,
       })
 
-      gameCode = (await hostPage.locator('.font-mono.text-purple-600').first().innerText()).trim()
+      gameCode = (await hostPage.getByTestId('game-code').innerText()).trim()
       expect(gameCode).toMatch(/^[A-Z0-9]{5}$/)
 
       const guestName = `SmokeGuest${Date.now().toString(36).slice(-4)}`

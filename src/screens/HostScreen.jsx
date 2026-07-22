@@ -66,7 +66,10 @@ export default function HostScreen({
           </div>
 
           <div className="mingo-surface-brand p-4 sm:p-6 rounded-xl">
-            <div className="text-3xl sm:text-5xl font-bold font-mono mingo-text-brand mb-3 sm:mb-4 tracking-wider">
+            <div
+              data-testid="game-code"
+              className="text-3xl sm:text-5xl font-bold font-mono mingo-text-brand mb-3 sm:mb-4 tracking-wider"
+            >
               {gameCode}
             </div>
             <button

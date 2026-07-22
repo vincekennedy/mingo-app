@@ -32,7 +32,7 @@ test.describe('Public lobby', () => {
       await expect(hostPage.getByRole('heading', { name: /Game Created/i })).toBeVisible({
         timeout: 45_000,
       })
-      const code = (await hostPage.locator('.font-mono.text-purple-600').first().innerText()).trim()
+      const code = (await hostPage.getByTestId('game-code').innerText()).trim()
       expect(code).toMatch(/^[A-Z0-9]{5}$/)
 
       if (visibility === 'public') {

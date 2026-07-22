@@ -39,7 +39,7 @@ test.describe('Four corners win mode', () => {
       })
       await expect(hostPage.getByText(/four corners/i)).toBeVisible()
 
-      gameCode = (await hostPage.locator('.font-mono.text-purple-600').first().innerText()).trim()
+      gameCode = (await hostPage.getByTestId('game-code').innerText()).trim()
       expect(gameCode).toMatch(/^[A-Z0-9]{5}$/)
 
       const guestName = `CornerGuest${Date.now().toString(36).slice(-4)}`
