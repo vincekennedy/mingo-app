@@ -142,6 +142,29 @@ curl -sS -X POST "https://lmlzduwtrzzjaggqsulr.supabase.co/functions/v1/cleanup-
 
 Optional function secret: Dashboard → Edge Functions → secrets → `GUEST_CLEANUP_CRON_SECRET` (accepted as Bearer in place of the service role key). Never put the service role key in the Vite app.
 
+## Smoke e2e data cleanup
+
+Playwright leftovers (games titles like `Smoke Test Bingo` / `Corners Smoke` / `Lobby * Smoke`, and anonymous guests named `SmokeGuest*` / `CornerGuest*` / `LobbyGuest*`) are cleaned by a separate job. The durable **SMOKE_HOST** account is never deleted (it is not anonymous).
+
+| Rule | Detail |
+|------|--------|
+| Games | `config->>'title'` matches known smoke e2e titles |
+| Users | `auth.users.is_anonymous` + profile name matches smoke guest prefixes |
+| Skip users | Still in an **active non-smoke** game |
+| Batch | Up to 100 games + 100 users per run |
+
+**Schedule:** `pg_cron` job `cleanup-smoke-test-data-daily` at **06:15 UTC** runs `public.cleanup_smoke_test_data(100, false)` (after the general guest cleanup).
+
+**SQL (service_role / `supabase db query`):**
+
+```sql
+-- Preview
+SELECT * FROM public.cleanup_smoke_test_data(100, true);
+
+-- Delete
+SELECT * FROM public.cleanup_smoke_test_data(100, false);
+```
+
 ## Local app env (Mingo-local)
 
 In `.env.local` (both values from **Mingo-local** → Settings → API):
