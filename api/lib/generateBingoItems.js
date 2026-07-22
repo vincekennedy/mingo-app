@@ -106,8 +106,11 @@ export async function generateBingoItems({ title, count, apiKey }) {
 
       let message = raw || 'Google AI request failed. Check your API key and quota.'
       if (/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication|UNAUTHENTICATED/i.test(raw)) {
-        message =
-          'Google AI rejected this API key (ACCESS_TOKEN_TYPE_UNSUPPORTED). Create a new key at https://aistudio.google.com/apikey, ensure the Generative Language API is enabled on that Google Cloud project, set GEMINI_API_KEY, and redeploy.'
+        // AI Studio now often issues "AQ." auth keys; those frequently fail on
+        // generativelanguage.googleapis.com. Classic "AIza..." keys from Cloud Console work.
+        message = key.startsWith('AQ.')
+          ? 'This GEMINI_API_KEY is an AI Studio "AQ." auth key, which Google often rejects for the Generative Language API. Create a classic API key (starts with AIza) in Google Cloud Console → APIs & Services → Credentials, restrict it to Generative Language API, set GEMINI_API_KEY, and redeploy.'
+          : 'Google AI rejected this API key. Create a Generative Language API key (AIza…) in Google Cloud Console → APIs & Services → Credentials (or https://aistudio.google.com/apikey if it still issues AIza keys), set GEMINI_API_KEY, and redeploy.'
       } else if (isModelUnavailableError(raw)) {
         message =
           'That Gemini model is not available for this API key. Set GEMINI_BINGO_MODEL to a current model (e.g. gemini-flash-latest) and redeploy.'
