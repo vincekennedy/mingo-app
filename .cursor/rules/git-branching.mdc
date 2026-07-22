@@ -7,12 +7,18 @@ alwaysApply: true
 
 - Use **`develop`** as the integration branch for day-to-day work.
 - Do **not** commit or push feature work directly to **`master`**.
-- When starting work or committing/pushing:
-  1. Base new branches on up-to-date `develop` (e.g. `git checkout develop && git pull`, then `git checkout -b …`).
-  2. Commit and push on that feature branch (or `develop` when the user asks to land there).
-  3. Open PRs into **`develop`**, not `master`, unless the user explicitly asks otherwise.
+- **Always sync `develop` before creating a feature branch** (local, Cloud Agents, phone — no exceptions):
+  1. `git fetch origin`
+  2. `git checkout develop`
+  3. `git pull origin develop` (must be up to date with `origin/develop`)
+  4. `git checkout -b feature/…` (or similar) from that tip
+  - Do **not** branch from `master`, a stale local `develop`, or whatever branch the agent/session started on.
+  - Do **not** skip the pull even if `develop` looks current.
+- When committing/pushing:
+  1. Commit and push on that feature branch (or `develop` when the user asks to land there).
+  2. Open PRs into **`develop`**, not `master`, unless the user explicitly asks otherwise.
 - **`master`** is for production releases. Cut CalVer on **`develop`** (Action **CalVer release on develop**), then open a PR **`develop` → `master`**. See `.cursor/rules/releases.mdc`.
 
 ```text
-feature/* → develop (CalVer stamped here) → master (production via PR)
+fetch → checkout develop → pull → feature/* → develop (CalVer) → master
 ```

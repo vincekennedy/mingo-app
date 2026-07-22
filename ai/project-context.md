@@ -85,6 +85,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `generateItems.js` | Client call to `/api/generate-items` for AI bingo items from title |
 | `feedback.js` | Submit issue/feedback reports to `feedback_reports` (anon + authenticated) |
 | `../lib/realtime.js` | `subscribeGame` / `subscribeDashboard` Realtime channels for multiplayer freshness |
+| `../lib/winDetection.js` | Pure win detection + `describeWinRule` / `normalizeWinConfig` for game modes |
 
 ---
 
@@ -110,9 +111,14 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
   "items": [{ "text": "...", "imageUrl": null }],
   "boardSize": 5,
   "useFreeSpace": true,
-  "title": "..."
+  "title": "...",
+  "winMode": "standard",
+  "linesToWin": 1
 }
 ```
+
+`winMode`: `standard` \| `four_corners` \| `x` \| `blackout` (default `standard` for legacy games).  
+`linesToWin`: 1–3, used only when `winMode` is `standard`. See [`src/lib/winDetection.js`](../src/lib/winDetection.js).
 
 **Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback) and optional `display_name`. Client also retries/fallback-inserts if needed. Guests store unique `username` as `Name-xxxx` and `display_name` as the entered name.
 
@@ -145,8 +151,8 @@ Auth email redirect URLs in Supabase must include production Vercel origin and l
 
 1. **Create** (`setup`) — validate enough items for board size → generate 5-char code from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` → `createGame` (game row + host participant) → `host`.  
 2. **Join** (`home`) — must be logged in → `joinGame` → load or generate board → `play`.  
-3. **Play** — toggle marks; optional free center; debounce save ~500ms; win detection: row / column / diagonal.  
-4. **Claim** — non-host bingo auto-submits win claim. **Host self-bingo** auto-confirms locally (no claim row).  
+3. **Play** — toggle marks; optional free center; debounce save ~500ms; win detection via `winMode` / `linesToWin` (standard lines, four corners, X, or blackout).  
+4. **Claim** — non-host bingo auto-submits win claim. **Host self-bingo** auto-confirms locally (no claim row). Host/play show a one-line “How to win” from config.  
 5. **Host review** — confirm claim (optional end-game dialog) or reject with selected incorrect items (player clears those marks).  
 6. **End** — host `endGame` or `markGameAsEnded` sets `status: 'ended'`. Dashboard and `getGame` only use **active** games.
 

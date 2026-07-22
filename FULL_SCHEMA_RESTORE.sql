@@ -132,6 +132,7 @@ DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
 DROP POLICY IF EXISTS "Anyone can read games" ON public.games;
 DROP POLICY IF EXISTS "Hosts can create games" ON public.games;
 DROP POLICY IF EXISTS "Hosts can update their games" ON public.games;
+DROP POLICY IF EXISTS "Hosts can delete their games" ON public.games;
 
 DROP POLICY IF EXISTS "Participants can read their games" ON public.game_participants;
 DROP POLICY IF EXISTS "Hosts can read participants of their games" ON public.game_participants;
@@ -176,6 +177,10 @@ CREATE POLICY "Hosts can update their games" ON public.games
   FOR UPDATE TO authenticated
   USING (auth.uid() = host_id)
   WITH CHECK (auth.uid() = host_id);
+
+CREATE POLICY "Hosts can delete their games" ON public.games
+  FOR DELETE TO authenticated
+  USING (auth.uid() = host_id);
 
 -- -----------------------------------------------------------------------------
 -- RLS: game_participants

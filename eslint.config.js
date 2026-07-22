@@ -23,7 +23,28 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': [
+        'error',
+        {
+          varsIgnorePattern: '^[A-Z_]',
+          argsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+  // Node/tooling files (Vite, Playwright, API) need Node globals, not browser-only.
+  {
+    files: [
+      'vite.config.js',
+      'playwright.config.js',
+      'eslint.config.js',
+      'api/**/*.{js,mjs,cjs}',
+      'e2e/**/*.{js,mjs,cjs}',
+      'scripts/**/*.{js,mjs,cjs}',
+    ],
+    languageOptions: {
+      globals: globals.node,
     },
   },
 ])
