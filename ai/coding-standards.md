@@ -16,7 +16,7 @@ Conventions for Mingo. Prefer matching existing code over introducing new patter
 - Prefer existing Tailwind utility classes and gradient/layout patterns in the app
 - New Lucide icons: import from `lucide-react` next to existing imports
 - Keep mobile-friendly spacing (`sm:` breakpoints) consistent with neighboring screens
-- Alerts (`alert(...)`) are used for form errors today — match that unless replacing with a shared pattern
+- User-facing errors: use `showToast` from `useToast` (hosted in `App.jsx`); pass `showToast` into screens that need it. Prefer inline `authError` on login/register forms when the screen already has that pattern. Do not use `window.alert`.
 
 ## Supabase / services
 

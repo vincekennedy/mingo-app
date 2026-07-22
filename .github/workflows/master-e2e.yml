@@ -1,26 +1,25 @@
-name: PR Smoke Tests
+name: Master full e2e
 
-# Playwright smoke on PRs into develop: landing + /api + lifecycle.
-# Broader specs (e.g. win modes) run locally before push and on master merge.
-# Requires mingo-local secrets (anon key + dedicated smoke host). Not for production.
+# Full Playwright suite on PRs into master (and manual dispatch).
+# Smoke already ran on develop PRs; this catches the full suite before production.
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
-  group: pr-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: master-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  playwright-smoke:
-    name: Playwright smoke (landing + api + lifecycle)
+  playwright-full:
+    name: Playwright full suite
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +35,6 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium --with-deps
 
-      # Anon key is a public client credential — accept Actions secret OR variable.
-      # Presence lines never print values (only true/false).
       - name: Require mingo-local smoke secrets
         env:
           SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
@@ -50,11 +47,11 @@ jobs:
           echo "SMOKE_HOST_PASSWORD present:            ${{ secrets.SMOKE_HOST_PASSWORD != '' }}"
           ok=1
           if [ -z "$SECRET_ANON" ]; then
-            echo "::error::VITE_SUPABASE_ANON_KEY is empty. Add it under Settings → Secrets and variables → Actions as a Repository secret OR variable named exactly VITE_SUPABASE_ANON_KEY (value only from .env.local, not the KEY= prefix). Environment secrets are ignored unless the job sets environment:."
+            echo "::error::VITE_SUPABASE_ANON_KEY is empty."
             ok=0
           fi
           if [ -z "$SMOKE_HOST_EMAIL" ]; then
-            echo "::error::SMOKE_HOST_EMAIL is required (dedicated mingo-local test host)."
+            echo "::error::SMOKE_HOST_EMAIL is required."
             ok=0
           fi
           if [ -z "$SMOKE_HOST_PASSWORD" ]; then
@@ -75,8 +72,8 @@ jobs:
             echo "GEMINI_API_KEY=$SECRET_GEMINI" >> "$GITHUB_ENV"
           fi
 
-      - name: Run Playwright smoke
-        run: npm run test:e2e:smoke
+      - name: Run Playwright full suite
+        run: npm run test:e2e
         env:
           CI: true
           SMOKE_HOST_EMAIL: ${{ secrets.SMOKE_HOST_EMAIL }}
@@ -86,7 +83,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-full
           path: |
             playwright-report/
             test-results/

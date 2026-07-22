@@ -1,7 +1,7 @@
 import { KeyRound } from 'lucide-react';
 import { authService } from '../services/auth';
 
-export default function ForgotPasswordScreen({ onSent, onBack }) {
+export default function ForgotPasswordScreen({ onSent, onBack, showToast }) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Reset password</h2>
@@ -17,7 +17,7 @@ export default function ForgotPasswordScreen({ onSent, onBack }) {
             await authService.requestPasswordReset(email);
             onSent();
           } catch (error) {
-            alert(error.message || 'Could not send reset email. Please try again.');
+            showToast(error.message || 'Could not send reset email. Please try again.');
           }
         }}
         className="space-y-4"

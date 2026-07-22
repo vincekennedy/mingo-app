@@ -2,6 +2,7 @@ import { Check, Copy, Play } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
+import { describeWinRule } from '../lib/winDetection';
 
 export default function HostScreen({
   gameCode,
@@ -23,6 +24,8 @@ export default function HostScreen({
   onStartPlaying,
   onResetToHome,
 }) {
+  const winRule = describeWinRule(gameConfig);
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
       <PlayerListSidebar
@@ -54,6 +57,7 @@ export default function HostScreen({
               <h3 className="text-lg sm:text-xl font-semibold text-purple-600 mb-2">{gameConfig.title}</h3>
             )}
             <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
+            <p className="mt-2 text-sm text-purple-700 font-medium">{winRule}</p>
           </div>
 
           <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 sm:p-6 rounded-xl">
