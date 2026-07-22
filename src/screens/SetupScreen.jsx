@@ -37,13 +37,13 @@ export default function SetupScreen({
           value={gameTitle}
           onChange={(e) => setGameTitle(e.target.value)}
           placeholder="Enter a title for your game (used to generate items)"
-          className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base"
         />
         <button
           type="button"
           onClick={onGenerateItems}
           disabled={generatingItems || !gameTitle.trim()}
-          className="mt-3 w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-3 w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 mingo-btn-secondary font-semibold rounded-lg transition text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Sparkles size={18} />
           {generatingItems
@@ -63,7 +63,7 @@ export default function SetupScreen({
           id="setup-board-size"
           value={boardSize}
           onChange={(e) => onUpdateBoardSize(Number(e.target.value))}
-          className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          className="w-full p-3 border-2 mingo-border-brand rounded-lg mingo-focus-brand text-sm sm:text-base"
         >
           <option value={3}>3x3</option>
           <option value={4}>4x4</option>
@@ -92,7 +92,7 @@ export default function SetupScreen({
           id="setup-win-mode"
           value={winMode}
           onChange={(e) => onUpdateWinMode(e.target.value)}
-          className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          className="w-full p-3 border-2 mingo-border-brand rounded-lg mingo-focus-brand text-sm sm:text-base"
         >
           <option value="standard">Standard (lines)</option>
           <option value="four_corners">Four corners</option>
@@ -113,7 +113,7 @@ export default function SetupScreen({
             id="setup-lines-to-win"
             value={linesToWin}
             onChange={(e) => onUpdateLinesToWin(Number(e.target.value))}
-            className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+            className="w-full p-3 border-2 mingo-border-brand rounded-lg mingo-focus-brand text-sm sm:text-base"
           >
             <option value={1}>1 line</option>
             <option value={2}>2 lines</option>
@@ -130,7 +130,7 @@ export default function SetupScreen({
           id="setup-visibility"
           value={gameVisibility}
           onChange={(e) => onUpdateGameVisibility(e.target.value)}
-          className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          className="w-full p-3 border-2 mingo-border-brand rounded-lg mingo-focus-brand text-sm sm:text-base"
         >
           <option value="private">Private (code only)</option>
           <option value="public">Public (listed in lobby)</option>
@@ -150,7 +150,7 @@ export default function SetupScreen({
           </label>
           <button
             onClick={onAddItem}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-sm sm:text-base"
+            className="flex items-center justify-center gap-2 px-4 py-2 mingo-btn-brand-mid rounded-lg transition text-sm sm:text-base"
           >
             <Plus size={18} className="sm:w-5 sm:h-5" /> Add Extra Item
           </button>
@@ -170,11 +170,11 @@ export default function SetupScreen({
                     onChange={(e) => onUpdateItem(index, e.target.value)}
                     placeholder={`Item ${index + 1} (text)`}
                     disabled={!!itemImageUrl}
-                    className={`flex-1 p-2 sm:p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base ${
+                    className={`flex-1 p-2 sm:p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base ${
                       itemImageUrl ? 'bg-gray-100 cursor-not-allowed' : ''
                     }`}
                   />
-                  <label className="flex items-center justify-center px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer text-sm">
+                  <label className="flex items-center justify-center px-3 py-2 mingo-btn-secondary-solid rounded-lg transition cursor-pointer text-sm">
                     <input
                       type="file"
                       accept="image/*"
@@ -203,7 +203,7 @@ export default function SetupScreen({
                     <img
                       src={itemImageUrl}
                       alt={`Item ${index + 1}`}
-                      className="w-full h-32 object-contain rounded border-2 border-purple-300"
+                      className="w-full h-32 object-contain rounded border-2 mingo-border-brand"
                     />
                     <button
                       onClick={() => onRemoveItemImage(index)}
@@ -228,7 +228,7 @@ export default function SetupScreen({
         </button>
         <button
           onClick={onCreateGame}
-          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
         >
           <Play size={20} className="sm:w-6 sm:h-6" /> Create Game
         </button>

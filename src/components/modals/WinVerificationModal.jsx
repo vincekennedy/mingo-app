@@ -36,7 +36,7 @@ export default function WinVerificationModal({
                   className={`bg-white border-2 rounded-lg p-2 text-sm font-semibold cursor-pointer transition-all ${
                     selectedIncorrectItems.has(idx)
                       ? 'border-red-500 bg-red-50 text-red-900'
-                      : 'border-purple-300 text-gray-800 hover:border-purple-500'
+                      : 'mingo-border-brand text-gray-800 mingo-border-brand-hover'
                   }`}
                 >
                   <div className="flex items-center gap-2">

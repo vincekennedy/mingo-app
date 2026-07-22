@@ -5,7 +5,7 @@ export default function PlayerListSidebar({ gamePlayers, confirmedWinners, empty
     <div className="lg:w-64 flex-shrink-0">
       <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">
         <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-          <Users size={20} className="text-purple-600" />
+          <Users size={20} className="mingo-text-brand" />
           Players ({gamePlayers.length})
         </h3>
         {gamePlayers.length === 0 ? (
@@ -21,7 +21,7 @@ export default function PlayerListSidebar({ gamePlayers, confirmedWinners, empty
                     hasWon
                       ? 'bg-yellow-100 border-2 border-yellow-400'
                       : player.isHost
-                      ? 'bg-purple-100 border border-purple-300'
+                      ? 'mingo-surface-brand-soft border mingo-border-brand'
                       : 'bg-gray-100 border border-gray-200'
                   }`}
                 >
@@ -32,7 +32,7 @@ export default function PlayerListSidebar({ gamePlayers, confirmedWinners, empty
                       {player.username}
                     </p>
                     {player.isHost && (
-                      <span className="text-xs text-purple-600 font-medium">Host</span>
+                      <span className="text-xs mingo-text-brand font-medium">Host</span>
                     )}
                   </div>
                   {hasWon && (

@@ -10,12 +10,12 @@ export default function GeneratingItemsOverlay({ generateStatusIndex, generateLo
       aria-labelledby="generate-items-title"
     >
       <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
-        <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
-        <div className="absolute top-10 left-8 h-24 w-24 rounded-full bg-orange-300/30 mingo-generate-orb" style={{ animationDelay: '1.2s' }} />
+        <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full mingo-orb-a mingo-generate-orb" />
+        <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full mingo-orb-b mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
+        <div className="absolute top-10 left-8 h-24 w-24 rounded-full mingo-orb-c mingo-generate-orb" style={{ animationDelay: '1.2s' }} />
 
         <div className="relative p-6 sm:p-8 text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg mingo-generate-sparkle">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl mingo-sparkle shadow-lg mingo-generate-sparkle">
             <Sparkles size={36} className="text-white" />
           </div>
 
@@ -33,7 +33,7 @@ export default function GeneratingItemsOverlay({ generateStatusIndex, generateLo
             {Array.from({ length: 9 }).map((_, i) => (
               <div
                 key={i}
-                className="mingo-generate-tile aspect-square rounded-lg bg-gradient-to-br from-purple-200 via-pink-200 to-orange-200 border border-white/80 shadow-sm"
+                className="mingo-generate-tile aspect-square rounded-lg mingo-generate-tile-fill border border-white/80 shadow-sm"
                 style={{ animationDelay: `${(i % 3) * 0.15 + Math.floor(i / 3) * 0.12}s` }}
               />
             ))}

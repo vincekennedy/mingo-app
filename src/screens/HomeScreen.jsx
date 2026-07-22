@@ -16,10 +16,10 @@ export default function HomeScreen({
       {currentUser ? (
         <>
           <div className="text-center mb-4">
-            <p className="text-gray-600 mb-2">Logged in as: <span className="font-bold text-purple-600">{currentUser.username}</span></p>
+            <p className="text-gray-600 mb-2">Logged in as: <span className="font-bold mingo-text-brand">{currentUser.username}</span></p>
             <button
               onClick={onOpenDashboard}
-              className="text-purple-600 font-semibold hover:text-purple-700 text-sm"
+              className="mingo-link-brand font-semibold text-sm"
             >
               Go to Dashboard →
             </button>
@@ -32,13 +32,13 @@ export default function HomeScreen({
           </div>
           <button
             onClick={onLogin}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
           >
             <LogIn size={20} /> Login
           </button>
           <button
             onClick={onRegister}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-secondary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
           >
             <UserPlus size={20} /> Create Account
           </button>
@@ -67,11 +67,11 @@ export default function HomeScreen({
           onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
           placeholder="Enter 5-digit code"
           maxLength={5}
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-center text-xl sm:text-2xl font-mono uppercase"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"
         />
         <button
           onClick={() => onJoinGame()}
-          className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+          className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-secondary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
         >
           <Users size={20} className="sm:w-6 sm:h-6" /> Join Game
         </button>

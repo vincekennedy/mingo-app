@@ -56,22 +56,25 @@ export default function HostScreen({
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">Game Created!</h2>
             {gameConfig?.title && (
-              <h3 className="text-lg sm:text-xl font-semibold text-purple-600 mb-2">{gameConfig.title}</h3>
+              <h3 className="text-lg sm:text-xl font-semibold mingo-text-brand mb-2">{gameConfig.title}</h3>
             )}
             <div className="flex justify-center mb-2">
               <VisibilityBadge visibility={gameVisibility} />
             </div>
             <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
-            <p className="mt-2 text-sm text-purple-700 font-medium">{winRule}</p>
+            <p className="mt-2 text-sm mingo-text-brand-strong font-medium">{winRule}</p>
           </div>
 
-          <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 sm:p-6 rounded-xl">
-            <div className="text-3xl sm:text-5xl font-bold font-mono text-purple-600 mb-3 sm:mb-4 tracking-wider">
+          <div className="mingo-surface-brand p-4 sm:p-6 rounded-xl">
+            <div
+              data-testid="game-code"
+              className="text-3xl sm:text-5xl font-bold font-mono mingo-text-brand mb-3 sm:mb-4 tracking-wider"
+            >
               {gameCode}
             </div>
             <button
               onClick={onCopyCode}
-              className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm sm:text-base"
+              className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 mingo-btn-brand rounded-lg transition text-sm sm:text-base"
             >
               {copied ? <Check size={18} className="sm:w-5 sm:h-5" /> : <Copy size={18} className="sm:w-5 sm:h-5" />}
               {copied ? 'Copied!' : 'Copy Code'}
@@ -81,7 +84,7 @@ export default function HostScreen({
           <div className="space-y-3">
             <button
               onClick={onStartPlaying}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-blue-700 hover:to-cyan-700 transition shadow-lg"
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-secondary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
             >
               <Play size={20} className="sm:w-6 sm:h-6" /> Start Playing
             </button>

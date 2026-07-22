@@ -9,6 +9,7 @@ import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 import { subscribeGame, subscribeDashboard } from './lib/realtime';
 import { detectWin, normalizeWinConfig } from './lib/winDetection';
+import { DEFAULT_THEME } from './lib/theme';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
@@ -169,7 +170,7 @@ export default function Mingo() {
 
       hydratePromise = (async () => {
         try {
-          const profile = await authService.getUserProfile(user.id);
+          const profile = await authService.ensureUserProfile(user);
           if (cancelled) return;
           const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
@@ -193,7 +194,7 @@ export default function Mingo() {
         const user = await authService.getCurrentUser();
         if (cancelled) return;
         if (user && passwordRecoveryRef.current) {
-          const profile = await authService.getUserProfile(user.id);
+          const profile = await authService.ensureUserProfile(user);
           if (cancelled) return;
           const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
@@ -255,7 +256,7 @@ export default function Mingo() {
       // After bootstrap: quiet updates only (no overlay flash)
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (passwordRecoveryRef.current) return;
-        const profile = await authService.getUserProfile(user.id);
+        const profile = await authService.ensureUserProfile(user);
         if (cancelled) return;
         const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
@@ -378,8 +379,8 @@ export default function Mingo() {
       // Sign in with Supabase
       const user = await authService.signIn(email, password);
       
-      // Get user profile with username
-      const profile = await authService.getUserProfile(user.id);
+      // Get user profile with username (create row if trigger never ran)
+      const profile = await authService.ensureUserProfile(user);
       
       // Set current user state
       const userUsername = resolveDisplayName(profile, email.split('@')[0]);
@@ -1494,7 +1495,7 @@ export default function Mingo() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+    <div data-theme={DEFAULT_THEME} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
       {(registering || loggingIn || !authReady) && (
         <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}

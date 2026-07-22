@@ -11,7 +11,7 @@ export default function EmailConfirmationScreen({ email, onGoToLogin, onBackHome
         <p className="text-gray-600 text-sm sm:text-base">
           We've sent a confirmation email to
         </p>
-        <p className="text-purple-600 font-semibold text-base sm:text-lg mt-1">
+        <p className="mingo-text-brand font-semibold text-base sm:text-lg mt-1">
           {email || 'your email address'}
         </p>
       </div>
@@ -30,7 +30,7 @@ export default function EmailConfirmationScreen({ email, onGoToLogin, onBackHome
       <div className="space-y-3">
         <button
           onClick={onGoToLogin}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
         >
           <LogIn size={20} /> Go to Login
         </button>

@@ -10,11 +10,11 @@ export default function AuthLoadingOverlay({ authReady, registering }) {
       aria-labelledby="auth-loading-title"
     >
       <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full bg-purple-400/40 mingo-generate-orb" />
-        <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-pink-400/40 mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
+        <div className="absolute -top-16 -right-16 h-40 w-40 rounded-full mingo-orb-a mingo-generate-orb" />
+        <div className="absolute -bottom-20 -left-12 h-44 w-44 rounded-full mingo-orb-b mingo-generate-orb" style={{ animationDelay: '0.7s' }} />
 
         <div className="relative p-6 sm:p-8 text-center">
-          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 shadow-lg">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl mingo-sparkle shadow-lg">
             <Loader2 size={36} className="text-white animate-spin" />
           </div>
 
@@ -34,9 +34,9 @@ export default function AuthLoadingOverlay({ authReady, registering }) {
           </p>
 
           <div className="mt-6 flex items-center justify-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-purple-500 animate-pulse" />
-            <span className="h-2.5 w-2.5 rounded-full bg-pink-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
-            <span className="h-2.5 w-2.5 rounded-full bg-orange-400 animate-pulse" style={{ animationDelay: '0.4s' }} />
+            <span className="h-2.5 w-2.5 rounded-full mingo-dot-a animate-pulse" />
+            <span className="h-2.5 w-2.5 rounded-full mingo-dot-b animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <span className="h-2.5 w-2.5 rounded-full mingo-dot-c animate-pulse" style={{ animationDelay: '0.4s' }} />
           </div>
         </div>
       </div>
