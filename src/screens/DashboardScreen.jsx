@@ -1,4 +1,6 @@
 import { AlertCircle, Copy, Loader2, LogOut, Play, X } from 'lucide-react';
+import PublicLobby from '../components/game/PublicLobby';
+import VisibilityBadge from '../components/game/VisibilityBadge';
 import { describeWinRule } from '../lib/winDetection';
 
 export default function DashboardScreen({
@@ -11,6 +13,7 @@ export default function DashboardScreen({
   onDuplicateSetup,
   onCreateGame,
   onJoinWithCode,
+  onJoinPublicGame,
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 sm:space-y-6">
@@ -70,6 +73,7 @@ export default function DashboardScreen({
                         HOST
                       </span>
                     )}
+                    <VisibilityBadge visibility={game.visibility} />
                     {game.pendingWin && game.isHost && (
                       <span className="px-2 py-1 bg-yellow-500 text-white text-xs font-semibold rounded flex items-center gap-1 animate-pulse">
                         <AlertCircle size={12} /> Pending Win
@@ -112,6 +116,10 @@ export default function DashboardScreen({
           ))}
         </div>
       )}
+
+      <div className="pt-4 border-t">
+        <PublicLobby onJoinGame={onJoinPublicGame} />
+      </div>
 
       <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
         <button

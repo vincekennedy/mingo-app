@@ -1,11 +1,13 @@
 import { AlertCircle, Home, RotateCcw, Shuffle, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
+import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import { describeWinRule } from '../lib/winDetection';
 
 export default function PlayScreen({
   gameCode,
   gameConfig,
+  gameVisibility,
   gamePlayers,
   confirmedWinners,
   isHost,
@@ -51,6 +53,9 @@ export default function PlayScreen({
             <div className="text-center mb-2">
               <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
               <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
+              <div className="mt-2 flex justify-center">
+                <VisibilityBadge visibility={gameVisibility} />
+              </div>
               <p className="mt-2 text-xs sm:text-sm text-purple-700 font-medium">{winRule}</p>
             </div>
             {currentUser && (

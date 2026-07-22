@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.games (
   host_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   config JSONB NOT NULL,
   status VARCHAR(20) DEFAULT 'active',
+  visibility text NOT NULL DEFAULT 'private'
+    CHECK (visibility IN ('private', 'public')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -77,6 +79,9 @@ CREATE TABLE IF NOT EXISTS public.win_claims (
 -- Indexes
 -- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_games_host ON public.games(host_id);
+CREATE INDEX IF NOT EXISTS idx_games_public_lobby
+  ON public.games (status, visibility, created_at DESC)
+  WHERE status = 'active' AND visibility = 'public';
 CREATE INDEX IF NOT EXISTS idx_participants_game ON public.game_participants(game_code);
 CREATE INDEX IF NOT EXISTS idx_participants_user ON public.game_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_code, user_id);
@@ -164,11 +169,91 @@ CREATE POLICY "Users can insert own profile" ON public.users
 CREATE POLICY "Users can update own data" ON public.users
   FOR UPDATE TO authenticated USING (auth.uid() = id);
 
+-- Fellow-participant / game SELECT helper (SECURITY DEFINER; defined before policies that use it)
+CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.game_participants
+    WHERE game_code = p_game_code
+      AND user_id = auth.uid()
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
+
+-- Load any active game by exact code (private join path before participant row exists).
+CREATE OR REPLACE FUNCTION public.get_active_game_by_code(p_code text)
+RETURNS SETOF public.games
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT *
+  FROM public.games
+  WHERE code = upper(trim(p_code))
+    AND status = 'active'
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_active_game_by_code(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_active_game_by_code(text) TO anon, authenticated;
+
+-- Lobby: open public games with participant counts.
+CREATE OR REPLACE FUNCTION public.list_public_games(p_limit int DEFAULT 10)
+RETURNS TABLE (
+  code varchar(5),
+  title text,
+  player_count bigint,
+  board_size int,
+  win_mode text,
+  created_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT
+    g.code,
+    NULLIF(trim(g.config->>'title'), '') AS title,
+    (
+      SELECT count(*)::bigint
+      FROM public.game_participants gp
+      WHERE gp.game_code = g.code
+    ) AS player_count,
+    COALESCE((g.config->>'boardSize')::int, 5) AS board_size,
+    COALESCE(NULLIF(trim(g.config->>'winMode'), ''), 'standard') AS win_mode,
+    g.created_at
+  FROM public.games g
+  WHERE g.status = 'active'
+    AND g.visibility = 'public'
+  ORDER BY g.created_at DESC
+  LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 10), 50));
+$$;
+
+REVOKE ALL ON FUNCTION public.list_public_games(int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_public_games(int) TO anon, authenticated;
+
 -- -----------------------------------------------------------------------------
 -- RLS: games
 -- -----------------------------------------------------------------------------
-CREATE POLICY "Anyone can read games" ON public.games
-  FOR SELECT TO authenticated USING (true);
+-- Public games are readable by any authenticated user; private only for host
+-- or participants. Join-by-code for private games uses get_active_game_by_code.
+CREATE POLICY "Read public, hosted, or participating games" ON public.games
+  FOR SELECT TO authenticated
+  USING (
+    visibility = 'public'
+    OR host_id = auth.uid()
+    OR public.is_participant_of(code)
+  );
 
 CREATE POLICY "Hosts can create games" ON public.games
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = host_id);
@@ -197,25 +282,6 @@ CREATE POLICY "Hosts can read participants of their games" ON public.game_partic
         AND g.host_id = auth.uid()
     )
   );
-
--- Fellow participants (SECURITY DEFINER avoids recursive RLS on game_participants)
-CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-STABLE
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.game_participants
-    WHERE game_code = p_game_code
-      AND user_id = auth.uid()
-  );
-$$;
-
-REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
 
 CREATE POLICY "Participants can read fellow participants"
   ON public.game_participants
