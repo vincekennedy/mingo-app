@@ -15,6 +15,8 @@ export default function SetupScreen({
   onUpdateWinMode,
   linesToWin,
   onUpdateLinesToWin,
+  gameVisibility,
+  onUpdateGameVisibility,
   items,
   onAddItem,
   onUpdateItem,
@@ -119,6 +121,24 @@ export default function SetupScreen({
           </select>
         </div>
       )}
+
+      <div className="mb-6">
+        <label htmlFor="setup-visibility" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+          Visibility
+        </label>
+        <select
+          id="setup-visibility"
+          value={gameVisibility}
+          onChange={(e) => onUpdateGameVisibility(e.target.value)}
+          className="w-full p-3 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+        >
+          <option value="private">Private (code only)</option>
+          <option value="public">Public (listed in lobby)</option>
+        </select>
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Private games stay off the public lobby. Anyone with the exact code can still join.
+        </p>
+      </div>
 
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2">

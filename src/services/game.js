@@ -6,10 +6,13 @@ export const gameService = {
    * @param {string} code - Game code (5 characters)
    * @param {string} hostId - User ID of the host
    * @param {Object} config - Game configuration {items, boardSize, useFreeSpace, title, winMode, linesToWin}
+   * @param {{ visibility?: 'private' | 'public' }} [options]
    * @returns {Promise<Object>} Created game data
    */
-  async createGame(code, hostId, config) {
+  async createGame(code, hostId, config, options = {}) {
     try {
+      const visibility = options.visibility === 'public' ? 'public' : 'private'
+
       // Verify user profile exists first
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
@@ -30,6 +33,7 @@ export const gameService = {
           host_id: hostId,
           config,
           status: 'active',
+          visibility,
         })
         .select()
         .single()
@@ -65,29 +69,53 @@ export const gameService = {
   },
   
   /**
-   * Get game by code
+   * Get game by code (works for private games before the caller is a participant)
    * @param {string} code - Game code
    * @returns {Promise<Object>} Game data
    */
   async getGame(code) {
     try {
-      const { data, error } = await supabase
-        .from('games')
-        .select('*')
-        .eq('code', code)
-        .eq('status', 'active')
-        .single()
-      
-      if (error) {
-        if (error.code === 'PGRST116') {
-          throw new Error('Game not found')
-        }
-        throw error
+      const { data, error } = await supabase.rpc('get_active_game_by_code', {
+        p_code: code,
+      })
+
+      if (error) throw error
+
+      const game = Array.isArray(data) ? data[0] : data
+      if (!game) {
+        throw new Error('Game not found')
       }
-      
-      return data
+
+      return game
     } catch (error) {
       console.error('Get game error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * List open public games for the lobby
+   * @param {number} [limit=10]
+   * @returns {Promise<Array<{ code: string, title: string|null, playerCount: number, boardSize: number, winMode: string, createdAt: string }>>}
+   */
+  async listPublicGames(limit = 10) {
+    try {
+      const { data, error } = await supabase.rpc('list_public_games', {
+        p_limit: limit,
+      })
+
+      if (error) throw error
+
+      return (data || []).map((row) => ({
+        code: row.code,
+        title: row.title || null,
+        playerCount: Number(row.player_count) || 0,
+        boardSize: row.board_size || 5,
+        winMode: row.win_mode || 'standard',
+        createdAt: row.created_at,
+      }))
+    } catch (error) {
+      console.error('List public games error:', error)
       throw error
     }
   },
@@ -178,6 +206,7 @@ export const gameService = {
         isHost: participant.is_host,
         joinedAt: participant.joined_at,
         config: participant.game?.config || null,
+        visibility: participant.game?.visibility === 'public' ? 'public' : 'private',
         pendingWin: false, // Will be set by checking win_claims
       }))
     } catch (error) {

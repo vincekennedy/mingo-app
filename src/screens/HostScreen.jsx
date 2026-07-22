@@ -1,5 +1,6 @@
 import { Check, Copy, Play } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
+import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
 import { describeWinRule } from '../lib/winDetection';
@@ -7,6 +8,7 @@ import { describeWinRule } from '../lib/winDetection';
 export default function HostScreen({
   gameCode,
   gameConfig,
+  gameVisibility,
   gamePlayers,
   confirmedWinners,
   pendingWinClaim,
@@ -56,6 +58,9 @@ export default function HostScreen({
             {gameConfig?.title && (
               <h3 className="text-lg sm:text-xl font-semibold text-purple-600 mb-2">{gameConfig.title}</h3>
             )}
+            <div className="flex justify-center mb-2">
+              <VisibilityBadge visibility={gameVisibility} />
+            </div>
             <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
             <p className="mt-2 text-sm text-purple-700 font-medium">{winRule}</p>
           </div>
