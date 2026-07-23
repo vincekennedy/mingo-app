@@ -103,9 +103,9 @@ export default function PlayScreen({
 
         <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-8">
           <div
-            className="grid gap-1.5 sm:gap-2 mx-auto"
+            className="grid gap-1.5 sm:gap-2 mx-auto w-full"
             style={{
-              gridTemplateColumns: `repeat(${boardSize}, 1fr)`,
+              gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
               maxWidth: `min(100%, ${boardSize * 120}px)`
             }}
           >
@@ -114,7 +114,7 @@ export default function PlayScreen({
                 key={index}
                 onClick={() => onToggleCell(index)}
                 className={`
-                  aspect-square p-1 sm:p-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center text-center transition-all
+                  mingo-board-cell w-full p-1 sm:p-2 rounded-lg font-semibold flex items-center justify-center text-center transition-all
                   ${cell.isFree
                     ? 'mingo-cell-free text-gray-900 cursor-default'
                     : marked.has(index)
@@ -130,7 +130,7 @@ export default function PlayScreen({
                     className="w-full h-full object-cover rounded"
                   />
                 ) : (
-                  <span className="break-words leading-tight">{cell.text}</span>
+                  <span className="mingo-board-cell-text">{cell.text}</span>
                 )}
               </button>
             ))}

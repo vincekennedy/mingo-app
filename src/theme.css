@@ -258,3 +258,35 @@
     var(--mingo-cell-free-to)
   );
 }
+
+/* Play board: keep tiles square and readable when labels are long */
+.mingo-board-cell {
+  container-type: inline-size;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mingo-board-cell-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+  width: 100%;
+  min-width: 0;
+  /* Scale with cell width so small mobile tiles still fit more text */
+  font-size: clamp(0.55rem, 15cqi, 0.875rem);
+}
+
+@media (min-width: 640px) {
+  .mingo-board-cell-text {
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    font-size: clamp(0.65rem, 12cqi, 0.875rem);
+  }
+}
