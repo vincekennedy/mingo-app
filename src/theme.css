@@ -1,0 +1,292 @@
+/*
+ * Mingo color tokens
+ *
+ * Swap named themes later with data-theme on the app shell:
+ *   <div data-theme="party" className="mingo-shell …">
+ * Presets only change these CSS variables — keep components on the utilities below.
+ */
+
+:root,
+[data-theme='party'] {
+  /* Page shell */
+  --mingo-shell-from: #a855f7; /* purple-500 */
+  --mingo-shell-via: #ec4899; /* pink-500 */
+  --mingo-shell-to: #f97316; /* orange-500 */
+
+  /* Primary CTA (purple → pink) */
+  --mingo-primary-from: #9333ea; /* purple-600 */
+  --mingo-primary-to: #db2777; /* pink-600 */
+  --mingo-primary-from-hover: #7e22ce; /* purple-700 */
+  --mingo-primary-to-hover: #be185d; /* pink-700 */
+
+  /* Secondary CTA (blue → cyan) */
+  --mingo-secondary-from: #2563eb; /* blue-600 */
+  --mingo-secondary-to: #0891b2; /* cyan-600 */
+  --mingo-secondary-from-hover: #1d4ed8; /* blue-700 */
+  --mingo-secondary-to-hover: #0e7490; /* cyan-700 */
+
+  /* Brand accents (text, borders, soft fills) */
+  --mingo-brand: #9333ea; /* purple-600 */
+  --mingo-brand-hover: #7e22ce; /* purple-700 */
+  --mingo-brand-strong: #7e22ce; /* purple-700 */
+  --mingo-brand-solid: #9333ea; /* purple-600 */
+  --mingo-brand-solid-hover: #7e22ce; /* purple-700 */
+  --mingo-brand-soft: #f3e8ff; /* purple-100 */
+  --mingo-brand-soft-hover: #e9d5ff; /* purple-200 */
+  --mingo-brand-tint: #faf5ff; /* purple-50 */
+  --mingo-brand-muted: #fce7f3; /* pink-100 */
+  --mingo-brand-border: #d8b4fe; /* purple-300 */
+  --mingo-brand-focus: #a855f7; /* purple-500 */
+  --mingo-brand-mid: #a855f7; /* purple-500 — solid mid buttons */
+  --mingo-brand-mid-hover: #9333ea; /* purple-600 */
+
+  /* Secondary solid (non-gradient actions) */
+  --mingo-secondary-solid: #3b82f6; /* blue-500 */
+  --mingo-secondary-solid-hover: #2563eb; /* blue-600 */
+
+  /* Decorative orbs / sparkle */
+  --mingo-orb-a: rgb(192 132 252 / 0.4); /* purple-400/40 */
+  --mingo-orb-b: rgb(244 114 182 / 0.4); /* pink-400/40 */
+  --mingo-orb-c: rgb(253 186 116 / 0.3); /* orange-300/30 */
+  --mingo-sparkle-from: #9333ea;
+  --mingo-sparkle-via: #ec4899;
+  --mingo-sparkle-to: #fb923c; /* orange-400 */
+  --mingo-tile-from: #e9d5ff; /* purple-200 */
+  --mingo-tile-via: #fbcfe8; /* pink-200 */
+  --mingo-tile-to: #fed7aa; /* orange-200 */
+
+  /* Avatar chip */
+  --mingo-avatar-from: #a855f7;
+  --mingo-avatar-to: #ec4899;
+
+  /* Board cells */
+  --mingo-cell-idle-from: #f3e8ff; /* purple-100 */
+  --mingo-cell-idle-to: #fce7f3; /* pink-100 */
+  --mingo-cell-marked-from: #22c55e; /* green-500 */
+  --mingo-cell-marked-to: #059669; /* emerald-600 */
+  --mingo-cell-free-from: #facc15; /* yellow-400 */
+  --mingo-cell-free-to: #fb923c; /* orange-400 */
+
+  /* Dot indicators on loading overlays */
+  --mingo-dot-a: #a855f7;
+  --mingo-dot-b: #ec4899;
+  --mingo-dot-c: #fb923c;
+}
+
+/* Future presets only need to redefine the variables above, e.g.:
+ * [data-theme='ocean'] { --mingo-shell-from: …; … }
+ */
+
+.mingo-shell {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-shell-from),
+    var(--mingo-shell-via),
+    var(--mingo-shell-to)
+  );
+}
+
+.mingo-btn-primary {
+  background-image: linear-gradient(
+    to right,
+    var(--mingo-primary-from),
+    var(--mingo-primary-to)
+  );
+  color: #fff;
+}
+.mingo-btn-primary:hover {
+  background-image: linear-gradient(
+    to right,
+    var(--mingo-primary-from-hover),
+    var(--mingo-primary-to-hover)
+  );
+}
+
+.mingo-btn-secondary {
+  background-image: linear-gradient(
+    to right,
+    var(--mingo-secondary-from),
+    var(--mingo-secondary-to)
+  );
+  color: #fff;
+}
+.mingo-btn-secondary:hover {
+  background-image: linear-gradient(
+    to right,
+    var(--mingo-secondary-from-hover),
+    var(--mingo-secondary-to-hover)
+  );
+}
+
+.mingo-btn-brand {
+  background-color: var(--mingo-brand-solid);
+  color: #fff;
+}
+.mingo-btn-brand:hover {
+  background-color: var(--mingo-brand-solid-hover);
+}
+
+.mingo-btn-brand-mid {
+  background-color: var(--mingo-brand-mid);
+  color: #fff;
+}
+.mingo-btn-brand-mid:hover {
+  background-color: var(--mingo-brand-mid-hover);
+}
+
+.mingo-btn-secondary-solid {
+  background-color: var(--mingo-secondary-solid);
+  color: #fff;
+}
+.mingo-btn-secondary-solid:hover {
+  background-color: var(--mingo-secondary-solid-hover);
+}
+
+.mingo-text-brand {
+  color: var(--mingo-brand);
+}
+.mingo-text-brand-strong {
+  color: var(--mingo-brand-strong);
+}
+.mingo-link-brand {
+  color: var(--mingo-brand);
+}
+.mingo-link-brand:hover {
+  color: var(--mingo-brand-hover);
+}
+
+.mingo-border-brand {
+  border-color: var(--mingo-brand-border);
+}
+.mingo-border-brand-hover:hover {
+  border-color: var(--mingo-brand-focus);
+}
+.mingo-focus-brand:focus {
+  border-color: var(--mingo-brand-focus);
+  outline: none;
+}
+
+.mingo-surface-brand {
+  background-image: linear-gradient(
+    to right,
+    var(--mingo-brand-soft),
+    var(--mingo-brand-muted)
+  );
+}
+.mingo-surface-brand-soft {
+  background-color: var(--mingo-brand-soft);
+}
+.mingo-surface-brand-tint {
+  background-color: var(--mingo-brand-tint);
+}
+.mingo-chip-brand {
+  background-color: var(--mingo-brand-solid);
+  color: #fff;
+}
+.mingo-chip-brand-soft {
+  background-color: var(--mingo-brand-soft);
+  color: var(--mingo-brand-strong);
+}
+.mingo-chip-brand-soft:hover {
+  background-color: var(--mingo-brand-soft-hover);
+}
+
+.mingo-avatar {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-avatar-from),
+    var(--mingo-avatar-to)
+  );
+}
+
+.mingo-orb-a {
+  background-color: var(--mingo-orb-a);
+}
+.mingo-orb-b {
+  background-color: var(--mingo-orb-b);
+}
+.mingo-orb-c {
+  background-color: var(--mingo-orb-c);
+}
+
+.mingo-sparkle {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-sparkle-from),
+    var(--mingo-sparkle-via),
+    var(--mingo-sparkle-to)
+  );
+}
+
+.mingo-generate-tile-fill {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-tile-from),
+    var(--mingo-tile-via),
+    var(--mingo-tile-to)
+  );
+}
+
+.mingo-dot-a {
+  background-color: var(--mingo-dot-a);
+}
+.mingo-dot-b {
+  background-color: var(--mingo-dot-b);
+}
+.mingo-dot-c {
+  background-color: var(--mingo-dot-c);
+}
+
+.mingo-cell-idle {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-cell-idle-from),
+    var(--mingo-cell-idle-to)
+  );
+}
+.mingo-cell-marked {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-cell-marked-from),
+    var(--mingo-cell-marked-to)
+  );
+}
+.mingo-cell-free {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--mingo-cell-free-from),
+    var(--mingo-cell-free-to)
+  );
+}
+
+/* Play board: keep tiles square and readable when labels are long */
+.mingo-board-cell {
+  container-type: inline-size;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mingo-board-cell-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.15;
+  width: 100%;
+  min-width: 0;
+  /* Scale with cell width so small mobile tiles still fit more text */
+  font-size: clamp(0.55rem, 15cqi, 0.875rem);
+}
+
+@media (min-width: 640px) {
+  .mingo-board-cell-text {
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    font-size: clamp(0.65rem, 12cqi, 0.875rem);
+  }
+}

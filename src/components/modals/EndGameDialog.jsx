@@ -13,7 +13,7 @@ export default function EndGameDialog({ onContinue, onEndGame }) {
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <button
           onClick={onContinue}
-          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg"
+          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 mingo-btn-secondary-solid font-semibold rounded-xl transition shadow-lg"
         >
           <Play size={20} /> Continue Playing
         </button>

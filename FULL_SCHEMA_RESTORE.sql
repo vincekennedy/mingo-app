@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.games (
   host_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   config JSONB NOT NULL,
   status VARCHAR(20) DEFAULT 'active',
+  visibility text NOT NULL DEFAULT 'private'
+    CHECK (visibility IN ('private', 'public')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -77,6 +79,9 @@ CREATE TABLE IF NOT EXISTS public.win_claims (
 -- Indexes
 -- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_games_host ON public.games(host_id);
+CREATE INDEX IF NOT EXISTS idx_games_public_lobby
+  ON public.games (status, visibility, created_at DESC)
+  WHERE status = 'active' AND visibility = 'public';
 CREATE INDEX IF NOT EXISTS idx_participants_game ON public.game_participants(game_code);
 CREATE INDEX IF NOT EXISTS idx_participants_user ON public.game_participants(user_id);
 CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_code, user_id);
@@ -164,11 +169,91 @@ CREATE POLICY "Users can insert own profile" ON public.users
 CREATE POLICY "Users can update own data" ON public.users
   FOR UPDATE TO authenticated USING (auth.uid() = id);
 
+-- Fellow-participant / game SELECT helper (SECURITY DEFINER; defined before policies that use it)
+CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.game_participants
+    WHERE game_code = p_game_code
+      AND user_id = auth.uid()
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
+
+-- Load any active game by exact code (private join path before participant row exists).
+CREATE OR REPLACE FUNCTION public.get_active_game_by_code(p_code text)
+RETURNS SETOF public.games
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT *
+  FROM public.games
+  WHERE code = upper(trim(p_code))
+    AND status = 'active'
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_active_game_by_code(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_active_game_by_code(text) TO anon, authenticated;
+
+-- Lobby: open public games with participant counts.
+CREATE OR REPLACE FUNCTION public.list_public_games(p_limit int DEFAULT 10)
+RETURNS TABLE (
+  code varchar(5),
+  title text,
+  player_count bigint,
+  board_size int,
+  win_mode text,
+  created_at timestamptz
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT
+    g.code,
+    NULLIF(trim(g.config->>'title'), '') AS title,
+    (
+      SELECT count(*)::bigint
+      FROM public.game_participants gp
+      WHERE gp.game_code = g.code
+    ) AS player_count,
+    COALESCE((g.config->>'boardSize')::int, 5) AS board_size,
+    COALESCE(NULLIF(trim(g.config->>'winMode'), ''), 'standard') AS win_mode,
+    g.created_at
+  FROM public.games g
+  WHERE g.status = 'active'
+    AND g.visibility = 'public'
+  ORDER BY g.created_at DESC
+  LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 10), 50));
+$$;
+
+REVOKE ALL ON FUNCTION public.list_public_games(int) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.list_public_games(int) TO anon, authenticated;
+
 -- -----------------------------------------------------------------------------
 -- RLS: games
 -- -----------------------------------------------------------------------------
-CREATE POLICY "Anyone can read games" ON public.games
-  FOR SELECT TO authenticated USING (true);
+-- Public games are readable by any authenticated user; private only for host
+-- or participants. Join-by-code for private games uses get_active_game_by_code.
+CREATE POLICY "Read public, hosted, or participating games" ON public.games
+  FOR SELECT TO authenticated
+  USING (
+    visibility = 'public'
+    OR host_id = auth.uid()
+    OR public.is_participant_of(code)
+  );
 
 CREATE POLICY "Hosts can create games" ON public.games
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = host_id);
@@ -197,25 +282,6 @@ CREATE POLICY "Hosts can read participants of their games" ON public.game_partic
         AND g.host_id = auth.uid()
     )
   );
-
--- Fellow participants (SECURITY DEFINER avoids recursive RLS on game_participants)
-CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-STABLE
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.game_participants
-    WHERE game_code = p_game_code
-      AND user_id = auth.uid()
-  );
-$$;
-
-REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
 
 CREATE POLICY "Participants can read fellow participants"
   ON public.game_participants
@@ -413,6 +479,134 @@ REVOKE ALL ON FUNCTION public.list_guest_users_for_cleanup(interval, integer) FR
 REVOKE ALL ON FUNCTION public.cleanup_guest_users(interval, integer, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.list_guest_users_for_cleanup(interval, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.cleanup_guest_users(interval, integer, boolean) TO service_role;
+
+-- -----------------------------------------------------------------------------
+-- Smoke e2e data cleanup (titles / guest name prefixes from Playwright)
+-- Full schedule + grants: see supabase/migrations/20260722010000_smoke_test_data_cleanup.sql
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.is_smoke_test_game_title(p_title text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT COALESCE(p_title, '') ~* '(smoke test|corners smoke|lobby (private|public) smoke)';
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_smoke_test_guest_name(p_username text, p_display_name text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT
+    COALESCE(p_display_name, '') ~* '^(SmokeGuest|CornerGuest|LobbyGuest)'
+    OR COALESCE(p_username, '') ~* '^(SmokeGuest|CornerGuest|LobbyGuest)';
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_smoke_test_games_for_cleanup(p_limit integer DEFAULT 100)
+RETURNS TABLE (game_code varchar(5))
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT g.code
+  FROM public.games g
+  WHERE public.is_smoke_test_game_title(g.config->>'title')
+  ORDER BY g.created_at ASC
+  LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 100), 500));
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_smoke_test_users_for_cleanup(p_limit integer DEFAULT 100)
+RETURNS TABLE (user_id uuid)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT u.id
+  FROM auth.users u
+  INNER JOIN public.users p ON p.id = u.id
+  WHERE u.is_anonymous IS TRUE
+    AND public.is_smoke_test_guest_name(p.username, p.display_name)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.game_participants gp
+      INNER JOIN public.games g ON g.code = gp.game_code
+      WHERE gp.user_id = u.id
+        AND g.status = 'active'
+        AND NOT public.is_smoke_test_game_title(g.config->>'title')
+    )
+  ORDER BY u.created_at ASC
+  LIMIT GREATEST(1, LEAST(COALESCE(p_limit, 100), 500));
+$$;
+
+CREATE OR REPLACE FUNCTION public.cleanup_smoke_test_data(
+  p_limit integer DEFAULT 100,
+  p_dry_run boolean DEFAULT false
+)
+RETURNS TABLE (kind text, id text, dry_run boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  game_codes varchar(5)[];
+  user_ids uuid[];
+  lim integer := GREATEST(1, LEAST(COALESCE(p_limit, 100), 500));
+BEGIN
+  SELECT coalesce(array_agg(l.game_code), ARRAY[]::varchar(5)[])
+    INTO game_codes
+  FROM public.list_smoke_test_games_for_cleanup(lim) AS l;
+
+  IF p_dry_run THEN
+    RETURN QUERY
+      SELECT 'game'::text, c::text, true
+      FROM unnest(game_codes) AS c;
+  ELSIF cardinality(game_codes) > 0 THEN
+    DELETE FROM public.games g
+    WHERE g.code = ANY (game_codes)
+      AND public.is_smoke_test_game_title(g.config->>'title');
+
+    RETURN QUERY
+      SELECT 'game'::text, c::text, false
+      FROM unnest(game_codes) AS c;
+  END IF;
+
+  SELECT coalesce(array_agg(l.user_id), ARRAY[]::uuid[])
+    INTO user_ids
+  FROM public.list_smoke_test_users_for_cleanup(lim) AS l;
+
+  IF p_dry_run THEN
+    RETURN QUERY
+      SELECT 'user'::text, i::text, true
+      FROM unnest(user_ids) AS i;
+    RETURN;
+  END IF;
+
+  IF cardinality(user_ids) = 0 THEN
+    RETURN;
+  END IF;
+
+  DELETE FROM auth.users au
+  WHERE au.id = ANY (user_ids)
+    AND au.is_anonymous IS TRUE;
+
+  RETURN QUERY
+    SELECT 'user'::text, i::text, false
+    FROM unnest(user_ids) AS i;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.is_smoke_test_game_title(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_smoke_test_guest_name(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.list_smoke_test_games_for_cleanup(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.list_smoke_test_users_for_cleanup(integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.cleanup_smoke_test_data(integer, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_smoke_test_game_title(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.is_smoke_test_guest_name(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.list_smoke_test_games_for_cleanup(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.list_smoke_test_users_for_cleanup(integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.cleanup_smoke_test_data(integer, boolean) TO service_role;
 
 -- -----------------------------------------------------------------------------
 -- Realtime publication (postgres_changes for host/play/dashboard)

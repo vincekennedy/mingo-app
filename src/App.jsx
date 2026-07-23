@@ -9,6 +9,7 @@ import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 import { subscribeGame, subscribeDashboard } from './lib/realtime';
 import { detectWin, normalizeWinConfig } from './lib/winDetection';
+import { DEFAULT_THEME } from './lib/theme';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
@@ -42,6 +43,7 @@ export default function Mingo() {
   const [useFreeSpace, setUseFreeSpace] = useState(true);
   const [winMode, setWinMode] = useState('standard');
   const [linesToWin, setLinesToWin] = useState(1);
+  const [gameVisibility, setGameVisibility] = useState('private');
   const [gameCode, setGameCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
@@ -168,7 +170,7 @@ export default function Mingo() {
 
       hydratePromise = (async () => {
         try {
-          const profile = await authService.getUserProfile(user.id);
+          const profile = await authService.ensureUserProfile(user);
           if (cancelled) return;
           const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
@@ -192,7 +194,7 @@ export default function Mingo() {
         const user = await authService.getCurrentUser();
         if (cancelled) return;
         if (user && passwordRecoveryRef.current) {
-          const profile = await authService.getUserProfile(user.id);
+          const profile = await authService.ensureUserProfile(user);
           if (cancelled) return;
           const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
           setCurrentUser({
@@ -254,7 +256,7 @@ export default function Mingo() {
       // After bootstrap: quiet updates only (no overlay flash)
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (passwordRecoveryRef.current) return;
-        const profile = await authService.getUserProfile(user.id);
+        const profile = await authService.ensureUserProfile(user);
         if (cancelled) return;
         const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
         setCurrentUser({
@@ -377,8 +379,8 @@ export default function Mingo() {
       // Sign in with Supabase
       const user = await authService.signIn(email, password);
       
-      // Get user profile with username
-      const profile = await authService.getUserProfile(user.id);
+      // Get user profile with username (create row if trigger never ran)
+      const profile = await authService.ensureUserProfile(user);
       
       // Set current user state
       const userUsername = resolveDisplayName(profile, email.split('@')[0]);
@@ -531,6 +533,7 @@ export default function Mingo() {
       const config = game.config;
       setGameConfig(config);
       setGameCode(gameCodeToLoad);
+      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
       {
@@ -606,6 +609,7 @@ export default function Mingo() {
       setIsHost(game.isHost);
       setGameConfig(game.config);
       setGameCode(game.gameCode);
+      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
       setGameTitle(game.config?.title || '');
       setBoardSize(game.config.boardSize || 5);
       setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
@@ -738,6 +742,10 @@ export default function Mingo() {
     setLinesToWin(value);
   };
 
+  const updateGameVisibility = (value) => {
+    setGameVisibility(value === 'public' ? 'public' : 'private');
+  };
+
   const duplicateSetupFromGame = (game) => {
     const config = game?.config;
     if (!config?.items || !Array.isArray(config.items) || config.items.length === 0) {
@@ -755,6 +763,7 @@ export default function Mingo() {
     setUseFreeSpace(free);
     setWinMode(rules.winMode);
     setLinesToWin(rules.linesToWin);
+    setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
     setItems(normalizedItems);
     setScreen('setup');
   };
@@ -856,11 +865,14 @@ export default function Mingo() {
 
     setGameCode(code);
     setGameConfig(config);
+    setGameVisibility(gameVisibility === 'public' ? 'public' : 'private');
     setIsHost(true);
     
     // Store in Supabase
     try {
-      await gameService.createGame(code, currentUser.id, config);
+      await gameService.createGame(code, currentUser.id, config, {
+        visibility: gameVisibility,
+      });
       console.log(`Game ${code} created and stored successfully`);
       
       // Reload user games to show the new game
@@ -899,6 +911,7 @@ export default function Mingo() {
       
       setGameConfig(config);
       setGameCode(code);
+      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
       {
@@ -946,12 +959,14 @@ export default function Mingo() {
     setGuestJoinError(null);
   };
 
-  const joinGame = async () => {
-    const code = joinCode.toUpperCase().trim();
+  const joinGame = async (codeOverride) => {
+    const code = (codeOverride ?? joinCode).toUpperCase().trim();
     if (code.length !== 5) {
       showToast('Please enter a 5-character game code');
       return;
     }
+
+    setJoinCode(code);
 
     if (!currentUser) {
       setGuestJoinError(null);
@@ -1480,7 +1495,7 @@ export default function Mingo() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 p-4 sm:p-8 relative">
+    <div data-theme={DEFAULT_THEME} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
       {(registering || loggingIn || !authReady) && (
         <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}
@@ -1623,12 +1638,14 @@ export default function Mingo() {
             onCreateGame={() => {
               setWinMode('standard');
               setLinesToWin(1);
+              setGameVisibility('private');
               setScreen('setup');
             }}
             onJoinWithCode={() => {
               setJoinCode('');
               setScreen('home');
             }}
+            onJoinPublicGame={joinGame}
           />
         )}
 
@@ -1652,6 +1669,7 @@ export default function Mingo() {
             onLogin={() => setScreen('login')}
             onRegister={() => setScreen('register')}
             onJoinGame={joinGame}
+            onJoinPublicGame={joinGame}
           />
         )}
 
@@ -1671,6 +1689,8 @@ export default function Mingo() {
             onUpdateWinMode={updateWinMode}
             linesToWin={linesToWin}
             onUpdateLinesToWin={updateLinesToWin}
+            gameVisibility={gameVisibility}
+            onUpdateGameVisibility={updateGameVisibility}
             items={items}
             onAddItem={addItem}
             onUpdateItem={updateItem}
@@ -1692,6 +1712,7 @@ export default function Mingo() {
           <HostScreen
             gameCode={gameCode}
             gameConfig={gameConfig}
+            gameVisibility={gameVisibility}
             gamePlayers={gamePlayers}
             confirmedWinners={confirmedWinners}
             pendingWinClaim={pendingWinClaim}
@@ -1723,6 +1744,7 @@ export default function Mingo() {
           <PlayScreen
             gameCode={gameCode}
             gameConfig={gameConfig}
+            gameVisibility={gameVisibility}
             gamePlayers={gamePlayers}
             confirmedWinners={confirmedWinners}
             isHost={isHost}

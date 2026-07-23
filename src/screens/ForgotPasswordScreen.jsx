@@ -27,11 +27,11 @@ export default function ForgotPasswordScreen({ onSent, onBack, showToast }) {
           type="email"
           placeholder="Email"
           required
-          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base"
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base"
         />
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-base sm:text-lg rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg"
+          className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
         >
           <KeyRound size={20} /> Send reset link
         </button>

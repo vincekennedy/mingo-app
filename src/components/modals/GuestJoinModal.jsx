@@ -61,7 +61,7 @@ export default function GuestJoinModal({
               maxLength={24}
               autoFocus
               disabled={guestJoining}
-              className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 text-sm sm:text-base disabled:bg-gray-100"
+              className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base disabled:bg-gray-100"
             />
           </div>
 
@@ -77,7 +77,7 @@ export default function GuestJoinModal({
             <button
               type="submit"
               disabled={guestJoining}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition disabled:opacity-60"
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 mingo-btn-primary font-bold rounded-xl transition disabled:opacity-60"
             >
               {guestJoining ? (
                 <>

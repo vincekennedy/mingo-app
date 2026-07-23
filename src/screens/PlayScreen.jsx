@@ -1,11 +1,13 @@
 import { AlertCircle, Home, RotateCcw, Shuffle, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
+import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import { describeWinRule } from '../lib/winDetection';
 
 export default function PlayScreen({
   gameCode,
   gameConfig,
+  gameVisibility,
   gamePlayers,
   confirmedWinners,
   isHost,
@@ -50,13 +52,16 @@ export default function PlayScreen({
           <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
             <div className="text-center mb-2">
               <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
-              <p className="text-xl sm:text-2xl font-bold font-mono text-purple-600">{gameCode}</p>
-              <p className="mt-2 text-xs sm:text-sm text-purple-700 font-medium">{winRule}</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono mingo-text-brand">{gameCode}</p>
+              <div className="mt-2 flex justify-center">
+                <VisibilityBadge visibility={gameVisibility} />
+              </div>
+              <p className="mt-2 text-xs sm:text-sm mingo-text-brand-strong font-medium">{winRule}</p>
             </div>
             {currentUser && (
               <button
                 onClick={onResetToHome}
-                className="w-full mt-2 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
+                className="w-full mt-2 px-4 py-2 mingo-btn-brand text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
               >
                 <Home size={16} /> Back to Dashboard
               </button>
@@ -98,9 +103,9 @@ export default function PlayScreen({
 
         <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-8">
           <div
-            className="grid gap-1.5 sm:gap-2 mx-auto"
+            className="grid gap-1.5 sm:gap-2 mx-auto w-full"
             style={{
-              gridTemplateColumns: `repeat(${boardSize}, 1fr)`,
+              gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,
               maxWidth: `min(100%, ${boardSize * 120}px)`
             }}
           >
@@ -109,12 +114,12 @@ export default function PlayScreen({
                 key={index}
                 onClick={() => onToggleCell(index)}
                 className={`
-                  aspect-square p-1 sm:p-2 rounded-lg font-semibold text-xs sm:text-sm flex items-center justify-center text-center transition-all
+                  mingo-board-cell w-full p-1 sm:p-2 rounded-lg font-semibold flex items-center justify-center text-center transition-all
                   ${cell.isFree
-                    ? 'bg-gradient-to-br from-yellow-400 to-orange-400 text-gray-900 cursor-default'
+                    ? 'mingo-cell-free text-gray-900 cursor-default'
                     : marked.has(index)
-                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white scale-95'
-                    : 'bg-gradient-to-br from-purple-100 to-pink-100 text-gray-800 hover:scale-105 hover:shadow-lg active:scale-95'
+                    ? 'mingo-cell-marked text-white scale-95'
+                    : 'mingo-cell-idle text-gray-800 hover:scale-105 hover:shadow-lg active:scale-95'
                   }
                 `}
               >
@@ -125,7 +130,7 @@ export default function PlayScreen({
                     className="w-full h-full object-cover rounded"
                   />
                 ) : (
-                  <span className="break-words leading-tight">{cell.text}</span>
+                  <span className="mingo-board-cell-text">{cell.text}</span>
                 )}
               </button>
             ))}
@@ -135,7 +140,7 @@ export default function PlayScreen({
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <button
             onClick={onNewBoard}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition shadow-lg text-sm sm:text-base"
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 mingo-btn-secondary-solid font-semibold rounded-xl transition shadow-lg text-sm sm:text-base"
           >
             <Shuffle size={18} className="sm:w-5 sm:h-5" /> New Board
           </button>

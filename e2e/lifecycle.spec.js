@@ -35,11 +35,19 @@ test.describe('Game lifecycle smoke', () => {
       }
 
       await hostPage.getByRole('button', { name: /^Create Game$/i }).click()
-      await expect(hostPage.getByRole('heading', { name: /Game Created/i })).toBeVisible({
-        timeout: 45_000,
-      })
+      try {
+        await expect(hostPage.getByRole('heading', { name: /Game Created/i })).toBeVisible({
+          timeout: 45_000,
+        })
+      } catch (err) {
+        const toast = hostPage.getByRole('status')
+        if (await toast.isVisible().catch(() => false)) {
+          throw new Error(`Create game failed: ${(await toast.innerText()).trim()}`)
+        }
+        throw err
+      }
 
-      gameCode = (await hostPage.locator('.font-mono.text-purple-600').first().innerText()).trim()
+      gameCode = (await hostPage.getByTestId('game-code').innerText()).trim()
       expect(gameCode).toMatch(/^[A-Z0-9]{5}$/)
 
       const guestName = `SmokeGuest${Date.now().toString(36).slice(-4)}`

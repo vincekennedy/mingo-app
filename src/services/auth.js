@@ -350,6 +350,57 @@ export const authService = {
       throw error
     }
   },
+
+  /**
+   * Ensure public.users has a row for this auth user (trigger may have been skipped).
+   * @param {import('@supabase/supabase-js').User} user
+   * @returns {Promise<Object|null>}
+   */
+  async ensureUserProfile(user) {
+    if (!user?.id) return null
+
+    let profile = await this.getUserProfile(user.id)
+    if (profile) return profile
+
+    const metaName =
+      typeof user.user_metadata?.username === 'string'
+        ? user.user_metadata.username.trim()
+        : ''
+    const emailLocal = user.email?.includes('@') ? user.email.split('@')[0] : ''
+    const base = (metaName || emailLocal || 'user').slice(0, 40)
+    let username = base
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          id: user.id,
+          username,
+          display_name:
+            typeof user.user_metadata?.display_name === 'string'
+              ? user.user_metadata.display_name.trim() || null
+              : null,
+        })
+        .select('*')
+        .single()
+
+      if (!error && data) return data
+
+      // Insert race or username unique conflict — re-read, then retry with suffix.
+      profile = await this.getUserProfile(user.id)
+      if (profile) return profile
+
+      if (error?.code === '23505') {
+        username = `${base.slice(0, 32)}-${Math.random().toString(36).slice(2, 6)}`
+        continue
+      }
+
+      console.error('ensureUserProfile insert failed:', error)
+      throw error || new Error('Could not create user profile.')
+    }
+
+    return this.getUserProfile(user.id)
+  },
   
   /**
    * Listen to auth state changes
