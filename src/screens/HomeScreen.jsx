@@ -61,6 +61,9 @@ export default function HomeScreen({
         <label className="block text-gray-700 font-semibold text-sm sm:text-base">
           Join Existing Game
         </label>
+        <p className="text-xs sm:text-sm text-gray-500">
+          Enter a code, or open a shared join link / QR from the host.
+        </p>
         <input
           type="text"
           value={joinCode}
@@ -68,6 +71,7 @@ export default function HomeScreen({
           placeholder="Enter 5-digit code"
           maxLength={5}
           className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"
+          data-testid="join-code-input"
         />
         <button
           onClick={() => onJoinGame()}

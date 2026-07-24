@@ -1,4 +1,4 @@
-import { AlertCircle, Home, RotateCcw, Trophy, X } from 'lucide-react';
+import { AlertCircle, Check, Home, Link2, Printer, RotateCcw, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
@@ -20,11 +20,14 @@ export default function PlayScreen({
   boardSize,
   marked,
   currentUser,
+  linkCopied,
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
   onResetToHome,
   onToggleCell,
+  onCopyJoinLink,
+  onOpenPrintableQr,
 }) {
   const winRule = describeWinRule(gameConfig);
 
@@ -57,6 +60,29 @@ export default function PlayScreen({
               </div>
               <p className="mt-2 text-xs sm:text-sm mingo-text-brand-strong font-medium">{winRule}</p>
             </div>
+
+            {isHost && (
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={onCopyJoinLink}
+                  className="w-full px-4 py-2.5 mingo-btn-primary text-sm font-bold rounded-lg transition flex items-center justify-center gap-2"
+                  data-testid="share-invite-link"
+                >
+                  {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
+                  {linkCopied ? 'Invite link copied!' : 'Share invite link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenPrintableQr}
+                  className="w-full px-4 py-2 mingo-btn-brand text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                  data-testid="open-printable-qr"
+                >
+                  <Printer size={16} /> Printable QR flyer
+                </button>
+              </div>
+            )}
+
             {currentUser && (
               <button
                 onClick={onResetToHome}
@@ -136,7 +162,7 @@ export default function PlayScreen({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="flex flex-col sm:gap-4 sm:flex-row gap-3">
           <button
             onClick={onResetToHome}
             className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 transition shadow-lg text-sm sm:text-base"

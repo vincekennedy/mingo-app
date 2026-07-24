@@ -25,7 +25,7 @@ Run on **mingo-local** (`npm run dev` + `.env.local`).
 ### 3. Guest join + display name
 
 - [ ] Incognito (or another browser): landing → enter the code → **Join Game**.
-- [ ] **Join as guest** modal appears (not a browser `prompt`).
+- [ ] **Join game** modal appears (guest name + Log in / Create account — not a browser `prompt`).
 - [ ] Enter a display name (e.g. `SmokeGuest`) → join → play board loads.
 - [ ] On the host view, the player list shows **`SmokeGuest`**, not `SmokeGuest-xxxx`.
 

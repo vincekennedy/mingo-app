@@ -1,4 +1,4 @@
-import { Check, Copy, Play } from 'lucide-react';
+import { Check, Copy, Link2, Play, Printer } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
@@ -16,6 +16,7 @@ export default function HostScreen({
   showEndGameDialog,
   isHost,
   copied,
+  linkCopied,
   currentUser,
   onToggleIncorrectItem,
   onRejectWin,
@@ -23,6 +24,8 @@ export default function HostScreen({
   onContinueAfterWin,
   onEndGameAfterWin,
   onCopyCode,
+  onCopyJoinLink,
+  onOpenPrintableQr,
   onStartPlaying,
   onResetToHome,
 }) {
@@ -61,24 +64,48 @@ export default function HostScreen({
             <div className="flex justify-center mb-2">
               <VisibilityBadge visibility={gameVisibility} />
             </div>
-            <p className="text-sm sm:text-base text-gray-600">Share this code with players:</p>
+            <p className="text-sm sm:text-base text-gray-600">
+              Share an invite link, or print a QR flyer for the room.
+            </p>
             <p className="mt-2 text-sm mingo-text-brand-strong font-medium">{winRule}</p>
           </div>
 
-          <div className="mingo-surface-brand p-4 sm:p-6 rounded-xl">
+          <div className="mingo-surface-brand p-4 sm:p-6 rounded-xl space-y-4">
             <div
               data-testid="game-code"
-              className="text-3xl sm:text-5xl font-bold font-mono mingo-text-brand mb-3 sm:mb-4 tracking-wider"
+              className="text-3xl sm:text-5xl font-bold font-mono mingo-text-brand tracking-wider"
             >
               {gameCode}
             </div>
+
             <button
-              onClick={onCopyCode}
-              className="flex items-center justify-center gap-2 mx-auto px-4 sm:px-6 py-2 sm:py-3 mingo-btn-brand rounded-lg transition text-sm sm:text-base"
+              type="button"
+              onClick={onCopyJoinLink}
+              className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-3 sm:py-4 mingo-btn-primary font-bold rounded-xl transition text-sm sm:text-base shadow-lg"
+              data-testid="copy-join-link"
             >
-              {copied ? <Check size={18} className="sm:w-5 sm:h-5" /> : <Copy size={18} className="sm:w-5 sm:h-5" />}
-              {copied ? 'Copied!' : 'Copy Code'}
+              {linkCopied ? <Check size={20} /> : <Link2 size={20} />}
+              {linkCopied ? 'Invite link copied!' : 'Share invite link'}
             </button>
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
+              <button
+                type="button"
+                onClick={onCopyCode}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 mingo-btn-brand rounded-lg transition text-sm"
+              >
+                {copied ? <Check size={18} /> : <Copy size={18} />}
+                {copied ? 'Code copied!' : 'Copy code'}
+              </button>
+              <button
+                type="button"
+                onClick={onOpenPrintableQr}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 mingo-btn-secondary rounded-lg transition text-sm"
+                data-testid="open-printable-qr"
+              >
+                <Printer size={18} /> Printable QR flyer
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
