@@ -1,9 +1,10 @@
 /*
  * Mingo color tokens
  *
- * Swap named themes later with data-theme on the app shell:
- *   <div data-theme="party" className="mingo-shell …">
+ * Named themes via data-theme on the app shell:
+ *   <div data-theme="party|sunset|ocean|ink" className="mingo-shell …">
  * Presets only change these CSS variables — keep components on the utilities below.
+ * Marked / FREE cell greens & yellows stay semantic across presets.
  */
 
 :root,
@@ -73,9 +74,176 @@
   --mingo-dot-c: #fb923c;
 }
 
-/* Future presets only need to redefine the variables above, e.g.:
- * [data-theme='ocean'] { --mingo-shell-from: …; … }
- */
+[data-theme='sunset'] {
+  --mingo-shell-from: #f43f5e; /* rose-500 */
+  --mingo-shell-via: #fb7185; /* rose-400 */
+  --mingo-shell-to: #f59e0b; /* amber-500 */
+
+  --mingo-primary-from: #e11d48; /* rose-600 */
+  --mingo-primary-to: #ea580c; /* orange-600 */
+  --mingo-primary-from-hover: #be123c; /* rose-700 */
+  --mingo-primary-to-hover: #c2410c; /* orange-700 */
+
+  --mingo-secondary-from: #db2777; /* pink-600 */
+  --mingo-secondary-to: #d97706; /* amber-600 */
+  --mingo-secondary-from-hover: #be185d; /* pink-700 */
+  --mingo-secondary-to-hover: #b45309; /* amber-700 */
+
+  --mingo-brand: #e11d48;
+  --mingo-brand-hover: #be123c;
+  --mingo-brand-strong: #be123c;
+  --mingo-brand-solid: #e11d48;
+  --mingo-brand-solid-hover: #be123c;
+  --mingo-brand-soft: #ffe4e6; /* rose-100 */
+  --mingo-brand-soft-hover: #fecdd3; /* rose-200 */
+  --mingo-brand-tint: #fff1f2; /* rose-50 */
+  --mingo-brand-muted: #ffedd5; /* orange-100 */
+  --mingo-brand-border: #fda4af; /* rose-300 */
+  --mingo-brand-focus: #fb7185;
+  --mingo-brand-mid: #f43f5e;
+  --mingo-brand-mid-hover: #e11d48;
+
+  --mingo-secondary-solid: #f97316; /* orange-500 */
+  --mingo-secondary-solid-hover: #ea580c;
+
+  --mingo-orb-a: rgb(251 113 133 / 0.4); /* rose-400/40 */
+  --mingo-orb-b: rgb(251 146 60 / 0.4); /* orange-400/40 */
+  --mingo-orb-c: rgb(252 211 77 / 0.3); /* amber-300/30 */
+  --mingo-sparkle-from: #e11d48;
+  --mingo-sparkle-via: #f97316;
+  --mingo-sparkle-to: #fbbf24;
+  --mingo-tile-from: #fecdd3;
+  --mingo-tile-via: #fed7aa;
+  --mingo-tile-to: #fde68a;
+
+  --mingo-avatar-from: #f43f5e;
+  --mingo-avatar-to: #f59e0b;
+
+  --mingo-cell-idle-from: #ffe4e6;
+  --mingo-cell-idle-to: #ffedd5;
+  --mingo-cell-marked-from: #22c55e;
+  --mingo-cell-marked-to: #059669;
+  --mingo-cell-free-from: #facc15;
+  --mingo-cell-free-to: #fb923c;
+
+  --mingo-dot-a: #f43f5e;
+  --mingo-dot-b: #fb7185;
+  --mingo-dot-c: #fbbf24;
+}
+
+[data-theme='ocean'] {
+  --mingo-shell-from: #0f766e; /* teal-700 */
+  --mingo-shell-via: #06b6d4; /* cyan-500 */
+  --mingo-shell-to: #38bdf8; /* sky-400 */
+
+  --mingo-primary-from: #0d9488; /* teal-600 */
+  --mingo-primary-to: #0284c7; /* sky-600 */
+  --mingo-primary-from-hover: #0f766e; /* teal-700 */
+  --mingo-primary-to-hover: #0369a1; /* sky-700 */
+
+  --mingo-secondary-from: #0891b2; /* cyan-600 */
+  --mingo-secondary-to: #2563eb; /* blue-600 */
+  --mingo-secondary-from-hover: #0e7490;
+  --mingo-secondary-to-hover: #1d4ed8;
+
+  --mingo-brand: #0d9488;
+  --mingo-brand-hover: #0f766e;
+  --mingo-brand-strong: #0f766e;
+  --mingo-brand-solid: #0d9488;
+  --mingo-brand-solid-hover: #0f766e;
+  --mingo-brand-soft: #ccfbf1; /* teal-100 */
+  --mingo-brand-soft-hover: #99f6e4; /* teal-200 */
+  --mingo-brand-tint: #f0fdfa; /* teal-50 */
+  --mingo-brand-muted: #cffafe; /* cyan-100 */
+  --mingo-brand-border: #5eead4; /* teal-300 */
+  --mingo-brand-focus: #14b8a6; /* teal-500 */
+  --mingo-brand-mid: #14b8a6;
+  --mingo-brand-mid-hover: #0d9488;
+
+  --mingo-secondary-solid: #0ea5e9; /* sky-500 */
+  --mingo-secondary-solid-hover: #0284c7;
+
+  --mingo-orb-a: rgb(45 212 191 / 0.4); /* teal-400/40 */
+  --mingo-orb-b: rgb(34 211 238 / 0.4); /* cyan-400/40 */
+  --mingo-orb-c: rgb(125 211 252 / 0.3); /* sky-300/30 */
+  --mingo-sparkle-from: #0d9488;
+  --mingo-sparkle-via: #06b6d4;
+  --mingo-sparkle-to: #38bdf8;
+  --mingo-tile-from: #99f6e4;
+  --mingo-tile-via: #a5f3fc;
+  --mingo-tile-to: #bae6fd;
+
+  --mingo-avatar-from: #14b8a6;
+  --mingo-avatar-to: #0ea5e9;
+
+  --mingo-cell-idle-from: #ccfbf1;
+  --mingo-cell-idle-to: #cffafe;
+  --mingo-cell-marked-from: #22c55e;
+  --mingo-cell-marked-to: #059669;
+  --mingo-cell-free-from: #facc15;
+  --mingo-cell-free-to: #fb923c;
+
+  --mingo-dot-a: #14b8a6;
+  --mingo-dot-b: #06b6d4;
+  --mingo-dot-c: #38bdf8;
+}
+
+[data-theme='ink'] {
+  --mingo-shell-from: #0f172a; /* slate-900 */
+  --mingo-shell-via: #1e293b; /* slate-800 */
+  --mingo-shell-to: #1e3a5f; /* ink blue */
+
+  --mingo-primary-from: #d97706; /* amber-600 */
+  --mingo-primary-to: #ca8a04; /* yellow-600 */
+  --mingo-primary-from-hover: #b45309; /* amber-700 */
+  --mingo-primary-to-hover: #a16207; /* yellow-700 */
+
+  --mingo-secondary-from: #475569; /* slate-600 */
+  --mingo-secondary-to: #334155; /* slate-700 */
+  --mingo-secondary-from-hover: #334155;
+  --mingo-secondary-to-hover: #1e293b;
+
+  --mingo-brand: #d97706;
+  --mingo-brand-hover: #b45309;
+  --mingo-brand-strong: #b45309;
+  --mingo-brand-solid: #d97706;
+  --mingo-brand-solid-hover: #b45309;
+  --mingo-brand-soft: #f1f5f9; /* slate-100 */
+  --mingo-brand-soft-hover: #e2e8f0; /* slate-200 */
+  --mingo-brand-tint: #f8fafc; /* slate-50 */
+  --mingo-brand-muted: #fef3c7; /* amber-100 */
+  --mingo-brand-border: #cbd5e1; /* slate-300 */
+  --mingo-brand-focus: #f59e0b; /* amber-500 */
+  --mingo-brand-mid: #f59e0b;
+  --mingo-brand-mid-hover: #d97706;
+
+  --mingo-secondary-solid: #64748b; /* slate-500 */
+  --mingo-secondary-solid-hover: #475569;
+
+  --mingo-orb-a: rgb(100 116 139 / 0.4); /* slate-500/40 */
+  --mingo-orb-b: rgb(251 191 36 / 0.35); /* amber-400/35 */
+  --mingo-orb-c: rgb(148 163 184 / 0.3); /* slate-400/30 */
+  --mingo-sparkle-from: #f59e0b;
+  --mingo-sparkle-via: #eab308;
+  --mingo-sparkle-to: #94a3b8;
+  --mingo-tile-from: #e2e8f0;
+  --mingo-tile-via: #fde68a;
+  --mingo-tile-to: #cbd5e1;
+
+  --mingo-avatar-from: #f59e0b;
+  --mingo-avatar-to: #ca8a04;
+
+  --mingo-cell-idle-from: #f1f5f9;
+  --mingo-cell-idle-to: #e2e8f0;
+  --mingo-cell-marked-from: #22c55e;
+  --mingo-cell-marked-to: #059669;
+  --mingo-cell-free-from: #facc15;
+  --mingo-cell-free-to: #fb923c;
+
+  --mingo-dot-a: #f59e0b;
+  --mingo-dot-b: #94a3b8;
+  --mingo-dot-c: #eab308;
+}
 
 .mingo-shell {
   background-image: linear-gradient(

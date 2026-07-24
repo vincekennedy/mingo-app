@@ -9,7 +9,13 @@ import { generateItemsFromTitle } from './services/generateItems';
 import { supabase } from './lib/supabase';
 import { subscribeGame, subscribeDashboard } from './lib/realtime';
 import { detectWin, normalizeWinConfig } from './lib/winDetection';
-import { DEFAULT_THEME } from './lib/theme';
+import {
+  DEFAULT_THEME,
+  activeShellTheme,
+  getStoredTheme,
+  resolveTheme,
+  setStoredTheme,
+} from './lib/theme';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
@@ -59,6 +65,8 @@ export default function Mingo() {
   const [winMode, setWinMode] = useState('standard');
   const [linesToWin, setLinesToWin] = useState(1);
   const [gameVisibility, setGameVisibility] = useState('private');
+  const [userTheme, setUserTheme] = useState(() => getStoredTheme());
+  const [gameTheme, setGameTheme] = useState(() => getStoredTheme());
   const [gameCode, setGameCode] = useState('');
   const [joinCode, setJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
   const [pendingJoinCode, setPendingJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
@@ -628,6 +636,7 @@ export default function Mingo() {
       setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      applyThemeFromConfig(config);
       {
         const rules = normalizeWinConfig(config);
         setWinMode(rules.winMode);
@@ -705,6 +714,7 @@ export default function Mingo() {
       setGameTitle(game.config?.title || '');
       setBoardSize(game.config.boardSize || 5);
       setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
+      applyThemeFromConfig(game.config);
       {
         const rules = normalizeWinConfig(game.config);
         setWinMode(rules.winMode);
@@ -838,6 +848,26 @@ export default function Mingo() {
     setGameVisibility(value === 'public' ? 'public' : 'private');
   };
 
+  const updateUserTheme = (value) => {
+    setUserTheme(setStoredTheme(value));
+  };
+
+  const updateGameTheme = (value) => {
+    setGameTheme(resolveTheme(value));
+  };
+
+  const applyThemeFromConfig = (config) => {
+    setGameTheme(resolveTheme(config?.theme));
+  };
+
+  const startNewSetup = () => {
+    setWinMode('standard');
+    setLinesToWin(1);
+    setGameVisibility('private');
+    setGameTheme(resolveTheme(userTheme));
+    setScreen('setup');
+  };
+
   const duplicateSetupFromGame = (game) => {
     const config = game?.config;
     if (!config?.items || !Array.isArray(config.items) || config.items.length === 0) {
@@ -856,6 +886,7 @@ export default function Mingo() {
     setWinMode(rules.winMode);
     setLinesToWin(rules.linesToWin);
     setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
+    applyThemeFromConfig(config);
     setItems(normalizedItems);
     setScreen('setup');
   };
@@ -948,6 +979,7 @@ export default function Mingo() {
       title: gameTitle.trim() || null,
       winMode,
       linesToWin: winMode === 'standard' ? linesToWin : 1,
+      theme: resolveTheme(gameTheme),
     };
 
     if (!currentUser) {
@@ -1015,6 +1047,7 @@ export default function Mingo() {
       setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
       setBoardSize(config.boardSize || 5);
       setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
+      applyThemeFromConfig(config);
       {
         const rules = normalizeWinConfig(config);
         setWinMode(rules.winMode);
@@ -1676,6 +1709,7 @@ export default function Mingo() {
     setUseFreeSpace(true);
     setWinMode('standard');
     setLinesToWin(1);
+    setGameTheme(resolveTheme(userTheme));
     setGameCode('');
     setJoinCode('');
     setGameConfig(null);
@@ -1690,8 +1724,12 @@ export default function Mingo() {
   };
 
 
+  const shellTheme = screen === 'print-join'
+    ? DEFAULT_THEME
+    : activeShellTheme(screen, gameTheme, userTheme);
+
   return (
-    <div data-theme={DEFAULT_THEME} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
+    <div data-theme={shellTheme} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
       {(registering || loggingIn || !authReady) && screen !== 'print-join' && (
         <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}
@@ -1853,16 +1891,13 @@ export default function Mingo() {
             currentUser={currentUser}
             gamesLoading={gamesLoading}
             userGames={userGames}
+            userTheme={userTheme}
+            onUpdateUserTheme={updateUserTheme}
             onLogout={logoutUser}
             onSelectGame={selectGame}
             onEndGame={endGame}
             onDuplicateSetup={duplicateSetupFromGame}
-            onCreateGame={() => {
-              setWinMode('standard');
-              setLinesToWin(1);
-              setGameVisibility('private');
-              setScreen('setup');
-            }}
+            onCreateGame={startNewSetup}
             onJoinWithCode={() => {
               setJoinCode('');
               setScreen('home');
@@ -1887,6 +1922,8 @@ export default function Mingo() {
             currentUser={currentUser}
             joinCode={joinCode}
             setJoinCode={setJoinCode}
+            userTheme={userTheme}
+            onUpdateUserTheme={updateUserTheme}
             onOpenDashboard={() => setScreen('dashboard')}
             onLogin={() => setScreen('login')}
             onRegister={() => setScreen('register')}
@@ -1913,6 +1950,8 @@ export default function Mingo() {
             onUpdateLinesToWin={updateLinesToWin}
             gameVisibility={gameVisibility}
             onUpdateGameVisibility={updateGameVisibility}
+            gameTheme={gameTheme}
+            onUpdateGameTheme={updateGameTheme}
             items={items}
             onAddItem={addItem}
             onUpdateItem={updateItem}
