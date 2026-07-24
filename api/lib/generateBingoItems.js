@@ -6,11 +6,89 @@ const DEFAULT_MODEL = process.env.GEMINI_BINGO_MODEL || 'gemini-flash-latest'
 const FALLBACK_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash']
 const MAX_COUNT = 48
 const MIN_COUNT = 1
+const MAX_INSTRUCTIONS_LENGTH = 200
 
-const SYSTEM_PROMPT =
+/** @type {const} */
+const TONE_IDS = ['family', 'funny', 'wholesome', 'office', 'adult']
+const DEFAULT_TONE = 'family'
+
+/** @type {Record<(typeof TONE_IDS)[number], string>} */
+const TONE_LABELS = {
+  family: 'Family-friendly',
+  funny: 'Funny',
+  wholesome: 'Wholesome',
+  office: 'Office-safe',
+  adult: 'Adult',
+}
+
+/** @type {Record<(typeof TONE_IDS)[number], string>} */
+const TONE_CLAUSES = {
+  family:
+    'Keep every item family-friendly and kid-safe: no innuendo, swearing, or adult humor.',
+  funny:
+    'Make items witty, playful, and lightly roasting when it fits the theme. Keep language clean (no swearing or adult innuendo).',
+  wholesome:
+    'Make items warm, supportive, and sentimental rather than joke-first. Keep language clean and kind.',
+  office:
+    'Make items professional and workplace-appropriate. Avoid slang, roasting, politics, and anything that would be awkward in a corporate setting.',
+  adult:
+    'Spicy humor and innuendo are allowed when they fit the theme. Keep items as short bingo phrases — suggestive is fine; do not write graphic sexual content.',
+}
+
+const SYSTEM_PROMPT_BASE =
   'You generate short, distinct bingo square prompts for a custom bingo game. ' +
   'Return JSON only: {"items":["..."]}. Each item must be a concise phrase (ideally under 6 words), ' +
-  'family-friendly, specific to the theme, and unique. Do not number items. Do not include "FREE".'
+  'specific to the theme, and unique. Do not number items. Do not include "FREE".'
+
+/**
+ * @param {string | null | undefined} value
+ * @returns {(typeof TONE_IDS)[number]}
+ */
+function resolveTone(value) {
+  return TONE_IDS.includes(/** @type {(typeof TONE_IDS)[number]} */ (value))
+    ? /** @type {(typeof TONE_IDS)[number]} */ (value)
+    : DEFAULT_TONE
+}
+
+/**
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+function sanitizeInstructions(value) {
+  if (typeof value !== 'string') return ''
+  let cleaned = ''
+  for (const ch of value) {
+    const code = ch.charCodeAt(0)
+    if (code >= 32 || code === 9 || code === 10 || code === 13) {
+      cleaned += ch
+    }
+  }
+  return cleaned.trim().slice(0, MAX_INSTRUCTIONS_LENGTH)
+}
+
+/**
+ * @param {(typeof TONE_IDS)[number]} tone
+ * @returns {string}
+ */
+function buildSystemPrompt(tone) {
+  return `${SYSTEM_PROMPT_BASE} ${TONE_CLAUSES[tone]}`
+}
+
+/**
+ * @param {{ title: string, count: number, tone: (typeof TONE_IDS)[number], instructions: string }} params
+ * @returns {string}
+ */
+function buildUserMessage({ title, count, tone, instructions }) {
+  const lines = [
+    `Game title/theme: "${title}"`,
+    `Tone: ${TONE_LABELS[tone]}`,
+  ]
+  if (instructions) {
+    lines.push(`Extra instructions: "${instructions}"`)
+  }
+  lines.push(`Generate exactly ${count} bingo items.`)
+  return lines.join('\n')
+}
 
 function normalizeKey(value) {
   if (typeof value !== 'string') return ''
@@ -39,10 +117,16 @@ function isModelUnavailableError(raw) {
 
 /**
  * Generate bingo square item strings from a game title using Google Gemini.
- * @param {{ title: string, count: number, apiKey?: string }} params
+ * @param {{ title: string, count: number, tone?: string, instructions?: string, apiKey?: string }} params
  * @returns {Promise<string[]>}
  */
-export async function generateBingoItems({ title, count, apiKey }) {
+export async function generateBingoItems({
+  title,
+  count,
+  tone,
+  instructions,
+  apiKey,
+}) {
   const key = normalizeKey(
     apiKey ||
       process.env.GEMINI_API_KEY ||
@@ -78,6 +162,16 @@ export async function generateBingoItems({ title, count, apiKey }) {
     throw err
   }
 
+  const resolvedTone = resolveTone(tone)
+  const sanitizedInstructions = sanitizeInstructions(instructions)
+  const systemInstruction = buildSystemPrompt(resolvedTone)
+  const userContents = buildUserMessage({
+    title: trimmedTitle,
+    count: n,
+    tone: resolvedTone,
+    instructions: sanitizedInstructions,
+  })
+
   const ai = new GoogleGenAI({ apiKey: key })
 
   let content
@@ -86,11 +180,11 @@ export async function generateBingoItems({ title, count, apiKey }) {
     try {
       const response = await ai.models.generateContent({
         model: modelName,
-        contents: `Game title/theme: "${trimmedTitle}"\nGenerate exactly ${n} bingo items.`,
+        contents: userContents,
         config: {
           temperature: 0.8,
           responseMimeType: 'application/json',
-          systemInstruction: SYSTEM_PROMPT,
+          systemInstruction,
         },
       })
       content = response?.text

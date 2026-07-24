@@ -22,8 +22,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { title, count } = req.body || {}
-    const items = await generateBingoItems({ title, count })
+    const { title, count, tone, instructions } = req.body || {}
+    const items = await generateBingoItems({ title, count, tone, instructions })
     return res.status(200).json({ items })
   } catch (error) {
     console.error('generate-items error:', error)

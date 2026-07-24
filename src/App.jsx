@@ -16,6 +16,11 @@ import {
   resolveTheme,
   setStoredTheme,
 } from './lib/theme';
+import {
+  DEFAULT_GENERATION_TONE,
+  resolveGenerationTone,
+  sanitizeGenerationInstructions,
+} from './lib/generationTone';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
@@ -75,6 +80,8 @@ export default function Mingo() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
   const [gameTitle, setGameTitle] = useState('');
+  const [generationTone, setGenerationTone] = useState(DEFAULT_GENERATION_TONE);
+  const [generationInstructions, setGenerationInstructions] = useState('');
   const [generatingItems, setGeneratingItems] = useState(false);
   const [generateStatusIndex, setGenerateStatusIndex] = useState(0);
   const [registering, setRegistering] = useState(false);
@@ -860,11 +867,21 @@ export default function Mingo() {
     setGameTheme(resolveTheme(config?.theme));
   };
 
+  const updateGenerationTone = (value) => {
+    setGenerationTone(resolveGenerationTone(value));
+  };
+
+  const updateGenerationInstructions = (value) => {
+    setGenerationInstructions(sanitizeGenerationInstructions(value));
+  };
+
   const startNewSetup = () => {
     setWinMode('standard');
     setLinesToWin(1);
     setGameVisibility('private');
     setGameTheme(resolveTheme(userTheme));
+    setGenerationTone(DEFAULT_GENERATION_TONE);
+    setGenerationInstructions('');
     setScreen('setup');
   };
 
@@ -887,6 +904,8 @@ export default function Mingo() {
     setLinesToWin(rules.linesToWin);
     setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
     applyThemeFromConfig(config);
+    setGenerationTone(resolveGenerationTone(config.generationTone));
+    setGenerationInstructions(sanitizeGenerationInstructions(config.generationInstructions));
     setItems(normalizedItems);
     setScreen('setup');
   };
@@ -933,7 +952,10 @@ export default function Mingo() {
     setGeneratingItems(true);
     setGenerateStatusIndex(0);
     try {
-      const generated = await generateItemsFromTitle(title, neededItemCount);
+      const generated = await generateItemsFromTitle(title, neededItemCount, {
+        tone: resolveGenerationTone(generationTone),
+        instructions: sanitizeGenerationInstructions(generationInstructions),
+      });
       setItems(generated.map((text) => ({ text, imageUrl: null })));
     } catch (error) {
       console.error('Generate items error:', error);
@@ -980,6 +1002,8 @@ export default function Mingo() {
       winMode,
       linesToWin: winMode === 'standard' ? linesToWin : 1,
       theme: resolveTheme(gameTheme),
+      generationTone: resolveGenerationTone(generationTone),
+      generationInstructions: sanitizeGenerationInstructions(generationInstructions) || null,
     };
 
     if (!currentUser) {
@@ -1714,6 +1738,8 @@ export default function Mingo() {
     setJoinCode('');
     setGameConfig(null);
     setGameTitle('');
+    setGenerationTone(DEFAULT_GENERATION_TONE);
+    setGenerationInstructions('');
     setIsHost(false);
     setPendingWinClaim(null);
     setWinConfirmed(false);
@@ -1937,6 +1963,10 @@ export default function Mingo() {
             currentUser={currentUser}
             gameTitle={gameTitle}
             setGameTitle={setGameTitle}
+            generationTone={generationTone}
+            onUpdateGenerationTone={updateGenerationTone}
+            generationInstructions={generationInstructions}
+            onUpdateGenerationInstructions={updateGenerationInstructions}
             generatingItems={generatingItems}
             neededItemCount={neededItemCount}
             onGenerateItems={generateItemsFromGameTitle}

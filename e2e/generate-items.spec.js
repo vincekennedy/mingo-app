@@ -16,7 +16,12 @@ test.describe('API route smoke', () => {
 
   test('/api/generate-items responds with JSON (not SPA HTML)', async ({ request }) => {
     const res = await request.post('/api/generate-items', {
-      data: { title: 'Smoke test bingo theme', count: 8 },
+      data: {
+        title: 'Smoke test bingo theme',
+        count: 8,
+        tone: 'funny',
+        instructions: 'keep phrases short',
+      },
     })
 
     const contentType = res.headers()['content-type'] || ''

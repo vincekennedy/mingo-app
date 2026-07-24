@@ -118,13 +118,17 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
   "title": "...",
   "winMode": "standard",
   "linesToWin": 1,
-  "theme": "party"
+  "theme": "party",
+  "generationTone": "family",
+  "generationInstructions": null
 }
 ```
 
 `winMode`: `standard` \| `four_corners` \| `x` \| `blackout` (default `standard` for legacy games).  
 `linesToWin`: 1–3, used only when `winMode` is `standard`. See [`src/lib/winDetection.js`](../src/lib/winDetection.js).  
-`theme`: `party` \| `sunset` \| `ocean` \| `ink` (default `party` for legacy games). User chrome preference is separate (`localStorage` `mingo.theme`); setup/host/play use the game theme. See [`src/lib/theme.js`](../src/lib/theme.js).
+`theme`: `party` \| `sunset` \| `ocean` \| `ink` (default `party` for legacy games). User chrome preference is separate (`localStorage` `mingo.theme`); setup/host/play use the game theme. See [`src/lib/theme.js`](../src/lib/theme.js).  
+`generationTone`: `family` \| `funny` \| `wholesome` \| `office` \| `adult` (default `family`). Used only for AI generate-items / Reuse setup — not shown in play. See [`src/lib/generationTone.js`](../src/lib/generationTone.js).  
+`generationInstructions`: optional short string (max 200 chars) constraining content (e.g. “only 90s song titles”); null/omitted when empty.
 
 **Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback) and optional `display_name`. Client also retries/fallback-inserts if needed. Guests store unique `username` as `Name-xxxx` and `display_name` as the entered name.
 
