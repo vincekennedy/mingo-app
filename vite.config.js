@@ -80,6 +80,8 @@ function generateItemsDevApi() {
           const items = await generateBingoItems({
             title: body.title,
             count: body.count,
+            tone: body.tone,
+            instructions: body.instructions,
             apiKey:
               process.env.GEMINI_API_KEY ||
               process.env.GOOGLE_GENERATIVE_AI_API_KEY,
