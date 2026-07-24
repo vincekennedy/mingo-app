@@ -12,7 +12,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 - **Backend:** Supabase (Auth, Postgres, Storage)  
 - **Intent:** Hands-on experiment in AI-assisted shipping (Cursor, Claude, Linear, Vercel) — see `README.md`
 
-**Product:** Hosts need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project. Guests are ephemeral: after they are in **no active games** and idle **≥ 24 hours**, `cleanup_guest_users` (pg_cron daily + optional Edge Function) deletes the Auth user (cascades profile / game rows). See [`supabase/README.md`](../supabase/README.md#guest-user-retention).
+**Product:** Hosts need an account to **create** games. **Join** supports (1) typing a 5-character code on the landing page, or (2) opening a deep link `/join/:code` (also `?join=` / `?code=`). Unauthenticated join opens a chooser: **guest** (Supabase Anonymous auth + display name) or **log in / create account** (pending code kept in `sessionStorage` so auth returns into the game). Hosts can copy the join URL and show a **QR code** on the host lobby. Enable Anonymous under Authentication → Providers on each project. Guests are ephemeral: after they are in **no active games** and idle **≥ 24 hours**, `cleanup_guest_users` (pg_cron daily + optional Edge Function) deletes the Auth user (cascades profile / game rows). See [`supabase/README.md`](../supabase/README.md#guest-user-retention).
 
 ---
 
@@ -24,6 +24,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 | Styling | Tailwind via **CDN** in `index.html` (npm Tailwind 4 is also installed — dual setup) |
 | Icons | `lucide-react` |
 | Effects | `canvas-confetti` |
+| QR | `qrcode` (join-link QR on host lobby) |
 | Client SDK | `@supabase/supabase-js` (browser only) |
 | Deploy | Vercel |
 
@@ -45,9 +46,10 @@ Almost all UI and game logic live in a **single screen state machine**:
 - `src/hooks/*` — extracted hooks (e.g. report modal)  
 - `src/services/*` — Supabase API wrappers  
 - `src/lib/supabase.js` — shared client  
+- `src/lib/joinLink.js` — `/join/:code` parsing, pending-join storage, join URL helpers (no React Router)  
 - `src/lib/version.js` — CalVer / commit version chip string  
 
-There is **no React Router**. Navigation is `setScreen(...)`.
+There is **no React Router**. Navigation is `setScreen(...)`. Join deep links are handled by reading `window.location` on boot (`/join/ABC12` or `?join=ABC12`); `vercel.json` already SPA-rewrites those paths to `index.html`.
 
 Multiplayer freshness uses **Supabase Realtime** (`postgres_changes` on `game_participants`, `win_claims`, `games`) via [`src/lib/realtime.js`](../src/lib/realtime.js). Board marks still persist over HTTP with a short debounce.
 
@@ -68,7 +70,7 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `email-confirmation` | Signup succeeded but no session (email confirm required in Supabase) |
 | `dashboard` | User’s active games, pending-win badges for hosts, logout |
 | `setup` | Host builder: title, board size, free space, items (+ images) |
-| `host` | Share code, player list, pending claims, start playing / end game |
+| `host` | Share code + **join link** + **QR**, player list, pending claims, start playing / end game |
 | `play` | Markable board; win claim / host review; confetti on confirmed win |
 
 ---
