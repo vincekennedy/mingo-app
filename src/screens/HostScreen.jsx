@@ -1,12 +1,9 @@
-import { useState } from 'react';
-import { Check, Copy, Link2, Play, QrCode } from 'lucide-react';
+import { Check, Copy, Link2, Play, Printer } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
-import JoinQrCode from '../components/game/JoinQrCode';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
 import { describeWinRule } from '../lib/winDetection';
-import { buildJoinUrl } from '../lib/joinLink';
 
 export default function HostScreen({
   gameCode,
@@ -28,12 +25,11 @@ export default function HostScreen({
   onEndGameAfterWin,
   onCopyCode,
   onCopyJoinLink,
+  onOpenPrintableQr,
   onStartPlaying,
   onResetToHome,
 }) {
   const winRule = describeWinRule(gameConfig);
-  const [showQr, setShowQr] = useState(true);
-  const joinUrl = gameCode ? buildJoinUrl(gameCode) : '';
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
@@ -69,7 +65,7 @@ export default function HostScreen({
               <VisibilityBadge visibility={gameVisibility} />
             </div>
             <p className="text-sm sm:text-base text-gray-600">
-              Share the code, link, or QR — players can join in one tap.
+              Share an invite link, or print a QR flyer for the room.
             </p>
             <p className="mt-2 text-sm mingo-text-brand-strong font-medium">{winRule}</p>
           </div>
@@ -82,60 +78,34 @@ export default function HostScreen({
               {gameCode}
             </div>
 
+            <button
+              type="button"
+              onClick={onCopyJoinLink}
+              className="w-full flex items-center justify-center gap-2 px-4 sm:px-6 py-3 sm:py-4 mingo-btn-primary font-bold rounded-xl transition text-sm sm:text-base shadow-lg"
+              data-testid="copy-join-link"
+            >
+              {linkCopied ? <Check size={20} /> : <Link2 size={20} />}
+              {linkCopied ? 'Invite link copied!' : 'Share invite link'}
+            </button>
+
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
               <button
                 type="button"
                 onClick={onCopyCode}
-                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 mingo-btn-brand rounded-lg transition text-sm sm:text-base"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 mingo-btn-brand rounded-lg transition text-sm"
               >
                 {copied ? <Check size={18} /> : <Copy size={18} />}
                 {copied ? 'Code copied!' : 'Copy code'}
               </button>
               <button
                 type="button"
-                onClick={onCopyJoinLink}
-                className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2 sm:py-3 mingo-btn-secondary rounded-lg transition text-sm sm:text-base"
-                data-testid="copy-join-link"
+                onClick={onOpenPrintableQr}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 mingo-btn-secondary rounded-lg transition text-sm"
+                data-testid="open-printable-qr"
               >
-                {linkCopied ? <Check size={18} /> : <Link2 size={18} />}
-                {linkCopied ? 'Link copied!' : 'Copy join link'}
+                <Printer size={18} /> Printable QR flyer
               </button>
             </div>
-
-            {joinUrl && (
-              <p
-                className="text-xs sm:text-sm text-gray-600 break-all font-mono"
-                data-testid="join-link-url"
-              >
-                {joinUrl}
-              </p>
-            )}
-          </div>
-
-          <div className="border border-gray-200 rounded-xl p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-left">
-                <h3 className="text-base sm:text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <QrCode size={20} className="mingo-text-brand" /> Scan to join
-                </h3>
-                <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                  Great for bar nights and events — put this on a phone or TV.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowQr((v) => !v)}
-                className="text-sm font-semibold mingo-link-brand shrink-0"
-                aria-expanded={showQr}
-              >
-                {showQr ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {showQr && joinUrl && (
-              <div className="pt-1">
-                <JoinQrCode url={joinUrl} size={180} />
-              </div>
-            )}
           </div>
 
           <div className="space-y-3">

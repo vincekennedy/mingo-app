@@ -25,6 +25,16 @@ test.describe('Join link deep links', () => {
     await expect(modal).toBeVisible({ timeout: 60_000 })
     await expect(modal.getByTestId('join-modal-code')).toHaveText('XY9K2')
   })
+
+  test('printable flyer page shows QR, code, and print control', async ({ page }) => {
+    await page.goto('/print/join/ABC12?title=Bar%20Bingo')
+    await expect(page.getByTestId('print-join-flyer')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByTestId('print-flyer-code')).toHaveText('ABC12')
+    await expect(page.getByText('Bar Bingo')).toBeVisible()
+    await expect(page.getByTestId('print-flyer-url')).toContainText('/join/ABC12')
+    await expect(page.getByTestId('join-qr-code')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('print-flyer-button')).toBeVisible()
+  })
 })
 
 const hostEmail = process.env.SMOKE_HOST_EMAIL
@@ -34,7 +44,9 @@ const hasHostCreds = Boolean(hostEmail && hostPassword)
 test.describe('Join link end-to-end', () => {
   test.skip(!hasHostCreds, 'Set SMOKE_HOST_EMAIL and SMOKE_HOST_PASSWORD (mingo-local test host)')
 
-  test('host share UI shows join link + QR; guest joins via /join/:code', async ({ browser }) => {
+  test('host share invite + printable QR; play screen share; guest joins via link', async ({
+    browser,
+  }) => {
     let gameCode = null
     const hostContext = await browser.newContext()
     const hostPage = await hostContext.newPage()
@@ -64,10 +76,21 @@ test.describe('Join link end-to-end', () => {
       gameCode = (await hostPage.getByTestId('game-code').innerText()).trim()
       expect(gameCode).toMatch(/^[A-Z0-9]{5}$/)
 
-      const joinUrl = await hostPage.getByTestId('join-link-url').innerText()
-      expect(joinUrl).toContain(`/join/${gameCode}`)
-      await expect(hostPage.getByTestId('join-qr-code')).toBeVisible({ timeout: 15_000 })
       await expect(hostPage.getByTestId('copy-join-link')).toBeVisible()
+      await expect(hostPage.getByTestId('open-printable-qr')).toBeVisible()
+
+      const flyerPromise = hostPage.waitForEvent('popup')
+      await hostPage.getByTestId('open-printable-qr').click()
+      const flyerPage = await flyerPromise
+      await expect(flyerPage.getByTestId('print-join-flyer')).toBeVisible({ timeout: 30_000 })
+      await expect(flyerPage.getByTestId('print-flyer-code')).toHaveText(gameCode)
+      await expect(flyerPage.getByTestId('join-qr-code')).toBeVisible({ timeout: 15_000 })
+      await flyerPage.close()
+
+      await hostPage.getByRole('button', { name: /Start Playing/i }).click()
+      await expect(hostPage.getByTestId('share-invite-link')).toBeVisible({ timeout: 30_000 })
+      await hostPage.getByTestId('share-invite-link').click()
+      await expect(hostPage.getByTestId('share-invite-link')).toContainText(/copied/i)
 
       const guestName = `LinkGuest${Date.now().toString(36).slice(-4)}`
       guestContext = await browser.newContext()

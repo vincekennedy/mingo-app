@@ -30,6 +30,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import SetupScreen from './screens/SetupScreen';
 import HostScreen from './screens/HostScreen';
 import PlayScreen from './screens/PlayScreen';
+import PrintJoinFlyerScreen from './screens/PrintJoinFlyerScreen';
 import {
   buildJoinUrl,
   clearJoinPathFromUrl,
@@ -40,11 +41,13 @@ import {
   resolveInitialJoinCode,
   writePendingJoinCode,
 } from './lib/joinLink';
+import { openPrintableJoinFlyer, resolveInitialPrintJoin } from './lib/printJoinFlyer';
 
 const initialJoinCode = resolveInitialJoinCode();
+const initialPrintJoin = resolveInitialPrintJoin();
 
 export default function Mingo() {
-  const [screen, setScreen] = useState('home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play
+  const [screen, setScreen] = useState(initialPrintJoin ? 'print-join' : 'home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play, print-join
   const [currentUser, setCurrentUser] = useState(null);
   const [userGames, setUserGames] = useState([]);
   const [items, setItems] = useState(Array(24).fill({ text: '', imageUrl: null }));
@@ -57,8 +60,9 @@ export default function Mingo() {
   const [linesToWin, setLinesToWin] = useState(1);
   const [gameVisibility, setGameVisibility] = useState('private');
   const [gameCode, setGameCode] = useState('');
-  const [joinCode, setJoinCode] = useState(initialJoinCode);
-  const [pendingJoinCode, setPendingJoinCode] = useState(initialJoinCode);
+  const [joinCode, setJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
+  const [pendingJoinCode, setPendingJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
+  const [printFlyer] = useState(initialPrintJoin);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [gameConfig, setGameConfig] = useState(null);
@@ -87,7 +91,8 @@ export default function Mingo() {
   const passwordRecoveryRef = useRef(false);
   const gamesLoadIdRef = useRef(0);
   const authReadyRef = useRef(false);
-  const pendingJoinCodeRef = useRef(initialJoinCode);
+  const pendingJoinCodeRef = useRef(initialPrintJoin ? '' : initialJoinCode);
+  const printFlyerRef = useRef(Boolean(initialPrintJoin));
   const joinInFlightRef = useRef(false);
   const [authReady, setAuthReady] = useState(false);
   const [gamesLoading, setGamesLoading] = useState(false);
@@ -231,11 +236,14 @@ export default function Mingo() {
             username,
             isGuest: Boolean(user.is_anonymous),
           });
-          // Deep-link join: stay off dashboard until the pending-join effect runs
-          if (!pendingJoinCodeRef.current) {
+          // Deep-link join: stay off dashboard until the pending-join effect runs.
+          // Printable flyer tab: stay on print-join (do not yank to dashboard).
+          if (printFlyerRef.current) {
+            setScreen('print-join');
+          } else if (!pendingJoinCodeRef.current) {
             setScreen('dashboard');
           }
-          await loadUserGames(user.id, { showLoading: true });
+          await loadUserGames(user.id, { showLoading: !printFlyerRef.current });
         } finally {
           markAuthReady();
         }
@@ -322,8 +330,8 @@ export default function Mingo() {
           isGuest: Boolean(user.is_anonymous),
         });
         // Don't yank users to the dashboard while a join deep-link / login-to-join is pending,
-        // or while they are already in host/play.
-        if (!pendingJoinCodeRef.current) {
+        // while viewing a printable flyer, or while they are already in host/play.
+        if (!pendingJoinCodeRef.current && !printFlyerRef.current) {
           setScreen((prev) =>
             prev === 'home' || prev === 'login' || prev === 'register' ? 'dashboard' : prev
           );
@@ -1247,9 +1255,18 @@ export default function Mingo() {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
+  const openPrintableQr = () => {
+    if (!gameCode) return;
+    const opened = openPrintableJoinFlyer(gameCode, gameConfig?.title || '');
+    if (!opened) {
+      showToast('Pop-up blocked — allow pop-ups to open the printable QR flyer.');
+    }
+  };
+
   // Deep link / pending join: auto-join when signed in, otherwise open the chooser modal
   useEffect(() => {
     if (!authReady || passwordRecoveryRef.current) return;
+    if (printFlyerRef.current || screen === 'print-join') return;
     const code = pendingJoinCodeRef.current || pendingJoinCode;
     if (!isValidGameCode(code)) return;
     if (joinInFlightRef.current) return;
@@ -1675,7 +1692,7 @@ export default function Mingo() {
 
   return (
     <div data-theme={DEFAULT_THEME} className="min-h-screen mingo-shell p-4 sm:p-8 relative">
-      {(registering || loggingIn || !authReady) && (
+      {(registering || loggingIn || !authReady) && screen !== 'print-join' && (
         <AuthLoadingOverlay authReady={authReady} registering={registering} />
       )}
 
@@ -1686,14 +1703,24 @@ export default function Mingo() {
         />
       )}
 
-      {currentUser && screen !== 'reset-password' && (
+      {screen === 'print-join' && printFlyer && (
+        <div className="fixed inset-0 z-[80] overflow-auto">
+          <PrintJoinFlyerScreen
+            code={printFlyer.code}
+            title={printFlyer.title}
+            joinUrl={printFlyer.joinUrl}
+          />
+        </div>
+      )}
+
+      {currentUser && screen !== 'reset-password' && screen !== 'print-join' && (
         <UserProfileBanner
           username={currentUser.username}
           onOpenDashboard={() => setScreen('dashboard')}
         />
       )}
-      <VersionBadge />
-      <ReportButton onClick={openReportModal} />
+      {screen !== 'print-join' && <VersionBadge />}
+      {screen !== 'print-join' && <ReportButton onClick={openReportModal} />}
       <ToastHost />
 
       {showReportModal && (
@@ -1730,6 +1757,7 @@ export default function Mingo() {
         />
       )}
 
+      {screen !== 'print-join' && (
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-4 sm:mb-8">
           <h1 className="text-4xl sm:text-6xl font-bold text-white mb-2">🎲 Mingo</h1>
@@ -1923,6 +1951,7 @@ export default function Mingo() {
             onEndGameAfterWin={handleEndGameAfterWin}
             onCopyCode={copyCode}
             onCopyJoinLink={copyJoinLink}
+            onOpenPrintableQr={openPrintableQr}
             onStartPlaying={async () => {
               if (gameConfig && gameCode) {
                 await generateBoardFromConfig(gameConfig, gameCode);
@@ -1953,14 +1982,18 @@ export default function Mingo() {
             boardSize={boardSize}
             marked={marked}
             currentUser={currentUser}
+            linkCopied={linkCopied}
             onToggleIncorrectItem={toggleIncorrectItem}
             onRejectWin={rejectWin}
             onConfirmWin={confirmWin}
             onResetToHome={resetToHome}
             onToggleCell={toggleCell}
+            onCopyJoinLink={copyJoinLink}
+            onOpenPrintableQr={openPrintableQr}
           />
         )}
       </div>
+      )}
     </div>
   );
 }
