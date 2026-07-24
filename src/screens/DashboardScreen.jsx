@@ -1,4 +1,5 @@
 import { AlertCircle, Copy, Loader2, LogOut, Play, X } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 import PublicLobby from '../components/game/PublicLobby';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import { describeWinRule } from '../lib/winDetection';
@@ -7,6 +8,8 @@ export default function DashboardScreen({
   currentUser,
   gamesLoading,
   userGames,
+  userTheme,
+  onUpdateUserTheme,
   onLogout,
   onSelectGame,
   onEndGame,
@@ -28,6 +31,18 @@ export default function DashboardScreen({
         >
           <LogOut size={18} /> Logout
         </button>
+      </div>
+
+      <div className="pb-4 border-b border-gray-200">
+        <ThemeSwatchPicker
+          value={userTheme}
+          onChange={onUpdateUserTheme}
+          label="Your theme"
+          idPrefix="dashboard-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Applies on this device outside of a game. Each game can still use its own theme.
+        </p>
       </div>
 
       {gamesLoading ? (

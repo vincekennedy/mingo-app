@@ -1,10 +1,13 @@
 import { LogIn, UserPlus, Users } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 import PublicLobby from '../components/game/PublicLobby';
 
 export default function HomeScreen({
   currentUser,
   joinCode,
   setJoinCode,
+  userTheme,
+  onUpdateUserTheme,
   onOpenDashboard,
   onLogin,
   onRegister,
@@ -13,6 +16,18 @@ export default function HomeScreen({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+      <div className="pb-2 border-b border-gray-200">
+        <ThemeSwatchPicker
+          value={userTheme}
+          onChange={onUpdateUserTheme}
+          label="Your theme"
+          idPrefix="home-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Applies on this device outside of a game. Hosts can still pick a different look per game.
+        </p>
+      </div>
+
       {currentUser ? (
         <>
           <div className="text-center mb-4">
