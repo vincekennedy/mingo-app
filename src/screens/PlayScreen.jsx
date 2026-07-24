@@ -1,4 +1,4 @@
-import { AlertCircle, Home, RotateCcw, Shuffle, Trophy, X } from 'lucide-react';
+import { AlertCircle, Home, RotateCcw, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
@@ -25,7 +25,6 @@ export default function PlayScreen({
   onConfirmWin,
   onResetToHome,
   onToggleCell,
-  onNewBoard,
 }) {
   const winRule = describeWinRule(gameConfig);
 
@@ -138,12 +137,6 @@ export default function PlayScreen({
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <button
-            onClick={onNewBoard}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 mingo-btn-secondary-solid font-semibold rounded-xl transition shadow-lg text-sm sm:text-base"
-          >
-            <Shuffle size={18} className="sm:w-5 sm:h-5" /> New Board
-          </button>
           <button
             onClick={onResetToHome}
             className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-600 text-white font-semibold rounded-xl hover:bg-gray-700 transition shadow-lg text-sm sm:text-base"
