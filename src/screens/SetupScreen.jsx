@@ -1,4 +1,5 @@
 import { Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 
 export default function SetupScreen({
   currentUser,
@@ -17,6 +18,8 @@ export default function SetupScreen({
   onUpdateLinesToWin,
   gameVisibility,
   onUpdateGameVisibility,
+  gameTheme,
+  onUpdateGameTheme,
   items,
   onAddItem,
   onUpdateItem,
@@ -137,6 +140,18 @@ export default function SetupScreen({
         </select>
         <p className="mt-2 text-xs sm:text-sm text-gray-500">
           Private games stay off the public lobby. Anyone with the exact code can still join.
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <ThemeSwatchPicker
+          value={gameTheme}
+          onChange={onUpdateGameTheme}
+          label="Game theme"
+          idPrefix="setup-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Everyone in this game sees this look. Locked when you create the game.
         </p>
       </div>
 
