@@ -1016,6 +1016,28 @@ export default function Mingo() {
   };
 
   const generateBoardFromConfig = async (config, gameCodeToUse = null, userForSave = null) => {
+    const codeToSave = gameCodeToUse || gameCode;
+    const saveUser = userForSave || currentUser;
+
+    // Board is locked once generated for a user in a game — restore instead of reshuffling
+    if (saveUser && codeToSave) {
+      try {
+        const existing = await boardService.loadBoardState(codeToSave, saveUser.id);
+        if (existing?.board?.length > 0) {
+          setBoard(existing.board);
+          setMarked(existing.marked);
+          setHasWon(existing.hasWon || false);
+          setPendingWinClaim(null);
+          setWinConfirmed(false);
+          setWinRejected(false);
+          setScreen('play');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking existing board:', error);
+      }
+    }
+
     const { items: validItems, boardSize: size, useFreeSpace: freeSpace } = config;
     const totalCells = size * size;
     const neededItems = freeSpace ? totalCells - 1 : totalCells;
@@ -1074,9 +1096,7 @@ export default function Mingo() {
     setWinRejected(false);
     setScreen('play');
     
-    // Save generated board to Supabase
-    const codeToSave = gameCodeToUse || gameCode;
-    const saveUser = userForSave || currentUser;
+    // Save generated board to Supabase (locked for this user/game)
     if (saveUser && codeToSave) {
       try {
         await boardService.saveGeneratedBoard(codeToSave, saveUser.id, config, newBoard, freeSpace ? new Set([centerIndex]) : new Set());
@@ -1762,13 +1782,6 @@ export default function Mingo() {
             onConfirmWin={confirmWin}
             onResetToHome={resetToHome}
             onToggleCell={toggleCell}
-            onNewBoard={async () => {
-              if (gameConfig && gameCode) {
-                await generateBoardFromConfig(gameConfig, gameCode);
-              } else if (gameConfig) {
-                await generateBoardFromConfig(gameConfig);
-              }
-            }}
           />
         )}
       </div>

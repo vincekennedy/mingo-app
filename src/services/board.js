@@ -65,7 +65,8 @@ export const boardService = {
   },
   
   /**
-   * Generate and save a new board for a user
+   * Save a newly generated board for a user.
+   * Boards are locked after first generation — callers should not reshuffle.
    * @param {string} gameCode - Game code
    * @param {string} userId - User ID
    * @param {Object} config - Game configuration
