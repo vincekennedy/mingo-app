@@ -3,6 +3,7 @@ import { AlertCircle, Loader2, UserPlus } from 'lucide-react';
 export default function RegisterScreen({
   registering,
   authError,
+  pendingJoinCode,
   onRegister,
   onLogin,
   onBack,
@@ -11,6 +12,12 @@ export default function RegisterScreen({
   return (
     <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${registering ? 'pointer-events-none opacity-80' : ''}`}>
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
+      {pendingJoinCode ? (
+        <p className="text-center text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          After you create an account you will join game{' '}
+          <span className="font-mono font-bold mingo-text-brand tracking-wider">{pendingJoinCode}</span>
+        </p>
+      ) : null}
       {authError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2" role="alert">
           <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
