@@ -1,4 +1,17 @@
+import type { FormEvent, MouseEvent } from 'react';
 import { AlertCircle, Loader2, LogIn, UserPlus, Users, X } from 'lucide-react';
+
+type JoinGameModalProps = {
+  joinCode: string;
+  guestDisplayName: string;
+  setGuestDisplayName: (value: string) => void;
+  guestJoinError: string | null;
+  guestJoining: boolean;
+  onSubmitGuest: (e: FormEvent) => void;
+  onLogin: () => void;
+  onRegister: () => void;
+  onClose: () => void;
+};
 
 /**
  * Join chooser: guest (anonymous) display name, or log in / create an account.
@@ -14,14 +27,14 @@ export default function JoinGameModal({
   onLogin,
   onRegister,
   onClose,
-}) {
+}: JoinGameModalProps) {
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="join-game-modal-title"
-      onClick={(e) => {
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >

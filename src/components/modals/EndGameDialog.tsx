@@ -1,6 +1,11 @@
 import { Play, Trophy, X } from 'lucide-react';
 
-export default function EndGameDialog({ onContinue, onEndGame }) {
+type EndGameDialogProps = {
+  onContinue: () => void;
+  onEndGame: () => void;
+};
+
+export default function EndGameDialog({ onContinue, onEndGame }: EndGameDialogProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
       <div className="mb-4">

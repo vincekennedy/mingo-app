@@ -3,7 +3,50 @@ import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
-import { describeWinRule } from '../lib/winDetection';
+import { describeWinRule, type WinConfigFields } from '../lib/winDetection';
+import type { GameParticipantSummary, GameVisibility } from '../services/game';
+import type { AppUser } from '../types/app';
+
+type ScreenGameConfig = WinConfigFields & {
+  title?: string;
+  boardSize?: number;
+  useFreeSpace?: boolean;
+};
+
+type ActiveWinClaim = {
+  type: string;
+  indices: number[];
+  items: string[];
+  claimId: string;
+  timestamp: number;
+  userId?: string;
+  username?: string;
+};
+
+type HostScreenProps = {
+  gameCode: string;
+  gameConfig: ScreenGameConfig | null;
+  gameVisibility: GameVisibility;
+  gamePlayers: GameParticipantSummary[];
+  confirmedWinners: string[];
+  pendingWinClaim: ActiveWinClaim | null;
+  selectedIncorrectItems: Set<number>;
+  showEndGameDialog: boolean;
+  isHost: boolean;
+  copied: boolean;
+  linkCopied: boolean;
+  currentUser: AppUser | null;
+  onToggleIncorrectItem: (itemIndex: number) => void;
+  onRejectWin: () => void | Promise<void>;
+  onConfirmWin: () => void | Promise<void>;
+  onContinueAfterWin: () => void;
+  onEndGameAfterWin: () => void | Promise<void>;
+  onCopyCode: () => void;
+  onCopyJoinLink: () => void;
+  onOpenPrintableQr: () => void;
+  onStartPlaying: () => void | Promise<void>;
+  onResetToHome: () => void;
+};
 
 export default function HostScreen({
   gameCode,
@@ -28,7 +71,7 @@ export default function HostScreen({
   onOpenPrintableQr,
   onStartPlaying,
   onResetToHome,
-}) {
+}: HostScreenProps) {
   const winRule = describeWinRule(gameConfig);
 
   return (

@@ -1,13 +1,31 @@
 import { AlertCircle, Check, X } from 'lucide-react';
 import { formatClaimType } from '../../lib/winDetection';
 
+type PendingWinClaim = {
+  type: string;
+  indices: number[];
+  items?: string[];
+  claimId: string;
+  timestamp: number;
+  userId?: string;
+  username?: string;
+};
+
+type WinVerificationModalProps = {
+  pendingWinClaim: PendingWinClaim | null;
+  selectedIncorrectItems: Set<number>;
+  onToggleIncorrectItem: (idx: number) => void;
+  onReject: () => void;
+  onConfirm: () => void;
+};
+
 export default function WinVerificationModal({
   pendingWinClaim,
   selectedIncorrectItems,
   onToggleIncorrectItem,
   onReject,
   onConfirm,
-}) {
+}: WinVerificationModalProps) {
   if (!pendingWinClaim) return null;
 
   return (

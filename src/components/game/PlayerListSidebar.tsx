@@ -1,6 +1,17 @@
 import { Trophy, Users } from 'lucide-react';
+import type { GameParticipantSummary } from '../../services/game';
 
-export default function PlayerListSidebar({ gamePlayers, confirmedWinners, emptyLabel = 'No players yet...' }) {
+type PlayerListSidebarProps = {
+  gamePlayers: GameParticipantSummary[];
+  confirmedWinners: string[];
+  emptyLabel?: string;
+};
+
+export default function PlayerListSidebar({
+  gamePlayers,
+  confirmedWinners,
+  emptyLabel = 'No players yet...',
+}: PlayerListSidebarProps) {
   return (
     <div className="lg:w-64 flex-shrink-0">
       <div className="bg-white rounded-2xl shadow-2xl p-4 sticky top-4">

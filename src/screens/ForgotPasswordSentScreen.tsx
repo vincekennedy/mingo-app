@@ -1,6 +1,10 @@
 import { KeyRound, LogIn } from 'lucide-react';
 
-export default function ForgotPasswordSentScreen({ onBackToLogin }) {
+type ForgotPasswordSentScreenProps = {
+  onBackToLogin: () => void;
+};
+
+export default function ForgotPasswordSentScreen({ onBackToLogin }: ForgotPasswordSentScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
       <div className="mx-auto w-16 h-16 mingo-surface-brand-soft rounded-full flex items-center justify-center mb-4">

@@ -2,7 +2,64 @@ import { AlertCircle, Check, Home, Link2, Printer, RotateCcw, Trophy, X } from '
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
-import { describeWinRule } from '../lib/winDetection';
+import { describeWinRule, type BoardCell, type WinConfigFields } from '../lib/winDetection';
+import type { GameParticipantSummary, GameVisibility } from '../services/game';
+import type { AppUser } from '../types/app';
+
+type ScreenGameConfig = WinConfigFields & {
+  title?: string;
+  boardSize?: number;
+  useFreeSpace?: boolean;
+};
+
+/** Board cell in active play (object form may include imageUrl). */
+type PlayBoardCell =
+  | BoardCell
+  | { text?: string; isFree?: boolean; imageUrl?: string | null };
+
+type ActiveWinClaim = {
+  type: string;
+  indices: number[];
+  items: string[];
+  claimId: string;
+  timestamp: number;
+  userId?: string;
+  username?: string;
+};
+
+function normalizePlayCell(cell: PlayBoardCell): {
+  text?: string;
+  isFree?: boolean;
+  imageUrl?: string | null;
+} {
+  return typeof cell === 'string' ? { text: cell } : cell;
+}
+
+type PlayScreenProps = {
+  gameCode: string;
+  gameConfig: ScreenGameConfig | null;
+  gameVisibility: GameVisibility;
+  gamePlayers: GameParticipantSummary[];
+  confirmedWinners: string[];
+  isHost: boolean;
+  pendingWinClaim: ActiveWinClaim | null;
+  selectedIncorrectItems: Set<number>;
+  winConfirmed: boolean;
+  winRejected: boolean;
+  hasWon: boolean;
+  board: PlayBoardCell[];
+  boardSize: number;
+  marked: Set<number>;
+  currentUser: AppUser | null;
+  linkCopied: boolean;
+  onToggleIncorrectItem: (itemIndex: number) => void;
+  onRejectWin: () => void | Promise<void>;
+  onConfirmWin: () => void | Promise<void>;
+  onResetToHome: () => void;
+  onToggleCell: (index: number) => void;
+  onCopyJoinLink: () => void;
+  onOpenPrintableQr: () => void;
+};
 
 export default function PlayScreen({
   gameCode,
@@ -28,7 +85,7 @@ export default function PlayScreen({
   onToggleCell,
   onCopyJoinLink,
   onOpenPrintableQr,
-}) {
+}: PlayScreenProps) {
   const winRule = describeWinRule(gameConfig);
 
   return (
@@ -135,31 +192,35 @@ export default function PlayScreen({
               maxWidth: `min(100%, ${boardSize * 120}px)`
             }}
           >
-            {board.map((cell, index) => (
-              <button
-                key={index}
-                onClick={() => onToggleCell(index)}
-                className={`
+            {board.map((cell, index) => {
+              const { text, isFree, imageUrl } = normalizePlayCell(cell);
+
+              return (
+                <button
+                  key={index}
+                  onClick={() => onToggleCell(index)}
+                  className={`
                   mingo-board-cell w-full p-1 sm:p-2 rounded-lg font-semibold flex items-center justify-center text-center transition-all
-                  ${cell.isFree
+                  ${isFree
                     ? 'mingo-cell-free text-gray-900 cursor-default'
                     : marked.has(index)
                     ? 'mingo-cell-marked text-white scale-95'
                     : 'mingo-cell-idle text-gray-800 hover:scale-105 hover:shadow-lg active:scale-95'
                   }
                 `}
-              >
-                {cell.imageUrl ? (
-                  <img
-                    src={cell.imageUrl}
-                    alt={cell.text || 'Bingo item'}
-                    className="w-full h-full object-cover rounded"
-                  />
-                ) : (
-                  <span className="mingo-board-cell-text">{cell.text}</span>
-                )}
-              </button>
-            ))}
+                >
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={text || 'Bingo item'}
+                      className="w-full h-full object-cover rounded"
+                    />
+                  ) : (
+                    <span className="mingo-board-cell-text">{text}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 

@@ -1,4 +1,15 @@
+import type { FormEvent } from 'react';
 import { AlertCircle, Loader2, UserPlus } from 'lucide-react';
+
+type RegisterScreenProps = {
+  registering: boolean;
+  authError: string | null;
+  pendingJoinCode: string;
+  onRegister: (username: string, email: string, password: string) => void | Promise<void>;
+  onLogin: () => void;
+  onBack: () => void;
+  onValidationError: (message: string) => void;
+};
 
 export default function RegisterScreen({
   registering,
@@ -8,7 +19,7 @@ export default function RegisterScreen({
   onLogin,
   onBack,
   onValidationError,
-}) {
+}: RegisterScreenProps) {
   return (
     <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${registering ? 'pointer-events-none opacity-80' : ''}`}>
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Create Account</h2>
@@ -25,14 +36,23 @@ export default function RegisterScreen({
         </div>
       )}
       <form
-        onSubmit={async (e) => {
+        onSubmit={async (e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           if (registering) return;
-          const formData = new FormData(e.target);
+          const formData = new FormData(e.currentTarget);
           const username = formData.get('username');
           const email = formData.get('email');
           const password = formData.get('password');
           const confirmPassword = formData.get('confirmPassword');
+
+          if (
+            typeof username !== 'string' ||
+            typeof email !== 'string' ||
+            typeof password !== 'string' ||
+            typeof confirmPassword !== 'string'
+          ) {
+            return;
+          }
 
           if (password !== confirmPassword) {
             onValidationError('Passwords do not match');

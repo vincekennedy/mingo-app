@@ -1,6 +1,11 @@
-import { User } from 'lucide-react';
+import { User } from 'lucide-react'
 
-export default function UserProfileBanner({ username, onOpenDashboard }) {
+type UserProfileBannerProps = {
+  username: string
+  onOpenDashboard: () => void
+}
+
+export default function UserProfileBanner({ username, onOpenDashboard }: UserProfileBannerProps) {
   return (
     <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-20">
       <button
@@ -15,5 +20,5 @@ export default function UserProfileBanner({ username, onOpenDashboard }) {
         </span>
       </button>
     </div>
-  );
+  )
 }

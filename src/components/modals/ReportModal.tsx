@@ -1,6 +1,26 @@
+import type { Dispatch, FormEvent, MouseEvent, SetStateAction } from 'react';
 import { AlertCircle, Check, Loader2, MessageSquarePlus, X } from 'lucide-react';
 import { FEEDBACK_CATEGORIES } from '../../services/feedback';
 import { getVersion } from '../../lib/version';
+import type { Screen } from '../../types/app';
+
+type ReportModalProps = {
+  screen: Screen | string;
+  gameCode: string;
+  reportCategory: string;
+  setReportCategory: Dispatch<SetStateAction<string>>;
+  reportEmail: string;
+  setReportEmail: Dispatch<SetStateAction<string>>;
+  reportSubject: string;
+  setReportSubject: Dispatch<SetStateAction<string>>;
+  reportDetails: string;
+  setReportDetails: Dispatch<SetStateAction<string>>;
+  reportSubmitting: boolean;
+  reportError: string | null;
+  reportSuccess: boolean;
+  onSubmit: (e: FormEvent) => void;
+  onClose: () => void;
+};
 
 export default function ReportModal({
   screen,
@@ -18,14 +38,14 @@ export default function ReportModal({
   reportSuccess,
   onSubmit,
   onClose,
-}) {
+}: ReportModalProps) {
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="report-modal-title"
-      onClick={(e) => {
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >

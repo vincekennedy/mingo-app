@@ -1,6 +1,10 @@
-import { MessageSquarePlus } from 'lucide-react';
+import { MessageSquarePlus } from 'lucide-react'
 
-export default function ReportButton({ onClick }) {
+type ReportButtonProps = {
+  onClick: () => void
+}
+
+export default function ReportButton({ onClick }: ReportButtonProps) {
   return (
     <button
       type="button"
@@ -10,5 +14,5 @@ export default function ReportButton({ onClick }) {
       <MessageSquarePlus size={16} className="mingo-text-brand" />
       Report
     </button>
-  );
+  )
 }

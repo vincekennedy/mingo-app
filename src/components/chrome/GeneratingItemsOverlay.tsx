@@ -1,6 +1,19 @@
-import { Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react'
 
-export default function GeneratingItemsOverlay({ generateStatusIndex, generateLoadingMessages }) {
+type GeneratingItemsOverlayProps = {
+  generateStatusIndex: number
+  generateLoadingMessages: readonly string[]
+}
+
+export default function GeneratingItemsOverlay({
+  generateStatusIndex,
+  generateLoadingMessages,
+}: GeneratingItemsOverlayProps) {
+  const message =
+    generateLoadingMessages.length > 0
+      ? generateLoadingMessages[generateStatusIndex % generateLoadingMessages.length]
+      : undefined
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
@@ -26,7 +39,7 @@ export default function GeneratingItemsOverlay({ generateStatusIndex, generateLo
             key={generateStatusIndex}
             className="mingo-generate-copy text-sm sm:text-base text-gray-600 min-h-[3rem] flex items-center justify-center px-2"
           >
-            {generateLoadingMessages[generateStatusIndex % generateLoadingMessages.length]}
+            {message}
           </p>
 
           <div className="mt-6 mx-auto grid max-w-[180px] grid-cols-3 gap-2">
@@ -45,5 +58,5 @@ export default function GeneratingItemsOverlay({ generateStatusIndex, generateLo
         </div>
       </div>
     </div>
-  );
+  )
 }

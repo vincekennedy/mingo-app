@@ -4,8 +4,51 @@ import {
   GENERATION_TONE_IDS,
   GENERATION_TONE_LABELS,
   MAX_INSTRUCTIONS_LENGTH,
+  type GenerationToneId,
 } from '../lib/generationTone';
 import { isValidCustomEntryCodeOrEmpty } from '../lib/joinLink';
+import type { ThemeId } from '../lib/theme';
+import type { WinMode } from '../lib/winDetection';
+import type { GameVisibility } from '../services/game';
+import type { AppUser } from '../types/app';
+
+type SetupItem = { text: string; imageUrl: string | null };
+type SetupItemEntry = SetupItem | string;
+
+type SetupScreenProps = {
+  currentUser: AppUser | null;
+  gameTitle: string;
+  setGameTitle: (title: string) => void;
+  generationTone: GenerationToneId;
+  onUpdateGenerationTone: (tone: string) => void;
+  generationInstructions: string;
+  onUpdateGenerationInstructions: (instructions: string) => void;
+  customEntryCode: string;
+  onUpdateCustomEntryCode: (code: string) => void;
+  generatingItems: boolean;
+  neededItemCount: number;
+  onGenerateItems: () => void | Promise<void>;
+  boardSize: number;
+  onUpdateBoardSize: (size: number) => void;
+  useFreeSpace: boolean;
+  onUpdateFreeSpace: (hasFreeSpace: boolean) => void;
+  winMode: WinMode;
+  onUpdateWinMode: (mode: string) => void;
+  linesToWin: number;
+  onUpdateLinesToWin: (n: number | string) => void;
+  gameVisibility: GameVisibility;
+  onUpdateGameVisibility: (value: string) => void;
+  gameTheme: ThemeId;
+  onUpdateGameTheme: (value: string | null | undefined) => void;
+  items: SetupItemEntry[];
+  onAddItem: () => void;
+  onUpdateItem: (index: number, value: string) => void;
+  onUpdateItemImage: (index: number, file: File) => void | Promise<void>;
+  onRemoveItem: (index: number) => void;
+  onRemoveItemImage: (index: number) => void;
+  onBack: () => void;
+  onCreateGame: () => void | Promise<void>;
+};
 
 export default function SetupScreen({
   currentUser,
@@ -40,7 +83,7 @@ export default function SetupScreen({
   onRemoveItemImage,
   onBack,
   onCreateGame,
-}) {
+}: SetupScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8">
       <div className="mb-6">
