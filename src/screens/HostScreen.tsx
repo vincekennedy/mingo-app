@@ -121,13 +121,15 @@ export default function HostScreen({
       )}
 
       <div className="flex-1 space-y-4 sm:space-y-6">
-        <WinVerificationModal
-          pendingWinClaim={pendingWinClaim}
-          selectedIncorrectItems={selectedIncorrectItems}
-          onToggleIncorrectItem={onToggleIncorrectItem}
-          onReject={onRejectWin}
-          onConfirm={onConfirmWin}
-        />
+        {!showEndGameDialog && (
+          <WinVerificationModal
+            pendingWinClaim={pendingWinClaim}
+            selectedIncorrectItems={selectedIncorrectItems}
+            onToggleIncorrectItem={onToggleIncorrectItem}
+            onReject={onRejectWin}
+            onConfirm={onConfirmWin}
+          />
+        )}
 
         {showEndGameDialog && isHost && (
           <EndGameDialog

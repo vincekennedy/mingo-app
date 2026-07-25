@@ -105,6 +105,14 @@ export const winClaimsService = {
 
   async confirmClaim(claimId: string): Promise<void> {
     try {
+      const { data: claim, error: fetchError } = await supabase
+        .from('win_claims')
+        .select('id, game_id, user_id')
+        .eq('id', claimId)
+        .single()
+
+      if (fetchError) throw fetchError
+
       const { error } = await supabase
         .from('win_claims')
         .update({
@@ -114,6 +122,26 @@ export const winClaimsService = {
         .eq('id', claimId)
 
       if (error) throw error
+
+      // Drop duplicate pending claims from the same rapid-submit race so the
+      // host verification UI and guest status stay on the confirmed win.
+      if (claim?.game_id && claim?.user_id) {
+        const { error: cleanupError } = await supabase
+          .from('win_claims')
+          .update({
+            status: 'rejected',
+            incorrect_indices: [],
+            resolved_at: new Date().toISOString(),
+          })
+          .eq('game_id', claim.game_id)
+          .eq('user_id', claim.user_id)
+          .eq('status', 'pending')
+          .neq('id', claimId)
+
+        if (cleanupError) {
+          console.error('Cleanup duplicate pending claims error:', cleanupError)
+        }
+      }
     } catch (error) {
       console.error('Confirm claim error:', error)
       throw error
@@ -143,23 +171,7 @@ export const winClaimsService = {
     userId: string,
   ): Promise<UserClaimStatus | null> {
     try {
-      const { data, error } = await supabase
-        .from('win_claims')
-        .select('*')
-        .eq('game_id', gameId)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          return null
-        }
-        throw error
-      }
-
-      const row = data as {
+      const mapRow = (row: {
         id: string
         status: string
         claim_type: string
@@ -167,9 +179,7 @@ export const winClaimsService = {
         claimed_items: string[]
         incorrect_indices?: number[] | null
         created_at: string
-      }
-
-      return {
+      }): UserClaimStatus => ({
         id: row.id,
         status: row.status,
         type: row.claim_type,
@@ -177,7 +187,36 @@ export const winClaimsService = {
         items: row.claimed_items,
         incorrectIndices: row.incorrect_indices || [],
         timestamp: new Date(row.created_at).getTime(),
-      }
+      })
+
+      // Prefer a confirmed claim so a later duplicate pending claim cannot
+      // hide an already-confirmed win (e.g. rapid multi-submit races).
+      const { data: confirmed, error: confirmedError } = await supabase
+        .from('win_claims')
+        .select('*')
+        .eq('game_id', gameId)
+        .eq('user_id', userId)
+        .eq('status', 'confirmed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (confirmedError) throw confirmedError
+      if (confirmed) return mapRow(confirmed as Parameters<typeof mapRow>[0])
+
+      const { data, error } = await supabase
+        .from('win_claims')
+        .select('*')
+        .eq('game_id', gameId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) throw error
+      if (!data) return null
+
+      return mapRow(data as Parameters<typeof mapRow>[0])
     } catch (error) {
       console.error('Get user claim status error:', error)
       return null

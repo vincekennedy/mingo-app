@@ -129,6 +129,8 @@ export function useActiveGame({
   const pendingWinClaimRef = useRef<ActiveWinClaim | null>(null)
   const winConfirmedRef = useRef(false)
   const winRejectedRef = useRef(false)
+  const claimSubmitInFlightRef = useRef(false)
+  const showEndGameDialogRef = useRef(false)
 
   const applyLiveConfig = (
     config: GameConfig,
@@ -173,6 +175,8 @@ export function useActiveGame({
     setPeekLoading(false)
     setPeekError(null)
     setPeekEmptyMessage(null)
+    claimSubmitInFlightRef.current = false
+    showEndGameDialogRef.current = false
   }
 
   const hydrateActiveGame = ({
@@ -529,6 +533,7 @@ export function useActiveGame({
       await winClaimsService.confirmClaim(pendingWinClaim.claimId)
       setPendingWinClaim(null)
       setSelectedIncorrectItems(new Set())
+      showEndGameDialogRef.current = true
       setShowEndGameDialog(true)
     } catch (error) {
       console.error('Error confirming win:', error)
@@ -541,6 +546,7 @@ export function useActiveGame({
 
     try {
       await gameService.markGameAsEnded(gameId)
+      showEndGameDialogRef.current = false
       setShowEndGameDialog(false)
 
       if (currentUser) {
@@ -558,6 +564,7 @@ export function useActiveGame({
   }
 
   const handleContinueAfterWin = () => {
+    showEndGameDialogRef.current = false
     setShowEndGameDialog(false)
   }
 
@@ -607,7 +614,15 @@ export function useActiveGame({
   }
 
   const toggleCell = (index: number) => {
-    if (isLiveCellFree(board[index]) || hasWon || pendingWinClaim || winRejected) return
+    if (
+      isLiveCellFree(board[index]) ||
+      hasWon ||
+      pendingWinClaim ||
+      winRejected ||
+      claimSubmitInFlightRef.current
+    ) {
+      return
+    }
 
     const newMarked = new Set(marked)
     if (newMarked.has(index)) {
@@ -632,8 +647,14 @@ export function useActiveGame({
     ) {
       const winResult = checkWin(newMarked)
       if (winResult && !isHost) {
+        // Synchronously block further submits before the async claim returns
+        // (rapid clicks otherwise create multiple pending claims).
+        claimSubmitInFlightRef.current = true
         const submitWinClaim = async () => {
-          if (!currentUser) return
+          if (!currentUser) {
+            claimSubmitInFlightRef.current = false
+            return
+          }
           try {
             const claimData = await winClaimsService.submitClaim(gameId!, currentUser.id, {
               type: winResult.type,
@@ -649,6 +670,7 @@ export function useActiveGame({
             })
           } catch (error) {
             console.error('Error submitting win claim:', error)
+            claimSubmitInFlightRef.current = false
             showToast('Error submitting win claim. Please try again.')
           }
         }
@@ -679,6 +701,9 @@ export function useActiveGame({
 
     const refreshHostClaims = async () => {
       try {
+        // Don't resurrect the verification modal after the host already confirmed.
+        if (showEndGameDialogRef.current) return
+
         const claims = await winClaimsService.getPendingClaims(id)
         if (claims && claims.length > 0) {
           const latestClaim = claims[0]!
