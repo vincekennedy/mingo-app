@@ -38,6 +38,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 
 ### Engineering / moderation
 
+- Product analytics (PostHog) — sparse events only: visitors, signup / guest join, game created / started, win confirmed; no cell-toggle spam; no UX surface
 - Sub-split `useActiveGame` into `useBoard` / `useWinClaims` if it grows again
 - Stricter TypeScript migration
 - OR-combinable custom win patterns (“any of selected”)
