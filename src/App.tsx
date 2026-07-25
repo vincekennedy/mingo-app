@@ -138,6 +138,15 @@ export default function Mingo() {
     endGame,
     clearActiveGame,
     onGameCreated,
+    peekPlayer,
+    peekBoard,
+    peekMarked,
+    peekBoardSize,
+    peekLoading,
+    peekError,
+    peekEmptyMessage,
+    openPlayerBoard,
+    closePlayerBoard,
   } = useActiveGame({
     currentUser,
     screen,
@@ -550,6 +559,15 @@ export default function Mingo() {
             copied={copied}
             linkCopied={linkCopied}
             currentUser={currentUser}
+            peekPlayer={peekPlayer}
+            peekBoard={peekBoard}
+            peekMarked={peekMarked}
+            peekBoardSize={peekBoardSize}
+            peekLoading={peekLoading}
+            peekError={peekError}
+            peekEmptyMessage={peekEmptyMessage}
+            onSelectPlayer={openPlayerBoard}
+            onClosePlayerBoard={closePlayerBoard}
             onToggleIncorrectItem={toggleIncorrectItem}
             onRejectWin={rejectWin}
             onConfirmWin={confirmWin}
@@ -589,6 +607,15 @@ export default function Mingo() {
             marked={marked}
             currentUser={currentUser}
             linkCopied={linkCopied}
+            peekPlayer={peekPlayer}
+            peekBoard={peekBoard}
+            peekMarked={peekMarked}
+            peekBoardSize={peekBoardSize}
+            peekLoading={peekLoading}
+            peekError={peekError}
+            peekEmptyMessage={peekEmptyMessage}
+            onSelectPlayer={openPlayerBoard}
+            onClosePlayerBoard={closePlayerBoard}
             onToggleIncorrectItem={toggleIncorrectItem}
             onRejectWin={rejectWin}
             onConfirmWin={confirmWin}

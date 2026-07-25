@@ -2,6 +2,7 @@ import { AlertCircle, Check, Home, Link2, Printer, RotateCcw, Trophy, X } from '
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
+import ViewPlayerBoardModal from '../components/modals/ViewPlayerBoardModal';
 import { describeWinRule, type BoardCell, type WinConfigFields } from '../lib/winDetection';
 import type { GameParticipantSummary, GameVisibility } from '../services/game';
 import type { AppUser } from '../types/app';
@@ -52,6 +53,15 @@ type PlayScreenProps = {
   marked: Set<number>;
   currentUser: AppUser | null;
   linkCopied: boolean;
+  peekPlayer: GameParticipantSummary | null;
+  peekBoard: PlayBoardCell[] | null;
+  peekMarked: Set<number>;
+  peekBoardSize: number;
+  peekLoading: boolean;
+  peekError: string | null;
+  peekEmptyMessage: string | null;
+  onSelectPlayer: (player: GameParticipantSummary) => void;
+  onClosePlayerBoard: () => void;
   onToggleIncorrectItem: (itemIndex: number) => void;
   onRejectWin: () => void | Promise<void>;
   onConfirmWin: () => void | Promise<void>;
@@ -78,6 +88,15 @@ export default function PlayScreen({
   marked,
   currentUser,
   linkCopied,
+  peekPlayer,
+  peekBoard,
+  peekMarked,
+  peekBoardSize,
+  peekLoading,
+  peekError,
+  peekEmptyMessage,
+  onSelectPlayer,
+  onClosePlayerBoard,
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
@@ -94,7 +113,22 @@ export default function PlayScreen({
         gamePlayers={gamePlayers}
         confirmedWinners={confirmedWinners}
         emptyLabel="Loading players..."
+        currentUserId={currentUser?.id}
+        onSelectPlayer={onSelectPlayer}
       />
+
+      {peekPlayer && (
+        <ViewPlayerBoardModal
+          playerName={peekPlayer.username}
+          board={peekBoard}
+          marked={peekMarked}
+          boardSize={peekBoardSize}
+          loading={peekLoading}
+          error={peekError}
+          emptyMessage={peekEmptyMessage}
+          onClose={onClosePlayerBoard}
+        />
+      )}
 
       <div className="flex-1 space-y-4 sm:space-y-6">
         {isHost && (

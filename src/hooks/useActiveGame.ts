@@ -117,6 +117,13 @@ export function useActiveGame({
   const [showEndGameDialog, setShowEndGameDialog] = useState(false)
   const [gamePlayers, setGamePlayers] = useState<GameParticipantSummary[]>([])
   const [confirmedWinners, setConfirmedWinners] = useState<string[]>([])
+  const [peekPlayer, setPeekPlayer] = useState<GameParticipantSummary | null>(null)
+  const [peekBoard, setPeekBoard] = useState<LiveBoardCell[] | null>(null)
+  const [peekMarked, setPeekMarked] = useState<Set<number>>(new Set())
+  const [peekBoardSize, setPeekBoardSize] = useState(5)
+  const [peekLoading, setPeekLoading] = useState(false)
+  const [peekError, setPeekError] = useState<string | null>(null)
+  const [peekEmptyMessage, setPeekEmptyMessage] = useState<string | null>(null)
 
   const confettiIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pendingWinClaimRef = useRef<ActiveWinClaim | null>(null)
@@ -160,6 +167,12 @@ export function useActiveGame({
     setConfirmedWinners([])
     setCopied(false)
     setLinkCopied(false)
+    setPeekPlayer(null)
+    setPeekBoard(null)
+    setPeekMarked(new Set())
+    setPeekLoading(false)
+    setPeekError(null)
+    setPeekEmptyMessage(null)
   }
 
   const hydrateActiveGame = ({
@@ -882,6 +895,50 @@ export function useActiveGame({
     setScreen('host')
   }
 
+  const closePlayerBoard = () => {
+    setPeekPlayer(null)
+    setPeekBoard(null)
+    setPeekMarked(new Set())
+    setPeekLoading(false)
+    setPeekError(null)
+    setPeekEmptyMessage(null)
+  }
+
+  const openPlayerBoard = async (player: GameParticipantSummary) => {
+    if (!gameId || !player?.id) return
+    if (currentUser && player.id === currentUser.id) return
+
+    setPeekPlayer(player)
+    setPeekBoard(null)
+    setPeekMarked(new Set())
+    setPeekError(null)
+    setPeekEmptyMessage(null)
+    setPeekLoading(true)
+
+    const sizeFromConfig =
+      typeof gameConfig?.boardSize === 'number' && gameConfig.boardSize > 0
+        ? gameConfig.boardSize
+        : boardSize
+    setPeekBoardSize(sizeFromConfig)
+
+    try {
+      const state = await boardService.loadBoardState(gameId, player.id)
+      if (!state?.board?.length) {
+        setPeekEmptyMessage(`${player.username} hasn't started a board yet.`)
+        return
+      }
+      setPeekBoard(state.board as LiveBoardCell[])
+      setPeekMarked(state.marked)
+      const derivedSize = Math.round(Math.sqrt(state.board.length))
+      if (derivedSize > 0) setPeekBoardSize(derivedSize)
+    } catch (error) {
+      console.error('Error loading player board:', error)
+      setPeekError(errorMessage(error, 'Could not load that board. Please try again.'))
+    } finally {
+      setPeekLoading(false)
+    }
+  }
+
   return {
     boardSize,
     board,
@@ -904,6 +961,15 @@ export function useActiveGame({
     showEndGameDialog,
     gamePlayers,
     confirmedWinners,
+    peekPlayer,
+    peekBoard,
+    peekMarked,
+    peekBoardSize,
+    peekLoading,
+    peekError,
+    peekEmptyMessage,
+    openPlayerBoard,
+    closePlayerBoard,
     saveBoardState,
     loadBoardState,
     selectGame,
