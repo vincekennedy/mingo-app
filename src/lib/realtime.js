@@ -2,7 +2,7 @@ import { supabase } from './supabase'
 
 /**
  * Subscribe to multiplayer changes for a single game (host / play screens).
- * @param {string} gameCode
+ * @param {string} gameId - Game UUID
  * @param {{
  *   onParticipantsChange?: (payload: object) => void,
  *   onClaimsChange?: (payload: object) => void,
@@ -10,11 +10,11 @@ import { supabase } from './supabase'
  * }} handlers
  * @returns {() => void} unsubscribe
  */
-export function subscribeGame(gameCode, handlers = {}) {
-  if (!gameCode) return () => {}
+export function subscribeGame(gameId, handlers = {}) {
+  if (!gameId) return () => {}
 
   const { onParticipantsChange, onClaimsChange, onGameChange } = handlers
-  const channel = supabase.channel(`game:${gameCode}`)
+  const channel = supabase.channel(`game:${gameId}`)
 
   if (onParticipantsChange) {
     channel.on(
@@ -23,7 +23,7 @@ export function subscribeGame(gameCode, handlers = {}) {
         event: 'INSERT',
         schema: 'public',
         table: 'game_participants',
-        filter: `game_code=eq.${gameCode}`,
+        filter: `game_id=eq.${gameId}`,
       },
       (payload) => onParticipantsChange(payload)
     )
@@ -33,7 +33,7 @@ export function subscribeGame(gameCode, handlers = {}) {
         event: 'DELETE',
         schema: 'public',
         table: 'game_participants',
-        filter: `game_code=eq.${gameCode}`,
+        filter: `game_id=eq.${gameId}`,
       },
       (payload) => onParticipantsChange(payload)
     )
@@ -46,7 +46,7 @@ export function subscribeGame(gameCode, handlers = {}) {
         event: 'INSERT',
         schema: 'public',
         table: 'win_claims',
-        filter: `game_code=eq.${gameCode}`,
+        filter: `game_id=eq.${gameId}`,
       },
       (payload) => onClaimsChange(payload)
     )
@@ -56,7 +56,7 @@ export function subscribeGame(gameCode, handlers = {}) {
         event: 'UPDATE',
         schema: 'public',
         table: 'win_claims',
-        filter: `game_code=eq.${gameCode}`,
+        filter: `game_id=eq.${gameId}`,
       },
       (payload) => onClaimsChange(payload)
     )
@@ -69,7 +69,7 @@ export function subscribeGame(gameCode, handlers = {}) {
         event: 'UPDATE',
         schema: 'public',
         table: 'games',
-        filter: `code=eq.${gameCode}`,
+        filter: `id=eq.${gameId}`,
       },
       (payload) => onGameChange(payload.new, payload)
     )
@@ -77,7 +77,7 @@ export function subscribeGame(gameCode, handlers = {}) {
 
   channel.subscribe((status, err) => {
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-      console.error('Game realtime channel error:', gameCode, status, err)
+      console.error('Game realtime channel error:', gameId, status, err)
     }
   })
 
@@ -88,7 +88,6 @@ export function subscribeGame(gameCode, handlers = {}) {
 
 /**
  * Subscribe to win_claims visible to the current user (dashboard badges).
- * No game_code filter — RLS scopes events to games the user can read.
  * @param {string} userId
  * @param {{ onChange?: (payload: object) => void }} handlers
  * @returns {() => void} unsubscribe

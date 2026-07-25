@@ -64,7 +64,7 @@ export default function DashboardScreen({
         <div className="space-y-3">
           {userGames.map((game) => (
             <div
-              key={game.gameCode}
+              key={game.gameId || game.gameCode}
               className={`w-full p-4 rounded-xl border-2 ${
                 game.pendingWin && game.isHost
                   ? 'border-yellow-500 bg-yellow-50'
@@ -118,7 +118,7 @@ export default function DashboardScreen({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (window.confirm(`Are you sure you want to end game ${game.gameCode}? This will remove it from your games list.`)) {
-                        onEndGame(game.gameCode);
+                        onEndGame(game.gameId);
                       }
                     }}
                     className="flex-1 px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"

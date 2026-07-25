@@ -102,10 +102,10 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 | Table | Purpose / key fields |
 |-------|----------------------|
 | `public.users` | Profile: `id` → `auth.users`, `username` UNIQUE, optional `display_name` (guests: entered name; UI prefers this over unique `username`) |
-| `public.games` | `code` (5-char PK), `host_id`, `config` JSONB, `status` `active` \| `ended` |
-| `public.game_participants` | `game_code`, `user_id`, `is_host`, UNIQUE(game_code, user_id) |
-| `public.board_states` | Per user per game: `board`, `marked_indices`, `has_won` |
-| `public.win_claims` | `claim_type`, claimed indices/items, `status` pending/confirmed/rejected, `incorrect_indices` |
+| `public.games` | `id` UUID PK; `code` TEXT join key (unique among **active** only); `host_id`, `config` JSONB, `status` `active` \| `ended` |
+| `public.game_participants` | `game_id` → games, `user_id`, `is_host`, UNIQUE(game_id, user_id) |
+| `public.board_states` | Per user per game (`game_id`): `board`, `marked_indices`, `has_won` |
+| `public.win_claims` | `game_id`, `claim_type`, claimed indices/items, `status` pending/confirmed/rejected, `incorrect_indices` |
 | `public.feedback_reports` | In-app reports: `category`, `email`, `subject`, `details`, required `app_version`; optional `user_id`, `screen`, `game_code`, `user_agent`. Client INSERT only (no SELECT). |
 
 **`games.config` shape** (written from setup):
@@ -129,6 +129,8 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 `theme`: `party` \| `sunset` \| `ocean` \| `ink` (default `party` for legacy games). User chrome preference is separate (`localStorage` `mingo.theme`); setup/host/play use the game theme. See [`src/lib/theme.js`](../src/lib/theme.js).  
 `generationTone`: `family` \| `funny` \| `wholesome` \| `office` \| `adult` (default `family`). Used only for AI generate-items / Reuse setup — not shown in play. See [`src/lib/generationTone.js`](../src/lib/generationTone.js).  
 `generationInstructions`: optional short string (max 200 chars) constraining content (e.g. “only 90s song titles”); null/omitted when empty.
+
+**Join codes:** Random default is 5 chars from an ambiguous-safe alphabet. Optional custom vanity codes are 4–12 `A–Z0–9`. Join resolves only `status = 'active'`; after end, the same code may be reused by anyone. Durable identity is `games.id` (boards/claims/realtime/storage). See [`src/lib/joinLink.js`](../src/lib/joinLink.js).
 
 **Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback) and optional `display_name`. Client also retries/fallback-inserts if needed. Guests store unique `username` as `Name-xxxx` and `display_name` as the entered name.
 

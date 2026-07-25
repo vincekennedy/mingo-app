@@ -1,8 +1,18 @@
 /** sessionStorage key for join-after-login/register */
 export const PENDING_JOIN_KEY = 'mingo_pending_join';
 
-/** Alphabet used when generating codes (no I/O/0/1). Length check is the join gate. */
-export const GAME_CODE_LENGTH = 5;
+/** Random codes stay 5 chars from the ambiguous-safe alphabet. */
+export const RANDOM_GAME_CODE_LENGTH = 5;
+
+/** Custom vanity codes: 4–12 alphanumeric (A–Z / 0–9). */
+export const CUSTOM_CODE_MIN_LENGTH = 4;
+export const CUSTOM_CODE_MAX_LENGTH = 12;
+
+/** @deprecated use RANDOM_GAME_CODE_LENGTH — kept for older imports */
+export const GAME_CODE_LENGTH = RANDOM_GAME_CODE_LENGTH;
+
+/** Alphabet used when generating random codes (no I/O/0/1). */
+export const RANDOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function normalizeGameCode(raw) {
   return String(raw || '')
@@ -10,20 +20,49 @@ export function normalizeGameCode(raw) {
     .trim();
 }
 
+/**
+ * Valid join / vanity code: 4–12 chars A–Z0–9.
+ * @param {string} code
+ */
 export function isValidGameCode(code) {
   const normalized = normalizeGameCode(code);
-  return normalized.length === GAME_CODE_LENGTH && /^[A-Z0-9]+$/.test(normalized);
+  return (
+    normalized.length >= CUSTOM_CODE_MIN_LENGTH &&
+    normalized.length <= CUSTOM_CODE_MAX_LENGTH &&
+    /^[A-Z0-9]+$/.test(normalized)
+  );
+}
+
+/**
+ * Optional custom entry field: empty is OK (random will be used); otherwise must be valid.
+ * @param {string} raw
+ */
+export function isValidCustomEntryCodeOrEmpty(raw) {
+  const normalized = normalizeGameCode(raw);
+  if (!normalized) return true;
+  return isValidGameCode(normalized);
+}
+
+export function generateRandomGameCode() {
+  let code = '';
+  for (let i = 0; i < RANDOM_GAME_CODE_LENGTH; i++) {
+    code += RANDOM_CODE_ALPHABET.charAt(
+      Math.floor(Math.random() * RANDOM_CODE_ALPHABET.length)
+    );
+  }
+  return code;
 }
 
 /**
  * Read a join code from `/join/ABC12` or `?join=` / `?code=`.
- * Does not require React Router — pathname is enough with the SPA rewrite.
  */
 export function parseJoinCodeFromLocation(loc = typeof window !== 'undefined' ? window.location : null) {
   if (!loc) return null;
 
   try {
-    const pathMatch = String(loc.pathname || '').match(/^\/join\/([A-Za-z0-9]{5})\/?$/i);
+    const pathMatch = String(loc.pathname || '').match(
+      /^\/join\/([A-Za-z0-9]{4,12})\/?$/i
+    );
     if (pathMatch && isValidGameCode(pathMatch[1])) {
       return normalizeGameCode(pathMatch[1]);
     }
@@ -73,18 +112,16 @@ export function clearPendingJoinCode() {
   writePendingJoinCode(null);
 }
 
-/** Prefer URL code, then any stored pending code (e.g. mid-login). */
 export function resolveInitialJoinCode() {
   if (typeof window === 'undefined') return '';
   return parseJoinCodeFromLocation(window.location) || readPendingJoinCode() || '';
 }
 
-/** Drop `/join/...` from the address bar without a full navigation. */
 export function clearJoinPathFromUrl() {
   if (typeof window === 'undefined' || !window.history?.replaceState) return;
   try {
     const { pathname, search, hash } = window.location;
-    const onJoinPath = /^\/join\/[A-Za-z0-9]{5}\/?$/i.test(pathname);
+    const onJoinPath = /^\/join\/[A-Za-z0-9]{4,12}\/?$/i.test(pathname);
     const params = new URLSearchParams(search);
     const hadJoinQuery = params.has('join') || params.has('code');
     if (!onJoinPath && !hadJoinQuery) return;

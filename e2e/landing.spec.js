@@ -9,7 +9,7 @@ test.describe('Landing smoke', () => {
     await expect(page.getByRole('button', { name: /Create Account/i })).toBeVisible()
     await expect(page.getByText(/or continue as guest/i)).toBeVisible()
     await expect(page.getByRole('button', { name: /^Join Game$/i })).toBeVisible()
-    await expect(page.getByPlaceholder(/Enter 5-digit code/i)).toBeVisible()
+    await expect(page.getByPlaceholder(/Enter join code/i)).toBeVisible()
 
     // Create lives on the dashboard, not landing
     await expect(page.getByRole('button', { name: /Create New Game/i })).toHaveCount(0)

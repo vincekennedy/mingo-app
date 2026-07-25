@@ -2,18 +2,16 @@ import { supabase } from '../lib/supabase'
 
 export const winClaimsService = {
   /**
-   * Submit a win claim
-   * @param {string} gameCode - Game code
-   * @param {string} userId - User ID
-   * @param {Object} claim - Claim data {type, indices, items}
-   * @returns {Promise<Object>} Created claim
+   * @param {string} gameId
+   * @param {string} userId
+   * @param {Object} claim
    */
-  async submitClaim(gameCode, userId, claim) {
+  async submitClaim(gameId, userId, claim) {
     try {
       const { data, error } = await supabase
         .from('win_claims')
         .insert({
-          game_code: gameCode,
+          game_id: gameId,
           user_id: userId,
           claim_type: claim.type,
           claimed_indices: claim.indices,
@@ -22,7 +20,7 @@ export const winClaimsService = {
         })
         .select()
         .single()
-      
+
       if (error) throw error
       return data
     } catch (error) {
@@ -30,13 +28,11 @@ export const winClaimsService = {
       throw error
     }
   },
-  
+
   /**
-   * Get pending claims for a game (host only)
-   * @param {string} gameCode - Game code
-   * @returns {Promise<Array>} Array of pending claims
+   * @param {string} gameId
    */
-  async getPendingClaims(gameCode) {
+  async getPendingClaims(gameId) {
     try {
       const { data, error } = await supabase
         .from('win_claims')
@@ -44,13 +40,13 @@ export const winClaimsService = {
           *,
           user:users(username, display_name)
         `)
-        .eq('game_code', gameCode)
+        .eq('game_id', gameId)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
-      
+
       if (error) throw error
-      
-      return data.map(claim => ({
+
+      return data.map((claim) => ({
         id: claim.id,
         userId: claim.user_id,
         username: claim.user?.display_name || claim.user?.username || 'Unknown',
@@ -64,12 +60,7 @@ export const winClaimsService = {
       throw error
     }
   },
-  
-  /**
-   * Confirm a win claim (host only)
-   * @param {string} claimId - Claim ID
-   * @returns {Promise<void>}
-   */
+
   async confirmClaim(claimId) {
     try {
       const { error } = await supabase
@@ -79,20 +70,14 @@ export const winClaimsService = {
           resolved_at: new Date().toISOString(),
         })
         .eq('id', claimId)
-      
+
       if (error) throw error
     } catch (error) {
       console.error('Confirm claim error:', error)
       throw error
     }
   },
-  
-  /**
-   * Reject a win claim (host only)
-   * @param {string} claimId - Claim ID
-   * @param {Array} incorrectIndices - Array of incorrect item indices
-   * @returns {Promise<void>}
-   */
+
   async rejectClaim(claimId, incorrectIndices) {
     try {
       const { error } = await supabase
@@ -103,38 +88,36 @@ export const winClaimsService = {
           resolved_at: new Date().toISOString(),
         })
         .eq('id', claimId)
-      
+
       if (error) throw error
     } catch (error) {
       console.error('Reject claim error:', error)
       throw error
     }
   },
-  
+
   /**
-   * Get claim status for a user in a game
-   * @param {string} gameCode - Game code
-   * @param {string} userId - User ID
-   * @returns {Promise<Object|null>} Claim status or null
+   * @param {string} gameId
+   * @param {string} userId
    */
-  async getUserClaimStatus(gameCode, userId) {
+  async getUserClaimStatus(gameId, userId) {
     try {
       const { data, error } = await supabase
         .from('win_claims')
         .select('*')
-        .eq('game_code', gameCode)
+        .eq('game_id', gameId)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(1)
         .single()
-      
+
       if (error) {
         if (error.code === 'PGRST116') {
-          return null // No claim found
+          return null
         }
         throw error
       }
-      
+
       return {
         id: data.id,
         status: data.status,
@@ -149,25 +132,21 @@ export const winClaimsService = {
       return null
     }
   },
-  
+
   /**
-   * Get confirmed winners for a game
-   * @param {string} gameCode - Game code
-   * @returns {Promise<Array>} Array of user IDs who have confirmed wins
+   * @param {string} gameId
    */
-  async getConfirmedWinners(gameCode) {
+  async getConfirmedWinners(gameId) {
     try {
       const { data, error } = await supabase
         .from('win_claims')
         .select('user_id')
-        .eq('game_code', gameCode)
+        .eq('game_id', gameId)
         .eq('status', 'confirmed')
-      
+
       if (error) throw error
-      
-      // Return unique user IDs
-      const uniqueUserIds = [...new Set(data.map(claim => claim.user_id))]
-      return uniqueUserIds
+
+      return [...new Set(data.map((claim) => claim.user_id))]
     } catch (error) {
       console.error('Get confirmed winners error:', error)
       return []
@@ -175,27 +154,26 @@ export const winClaimsService = {
   },
 
   /**
-   * Check if there are pending wins for games where user is host
-   * @param {Array} gameCodes - Array of game codes
-   * @returns {Promise<Object>} Map of gameCode -> hasPendingWin
+   * @param {string[]} gameIds
+   * @returns {Promise<Object>} Map of gameId -> hasPendingWin
    */
-  async checkPendingWinsForGames(gameCodes) {
-    if (!gameCodes || gameCodes.length === 0) return {}
-    
+  async checkPendingWinsForGames(gameIds) {
+    if (!gameIds || gameIds.length === 0) return {}
+
     try {
       const { data, error } = await supabase
         .from('win_claims')
-        .select('game_code')
-        .in('game_code', gameCodes)
+        .select('game_id')
+        .in('game_id', gameIds)
         .eq('status', 'pending')
-      
+
       if (error) throw error
-      
+
       const pendingMap = {}
-      gameCodes.forEach(code => {
-        pendingMap[code] = data.some(claim => claim.game_code === code)
+      gameIds.forEach((id) => {
+        pendingMap[id] = data.some((claim) => claim.game_id === id)
       })
-      
+
       return pendingMap
     } catch (error) {
       console.error('Check pending wins error:', error)

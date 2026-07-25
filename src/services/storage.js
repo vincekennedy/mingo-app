@@ -4,11 +4,11 @@ export const storageService = {
   /**
    * Upload an image file to Supabase Storage
    * @param {File} file - Image file to upload
-   * @param {string} gameCode - Game code (for organizing files)
+   * @param {string} gameId - Game UUID (or temp id during setup)
    * @param {string} userId - User ID
    * @returns {Promise<string>} Public URL of the uploaded image
    */
-  async uploadImage(file, gameCode, userId) {
+  async uploadImage(file, gameId, userId) {
     try {
       // Validate file type
       if (!file.type.startsWith('image/')) {
@@ -24,7 +24,7 @@ export const storageService = {
       // Generate unique filename
       const fileExt = file.name.split('.').pop()
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-      const filePath = `${userId}/${gameCode}/${fileName}`
+      const filePath = `${userId}/${gameId}/${fileName}`
 
       // Upload to Supabase Storage (filePath is relative to bucket root)
       const { data, error } = await supabase.storage
