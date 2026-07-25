@@ -1,6 +1,21 @@
+import type { FormEvent } from 'react';
 import { KeyRound } from 'lucide-react';
+import type { AppUser, ShowToast } from '../types/app';
+import { errorMessage } from '../types/app';
 
-export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel, showToast }) {
+type ResetPasswordScreenProps = {
+  currentUser: AppUser | null;
+  onSubmit: (password: string) => void | Promise<void>;
+  onCancel: () => void;
+  showToast: ShowToast;
+};
+
+export default function ResetPasswordScreen({
+  currentUser,
+  onSubmit,
+  onCancel,
+  showToast,
+}: ResetPasswordScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Choose a new password</h2>
@@ -10,11 +25,12 @@ export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel, s
         </p>
       )}
       <form
-        onSubmit={async (e) => {
+        onSubmit={async (e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
-          const formData = new FormData(e.target);
+          const formData = new FormData(e.currentTarget);
           const password = formData.get('password');
           const confirmPassword = formData.get('confirmPassword');
+          if (typeof password !== 'string' || typeof confirmPassword !== 'string') return;
           if (password !== confirmPassword) {
             showToast('Passwords do not match');
             return;
@@ -26,7 +42,7 @@ export default function ResetPasswordScreen({ currentUser, onSubmit, onCancel, s
           try {
             await onSubmit(password);
           } catch (error) {
-            showToast(error.message || 'Could not update password. Please try again.');
+            showToast(errorMessage(error, 'Could not update password. Please try again.'));
           }
         }}
         className="space-y-4"

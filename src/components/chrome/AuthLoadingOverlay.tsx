@@ -1,6 +1,11 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react'
 
-export default function AuthLoadingOverlay({ authReady, registering }) {
+type AuthLoadingOverlayProps = {
+  authReady: boolean
+  registering: boolean
+}
+
+export default function AuthLoadingOverlay({ authReady, registering }: AuthLoadingOverlayProps) {
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
@@ -41,5 +46,5 @@ export default function AuthLoadingOverlay({ authReady, registering }) {
         </div>
       </div>
     </div>
-  );
+  )
 }

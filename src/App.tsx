@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import {
   DEFAULT_THEME,
   activeShellTheme,
@@ -16,6 +16,8 @@ import {
 } from './hooks/useJoinFlow';
 import { useAuth } from './hooks/useAuth';
 import { useActiveGame } from './hooks/useActiveGame';
+import type { AppUser, Screen } from './types/app';
+import { errorMessage } from './types/app';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
 import GeneratingItemsOverlay from './components/chrome/GeneratingItemsOverlay';
 import UserProfileBanner from './components/chrome/UserProfileBanner';
@@ -37,25 +39,29 @@ import PlayScreen from './screens/PlayScreen';
 import PrintJoinFlyerScreen from './screens/PrintJoinFlyerScreen';
 
 export default function Mingo() {
-  const [screen, setScreen] = useState(initialPrintJoin ? 'print-join' : 'home');
+  const [screen, setScreen] = useState<Screen>(initialPrintJoin ? 'print-join' : 'home');
 
-  const pendingJoinCodeRef = useRef(initialPrintJoin ? '' : initialJoinCode);
-  const printFlyerRef = useRef(Boolean(initialPrintJoin));
-  const joinInFlightRef = useRef(false);
-  const passwordRecoveryRef = useRef(false);
+  const pendingJoinCodeRef = useRef<string>(initialPrintJoin ? '' : initialJoinCode);
+  const printFlyerRef = useRef<boolean>(Boolean(initialPrintJoin));
+  const joinInFlightRef = useRef<boolean>(false);
+  const passwordRecoveryRef = useRef<boolean>(false);
 
-  const loadUserGamesRef = useRef(async () => {});
-  const clearUserGamesRef = useRef(() => {});
-  const resumePendingJoinRef = useRef(async () => false);
-  const joinAsUserRef = useRef(async () => {});
-  const resetSessionRef = useRef(() => {});
-  const clearActiveGameRef = useRef(() => {});
-  const saveBoardStateRef = useRef(async () => {});
-  const resetDraftRef = useRef(() => {});
-  const resetJoinCodesRef = useRef(() => {});
-  const resetGameThemeToUserRef = useRef(() => {});
-  const clearPendingJoinRef = useRef(() => {});
-  const closeJoinModalRef = useRef(() => {});
+  const loadUserGamesRef = useRef<
+    (userId: string, opts?: { showLoading?: boolean }) => Promise<void>
+  >(async () => {});
+  const clearUserGamesRef = useRef<() => void>(() => {});
+  const resumePendingJoinRef = useRef<(user: AppUser) => Promise<boolean>>(async () => false);
+  const joinAsUserRef = useRef<
+    (user: AppUser, code: string, opts?: { isRetry?: boolean }) => Promise<void>
+  >(async () => {});
+  const resetSessionRef = useRef<() => void>(() => {});
+  const clearActiveGameRef = useRef<() => void>(() => {});
+  const saveBoardStateRef = useRef<(gameId?: string | null) => Promise<void>>(async () => {});
+  const resetDraftRef = useRef<() => void>(() => {});
+  const resetJoinCodesRef = useRef<() => void>(() => {});
+  const resetGameThemeToUserRef = useRef<() => void>(() => {});
+  const clearPendingJoinRef = useRef<() => void>(() => {});
+  const closeJoinModalRef = useRef<() => void>(() => {});
 
   const { showToast, ToastHost } = useToast();
   const {
@@ -138,7 +144,10 @@ export default function Mingo() {
     setScreen,
     showToast,
     loadUserGames,
-    applyThemeFromConfig,
+    applyThemeFromConfig: (config) =>
+      applyThemeFromConfig(
+        config as { theme?: string | null } | null | undefined,
+      ),
     joinInFlightRef,
     clearPendingJoin: () => clearPendingJoinRef.current(),
     closeJoinModal: () => closeJoinModalRef.current(),
@@ -364,7 +373,7 @@ export default function Mingo() {
               try {
                 await loginUser(email, password);
               } catch (error) {
-                setAuthError(error.message || 'Login failed. Please try again.');
+                setAuthError(errorMessage(error, 'Login failed. Please try again.'));
               }
             }}
             onForgotPassword={() => {
@@ -419,7 +428,7 @@ export default function Mingo() {
               try {
                 await registerUser(username, email, password);
               } catch (error) {
-                setAuthError(error.message || 'Registration failed. Please try again.');
+                setAuthError(errorMessage(error, 'Registration failed. Please try again.'));
               }
             }}
             onLogin={() => {

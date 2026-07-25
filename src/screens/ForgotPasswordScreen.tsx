@@ -1,7 +1,16 @@
+import type { FormEvent } from 'react';
 import { KeyRound } from 'lucide-react';
 import { authService } from '../services/auth';
+import type { ShowToast } from '../types/app';
+import { errorMessage } from '../types/app';
 
-export default function ForgotPasswordScreen({ onSent, onBack, showToast }) {
+type ForgotPasswordScreenProps = {
+  onSent: () => void;
+  onBack: () => void;
+  showToast: ShowToast;
+};
+
+export default function ForgotPasswordScreen({ onSent, onBack, showToast }: ForgotPasswordScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Reset password</h2>
@@ -9,15 +18,16 @@ export default function ForgotPasswordScreen({ onSent, onBack, showToast }) {
         Enter the email for your account. We will send you a link to choose a new password.
       </p>
       <form
-        onSubmit={async (e) => {
+        onSubmit={async (e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
-          const formData = new FormData(e.target);
+          const formData = new FormData(e.currentTarget);
           const email = formData.get('email');
+          if (typeof email !== 'string') return;
           try {
             await authService.requestPasswordReset(email);
             onSent();
           } catch (error) {
-            showToast(error.message || 'Could not send reset email. Please try again.');
+            showToast(errorMessage(error, 'Could not send reset email. Please try again.'));
           }
         }}
         className="space-y-4"

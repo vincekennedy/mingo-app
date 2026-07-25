@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Users } from 'lucide-react'
-import { gameService } from '../../services/game'
+import { gameService, type PublicLobbyGame } from '../../services/game'
 
 const POLL_MS = 20_000
 
-function shortWinLabel(winMode) {
+function shortWinLabel(winMode: string): string {
   switch (winMode) {
     case 'four_corners':
       return 'Four corners'
@@ -18,12 +18,16 @@ function shortWinLabel(winMode) {
   }
 }
 
-export default function PublicLobby({ onJoinGame }) {
-  const [games, setGames] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+type PublicLobbyProps = {
+  onJoinGame: (code: string) => void
+}
 
-  const refresh = useCallback(async ({ silent = false } = {}) => {
+export default function PublicLobby({ onJoinGame }: PublicLobbyProps) {
+  const [games, setGames] = useState<PublicLobbyGame[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!silent) setLoading(true)
     try {
       const list = await gameService.listPublicGames(10)

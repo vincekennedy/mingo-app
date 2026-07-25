@@ -1,6 +1,22 @@
+import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
 import { LogIn, UserPlus, Users } from 'lucide-react';
 import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 import PublicLobby from '../components/game/PublicLobby';
+import type { ThemeId } from '../lib/theme';
+import type { AppUser } from '../types/app';
+
+type HomeScreenProps = {
+  currentUser: AppUser | null;
+  joinCode: string;
+  setJoinCode: Dispatch<SetStateAction<string>>;
+  userTheme: ThemeId;
+  onUpdateUserTheme: (value: string | null | undefined) => void;
+  onOpenDashboard: () => void;
+  onLogin: () => void;
+  onRegister: () => void;
+  onJoinGame: () => void | Promise<void>;
+  onJoinPublicGame?: () => void | Promise<void>;
+};
 
 export default function HomeScreen({
   currentUser,
@@ -13,7 +29,7 @@ export default function HomeScreen({
   onRegister,
   onJoinGame,
   onJoinPublicGame,
-}) {
+}: HomeScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
       <div className="pb-2 border-b border-gray-200">
@@ -82,7 +98,7 @@ export default function HomeScreen({
         <input
           type="text"
           value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setJoinCode(e.target.value.toUpperCase())}
           placeholder="Enter join code"
           maxLength={12}
           className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"

@@ -1,4 +1,15 @@
+import type { FormEvent } from 'react';
 import { AlertCircle, Loader2, LogIn } from 'lucide-react';
+
+type LoginScreenProps = {
+  loggingIn: boolean;
+  authError: string | null;
+  pendingJoinCode: string;
+  onLogin: (email: string, password: string) => void | Promise<void>;
+  onForgotPassword: () => void;
+  onRegister: () => void;
+  onBack: () => void;
+};
 
 export default function LoginScreen({
   loggingIn,
@@ -8,7 +19,7 @@ export default function LoginScreen({
   onForgotPassword,
   onRegister,
   onBack,
-}) {
+}: LoginScreenProps) {
   return (
     <div className={`bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 ${loggingIn ? 'pointer-events-none opacity-80' : ''}`}>
       <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2 text-center">Login</h2>
@@ -25,11 +36,14 @@ export default function LoginScreen({
         </div>
       )}
       <form
-        onSubmit={async (e) => {
+        onSubmit={async (e: FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           if (loggingIn) return;
-          const formData = new FormData(e.target);
-          await onLogin(formData.get('email'), formData.get('password'));
+          const formData = new FormData(e.currentTarget);
+          const email = formData.get('email');
+          const password = formData.get('password');
+          if (typeof email !== 'string' || typeof password !== 'string') return;
+          await onLogin(email, password);
         }}
         className="space-y-4"
       >

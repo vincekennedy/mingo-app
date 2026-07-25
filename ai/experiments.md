@@ -15,10 +15,11 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 | 2026-07 | AI generation tones + extra instructions | Implemented (Setup select + textarea; server-composed Gemini prompt) | Yes | Tones: family/funny/wholesome/office/adult; max 200-char instructions; no raw system-prompt editing |
 | 2026-07 | Custom entry codes (vanity + weekly reuse) | Implemented (`games.id` UUID PK; partial unique active `code`) | Yes | Custom 4–12 A–Z0–9; random stays 5; reuse after end; anyone may reclaim |
 | 2026-07 | Split `App.jsx` into domain hooks | Implemented (`useTheme`, `useGameSetup`, `useDashboardGames`, `useJoinFlow`, `useAuth`, `useActiveGame`) | Yes | App is composition root (~590 lines); board+wins kept together in `useActiveGame` |
-| 2026-07 | Vercel Web Analytics (`@vercel/analytics/react`) | Implemented (`src/main.jsx`) | Yes | Visitors/pageviews only; enable in Vercel project dashboard; PostHog deferred until traffic justifies product events |
+| 2026-07 | Vercel Web Analytics (`@vercel/analytics/react`) | Implemented (`src/main.tsx`) | Yes | Visitors/pageviews only; enable in Vercel project dashboard; PostHog deferred until traffic justifies product events |
 | 2026-07 | Stricter TypeScript (phase 1: `src/lib`) | Implemented — strict `tsc`, `src/lib` → `.ts` | Yes | `allowJs` for gradual migrate; `npm run typecheck` on PR lint |
 | 2026-07 | Stricter TypeScript (phase 2: `src/services`) | Implemented — auth/game/board/claims/storage/feedback/generateItems → `.ts` | Yes | Local row types (no generated Supabase schema yet) |
-| 2026-07 | Stricter TypeScript (phase 3: `src/hooks`) | Implemented — all domain hooks → `.ts`/`.tsx` + `src/types/app.ts` | Yes | Next: screens/components + `App.jsx` |
+| 2026-07 | Stricter TypeScript (phase 3: `src/hooks`) | Implemented — all domain hooks → `.ts`/`.tsx` + `src/types/app.ts` | Yes | Shared AppUser/Screen/ShowToast |
+| 2026-07 | Stricter TypeScript (phase 4: UI + App) | Implemented — screens, components, `App.tsx`, `main.tsx` | Yes | `src/` app code is fully TypeScript; tooling (`api/`, e2e, vite config) still JS |
 
 ## How to add an entry
 
@@ -44,7 +45,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 
 - Product analytics (PostHog or similar) — sparse events later once traffic justifies it (signup / guest join, game created / started, win confirmed); Vercel Web Analytics covers visitors now; no cell-toggle spam; no UX surface
 - Sub-split `useActiveGame` into `useBoard` / `useWinClaims` if it grows again
-- Stricter TypeScript migration (phases 1–3 done: `src/lib` + `src/services` + `src/hooks`) — next: screens/components + App; keep `strict` + `noUncheckedIndexedAccess`
+- Stricter TypeScript follow-ups — optional: generated Supabase `Database` types; migrate `api/` + Vite/Playwright configs; eslint typescript-eslint for `.ts`/`.tsx`; drop `allowJs` once tooling is typed
 - OR-combinable custom win patterns (“any of selected”)
 - Join approval for games (`join_policy` + pending participant + host accept/reject UI)
 - Anti-spam for public lobbies (rate-limit cell toggles / max claims per window; host-only claim confirm already exists)

@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react';
 import { Printer } from 'lucide-react';
 import { generateJoinQrDataUrl } from '../lib/printJoinFlyer';
 
+type PrintJoinFlyerScreenProps = {
+  code: string;
+  title: string;
+  joinUrl: string;
+};
+
 /**
  * Full-page printable join flyer (opened in a new tab from the host lobby).
  * Layout is optimized for paper handouts at bars / events.
  */
-export default function PrintJoinFlyerScreen({ code, title, joinUrl }) {
+export default function PrintJoinFlyerScreen({ code, title, joinUrl }: PrintJoinFlyerScreenProps) {
   const [qrDataUrl, setQrDataUrl] = useState('');
-  const [qrError, setQrError] = useState(null);
+  const [qrError, setQrError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!joinUrl) return undefined;

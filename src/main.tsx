@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
 import './index.css'
 import './theme.css'
-import App from './App.jsx'
+import App from './App'
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
     <Analytics />

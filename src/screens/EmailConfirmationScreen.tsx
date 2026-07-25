@@ -1,6 +1,12 @@
 import { Check, LogIn } from 'lucide-react';
 
-export default function EmailConfirmationScreen({ email, onGoToLogin, onBackHome }) {
+type EmailConfirmationScreenProps = {
+  email: string | null | undefined;
+  onGoToLogin: () => void;
+  onBackHome: () => void;
+};
+
+export default function EmailConfirmationScreen({ email, onGoToLogin, onBackHome }: EmailConfirmationScreenProps) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4 text-center">
       <div className="mb-6">

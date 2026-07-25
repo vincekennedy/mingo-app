@@ -1,21 +1,21 @@
-import { THEME_IDS, THEME_LABELS } from '../../lib/theme';
+import { THEME_IDS, THEME_LABELS, type ThemeId } from '../../lib/theme'
+
+type ThemeSwatchPickerProps = {
+  value: ThemeId
+  onChange: (themeId: ThemeId) => void
+  label?: string
+  idPrefix?: string
+}
 
 /**
  * Compact theme swatch row. Selected state uses brand border tokens.
- *
- * @param {{
- *   value: string,
- *   onChange: (themeId: string) => void,
- *   label?: string,
- *   idPrefix?: string,
- * }} props
  */
 export default function ThemeSwatchPicker({
   value,
   onChange,
   label = 'Theme',
   idPrefix = 'theme',
-}) {
+}: ThemeSwatchPickerProps) {
   return (
     <div>
       <p className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base" id={`${idPrefix}-label`}>
@@ -27,7 +27,7 @@ export default function ThemeSwatchPicker({
         aria-labelledby={`${idPrefix}-label`}
       >
         {THEME_IDS.map((id) => {
-          const selected = value === id;
+          const selected = value === id
           return (
             <button
               key={id}
@@ -51,9 +51,9 @@ export default function ThemeSwatchPicker({
                 {THEME_LABELS[id]}
               </span>
             </button>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }
