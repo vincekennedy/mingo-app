@@ -47,15 +47,15 @@ test.describe('Four corners win mode', () => {
       const guestPage = await guestContext.newPage()
       await guestPage.goto('/')
       await expect(guestPage.getByRole('button', { name: /^Join Game$/i })).toBeVisible({ timeout: 60_000 })
-      await guestPage.getByPlaceholder(/Enter 5-digit code/i).fill(gameCode)
+      await guestPage.getByPlaceholder(/Enter join code/i).fill(gameCode)
       await guestPage.getByRole('button', { name: /^Join Game$/i }).click()
 
-      const guestModal = guestPage.getByRole('dialog', { name: /Join as guest/i })
+      const guestModal = guestPage.getByRole('dialog', { name: /Join game/i })
       await expect(guestModal).toBeVisible()
       await guestModal.getByLabel(/Display name/i).fill(guestName)
-      await guestModal.getByRole('button', { name: 'Join game', exact: true }).click()
+      await guestModal.getByRole('button', { name: /Join as guest/i }).click()
 
-      const board = guestPage.locator('.bg-white.rounded-2xl.shadow-2xl .grid')
+      const board = guestPage.getByTestId('bingo-board')
       await expect(board).toBeVisible({ timeout: 60_000 })
       await expect(guestPage.getByText(/four corners/i)).toBeVisible()
 

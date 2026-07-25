@@ -32,7 +32,8 @@ ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS display_name TEXT;
 
 CREATE TABLE IF NOT EXISTS public.games (
-  code VARCHAR(5) PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  code TEXT NOT NULL,
   host_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   config JSONB NOT NULL,
   status VARCHAR(20) DEFAULT 'active',
@@ -44,27 +45,27 @@ CREATE TABLE IF NOT EXISTS public.games (
 
 CREATE TABLE IF NOT EXISTS public.game_participants (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  game_code VARCHAR(5) REFERENCES public.games(code) ON DELETE CASCADE,
+  game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   is_host BOOLEAN DEFAULT FALSE,
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(game_code, user_id)
+  UNIQUE(game_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.board_states (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  game_code VARCHAR(5) REFERENCES public.games(code) ON DELETE CASCADE,
+  game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   board JSONB NOT NULL,
   marked_indices INTEGER[] DEFAULT '{}',
   has_won BOOLEAN DEFAULT FALSE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(game_code, user_id)
+  UNIQUE(game_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.win_claims (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  game_code VARCHAR(5) REFERENCES public.games(code) ON DELETE CASCADE,
+  game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
   claim_type VARCHAR(20) NOT NULL,
   claimed_indices INTEGER[] NOT NULL,
@@ -79,13 +80,16 @@ CREATE TABLE IF NOT EXISTS public.win_claims (
 -- Indexes
 -- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_games_host ON public.games(host_id);
+CREATE UNIQUE INDEX IF NOT EXISTS games_code_active_unique
+  ON public.games (upper(code))
+  WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_games_public_lobby
   ON public.games (status, visibility, created_at DESC)
   WHERE status = 'active' AND visibility = 'public';
-CREATE INDEX IF NOT EXISTS idx_participants_game ON public.game_participants(game_code);
+CREATE INDEX IF NOT EXISTS idx_participants_game ON public.game_participants(game_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user ON public.game_participants(user_id);
-CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_code, user_id);
-CREATE INDEX IF NOT EXISTS idx_win_claims_game ON public.win_claims(game_code);
+CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_win_claims_game ON public.win_claims(game_id);
 CREATE INDEX IF NOT EXISTS idx_win_claims_status ON public.win_claims(status) WHERE status = 'pending';
 
 -- Feedback / issue reports (unauthenticated submit allowed via RLS INSERT)
@@ -170,7 +174,7 @@ CREATE POLICY "Users can update own data" ON public.users
   FOR UPDATE TO authenticated USING (auth.uid() = id);
 
 -- Fellow-participant / game SELECT helper (SECURITY DEFINER; defined before policies that use it)
-CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_code text)
+CREATE OR REPLACE FUNCTION public.is_participant_of(p_game_id uuid)
 RETURNS boolean
 LANGUAGE sql
 SECURITY DEFINER
@@ -180,13 +184,13 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.game_participants
-    WHERE game_code = p_game_code
+    WHERE game_id = p_game_id
       AND user_id = auth.uid()
   );
 $$;
 
-REVOKE ALL ON FUNCTION public.is_participant_of(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_participant_of(text) TO authenticated;
+REVOKE ALL ON FUNCTION public.is_participant_of(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_participant_of(uuid) TO authenticated;
 
 -- Load any active game by exact code (private join path before participant row exists).
 CREATE OR REPLACE FUNCTION public.get_active_game_by_code(p_code text)
@@ -198,7 +202,7 @@ STABLE
 AS $$
   SELECT *
   FROM public.games
-  WHERE code = upper(trim(p_code))
+  WHERE upper(code) = upper(trim(p_code))
     AND status = 'active'
   LIMIT 1;
 $$;
@@ -209,7 +213,8 @@ GRANT EXECUTE ON FUNCTION public.get_active_game_by_code(text) TO anon, authenti
 -- Lobby: open public games with participant counts.
 CREATE OR REPLACE FUNCTION public.list_public_games(p_limit int DEFAULT 10)
 RETURNS TABLE (
-  code varchar(5),
+  id uuid,
+  code text,
   title text,
   player_count bigint,
   board_size int,
@@ -222,12 +227,13 @@ SET search_path = public
 STABLE
 AS $$
   SELECT
+    g.id,
     g.code,
     NULLIF(trim(g.config->>'title'), '') AS title,
     (
       SELECT count(*)::bigint
       FROM public.game_participants gp
-      WHERE gp.game_code = g.code
+      WHERE gp.game_id = g.id
     ) AS player_count,
     COALESCE((g.config->>'boardSize')::int, 5) AS board_size,
     COALESCE(NULLIF(trim(g.config->>'winMode'), ''), 'standard') AS win_mode,
@@ -252,7 +258,7 @@ CREATE POLICY "Read public, hosted, or participating games" ON public.games
   USING (
     visibility = 'public'
     OR host_id = auth.uid()
-    OR public.is_participant_of(code)
+    OR public.is_participant_of(id)
   );
 
 CREATE POLICY "Hosts can create games" ON public.games
@@ -278,7 +284,7 @@ CREATE POLICY "Hosts can read participants of their games" ON public.game_partic
   FOR SELECT TO authenticated USING (
     EXISTS (
       SELECT 1 FROM public.games g
-      WHERE g.code = game_participants.game_code
+      WHERE g.id = game_participants.game_id
         AND g.host_id = auth.uid()
     )
   );
@@ -287,7 +293,7 @@ CREATE POLICY "Participants can read fellow participants"
   ON public.game_participants
   FOR SELECT
   TO authenticated
-  USING (public.is_participant_of(game_code));
+  USING (public.is_participant_of(game_id));
 
 CREATE POLICY "Users can join games" ON public.game_participants
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
@@ -308,7 +314,7 @@ CREATE POLICY "Participants can read claims" ON public.win_claims
   FOR SELECT TO authenticated USING (
     EXISTS (
       SELECT 1 FROM public.game_participants
-      WHERE game_code = win_claims.game_code
+      WHERE game_id = win_claims.game_id
         AND user_id = auth.uid()
     )
   );
@@ -320,7 +326,7 @@ CREATE POLICY "Hosts can update claims" ON public.win_claims
   FOR UPDATE TO authenticated USING (
     EXISTS (
       SELECT 1 FROM public.games
-      WHERE code = win_claims.game_code
+      WHERE id = win_claims.game_id
         AND host_id = auth.uid()
     )
   );
@@ -433,7 +439,7 @@ AS $$
     AND NOT EXISTS (
       SELECT 1
       FROM public.game_participants gp
-      INNER JOIN public.games g ON g.code = gp.game_code
+      INNER JOIN public.games g ON g.id = gp.game_id
       WHERE gp.user_id = u.id
         AND g.status = 'active'
     )
@@ -489,7 +495,7 @@ RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT COALESCE(p_title, '') ~* '(smoke test|corners smoke|lobby (private|public) smoke)';
+  SELECT COALESCE(p_title, '') ~* '(smoke test|corners smoke|lobby (private|public) smoke|theme ocean smoke|custom code smoke)';
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_smoke_test_guest_name(p_username text, p_display_name text)
@@ -503,13 +509,13 @@ AS $$
 $$;
 
 CREATE OR REPLACE FUNCTION public.list_smoke_test_games_for_cleanup(p_limit integer DEFAULT 100)
-RETURNS TABLE (game_code varchar(5))
+RETURNS TABLE (game_id uuid, game_code text)
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = public
 STABLE
 AS $$
-  SELECT g.code
+  SELECT g.id, g.code
   FROM public.games g
   WHERE public.is_smoke_test_game_title(g.config->>'title')
   ORDER BY g.created_at ASC
@@ -531,7 +537,7 @@ AS $$
     AND NOT EXISTS (
       SELECT 1
       FROM public.game_participants gp
-      INNER JOIN public.games g ON g.code = gp.game_code
+      INNER JOIN public.games g ON g.id = gp.game_id
       WHERE gp.user_id = u.id
         AND g.status = 'active'
         AND NOT public.is_smoke_test_game_title(g.config->>'title')
@@ -550,26 +556,26 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  game_codes varchar(5)[];
+  game_ids uuid[];
   user_ids uuid[];
   lim integer := GREATEST(1, LEAST(COALESCE(p_limit, 100), 500));
 BEGIN
-  SELECT coalesce(array_agg(l.game_code), ARRAY[]::varchar(5)[])
-    INTO game_codes
+  SELECT coalesce(array_agg(l.game_id), ARRAY[]::uuid[])
+    INTO game_ids
   FROM public.list_smoke_test_games_for_cleanup(lim) AS l;
 
   IF p_dry_run THEN
     RETURN QUERY
-      SELECT 'game'::text, c::text, true
-      FROM unnest(game_codes) AS c;
-  ELSIF cardinality(game_codes) > 0 THEN
+      SELECT 'game'::text, i::text, true
+      FROM unnest(game_ids) AS i;
+  ELSIF cardinality(game_ids) > 0 THEN
     DELETE FROM public.games g
-    WHERE g.code = ANY (game_codes)
+    WHERE g.id = ANY (game_ids)
       AND public.is_smoke_test_game_title(g.config->>'title');
 
     RETURN QUERY
-      SELECT 'game'::text, c::text, false
-      FROM unnest(game_codes) AS c;
+      SELECT 'game'::text, i::text, false
+      FROM unnest(game_ids) AS i;
   END IF;
 
   SELECT coalesce(array_agg(l.user_id), ARRAY[]::uuid[])

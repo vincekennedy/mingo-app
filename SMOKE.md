@@ -19,13 +19,14 @@ Run on **mingo-local** (`npm run dev` + `.env.local`).
 ### 2. Host create
 
 - [ ] Log in → dashboard → **Create New Game**.
-- [ ] Set a title, pick board size (3×3 is fine), add enough items, **Create Game**.
+- [ ] Set a title, pick board size (3×3 is fine), optionally a custom entry code (4–12 chars), add enough items, **Create Game**.
 - [ ] Host screen shows the join code and a player list that includes you.
+- [ ] (Optional) End the game, create again with the **same** custom code — join should work for the new game only.
 
 ### 3. Guest join + display name
 
 - [ ] Incognito (or another browser): landing → enter the code → **Join Game**.
-- [ ] **Join as guest** modal appears (not a browser `prompt`).
+- [ ] **Join game** modal appears (guest name + Log in / Create account — not a browser `prompt`).
 - [ ] Enter a display name (e.g. `SmokeGuest`) → join → play board loads.
 - [ ] On the host view, the player list shows **`SmokeGuest`**, not `SmokeGuest-xxxx`.
 

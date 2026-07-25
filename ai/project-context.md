@@ -12,7 +12,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 - **Backend:** Supabase (Auth, Postgres, Storage)  
 - **Intent:** Hands-on experiment in AI-assisted shipping (Cursor, Claude, Linear, Vercel) — see `README.md`
 
-**Product:** Hosts need an account to **create** games. **Join** supports guests via Supabase Anonymous auth (display-name prompt); enable Anonymous under Authentication → Providers on each project. Guests are ephemeral: after they are in **no active games** and idle **≥ 24 hours**, `cleanup_guest_users` (pg_cron daily + optional Edge Function) deletes the Auth user (cascades profile / game rows). See [`supabase/README.md`](../supabase/README.md#guest-user-retention).
+**Product:** Hosts need an account to **create** games. **Join** supports (1) typing a 5-character code on the landing page, or (2) opening a deep link `/join/:code` (also `?join=` / `?code=`). Unauthenticated join opens a chooser: **guest** (Supabase Anonymous auth + display name) or **log in / create account** (pending code kept in `sessionStorage` so auth returns into the game). Hosts **Share invite link** (copies `/join/:code`) from the create lobby and the in-play host panel, and can open a **printable QR flyer** at `/print/join/:code` in a new tab for paper handouts. Enable Anonymous under Authentication → Providers on each project. Guests are ephemeral: after they are in **no active games** and idle **≥ 24 hours**, `cleanup_guest_users` (pg_cron daily + optional Edge Function) deletes the Auth user (cascades profile / game rows). See [`supabase/README.md`](../supabase/README.md#guest-user-retention).
 
 ---
 
@@ -24,6 +24,7 @@ Living brief for humans and AI assistants. Update when architecture or product d
 | Styling | Tailwind via **CDN** in `index.html` (npm Tailwind 4 is also installed — dual setup) |
 | Icons | `lucide-react` |
 | Effects | `canvas-confetti` |
+| QR | `qrcode` (join-link QR on host lobby) |
 | Client SDK | `@supabase/supabase-js` (browser only) |
 | Deploy | Vercel |
 
@@ -45,9 +46,11 @@ Almost all UI and game logic live in a **single screen state machine**:
 - `src/hooks/*` — extracted hooks (e.g. report modal)  
 - `src/services/*` — Supabase API wrappers  
 - `src/lib/supabase.js` — shared client  
+- `src/lib/joinLink.js` — `/join/:code` parsing, pending-join storage, join URL helpers (no React Router)  
+- `src/lib/printJoinFlyer.js` — `/print/join/:code` printable QR flyer helpers  
 - `src/lib/version.js` — CalVer / commit version chip string  
 
-There is **no React Router**. Navigation is `setScreen(...)`.
+There is **no React Router**. Navigation is `setScreen(...)`. Join deep links are handled by reading `window.location` on boot (`/join/ABC12` or `?join=ABC12`); printable flyers use `/print/join/ABC12`. `vercel.json` already SPA-rewrites those paths to `index.html`.
 
 Multiplayer freshness uses **Supabase Realtime** (`postgres_changes` on `game_participants`, `win_claims`, `games`) via [`src/lib/realtime.js`](../src/lib/realtime.js). Board marks still persist over HTTP with a short debounce.
 
@@ -68,8 +71,9 @@ Legacy `setStorage` / `getStorage` helpers remain in `App.jsx` but are **unused*
 | `email-confirmation` | Signup succeeded but no session (email confirm required in Supabase) |
 | `dashboard` | User’s active games, pending-win badges for hosts, logout |
 | `setup` | Host builder: title, board size, free space, items (+ images) |
-| `host` | Share code, player list, pending claims, start playing / end game |
-| `play` | Markable board; win claim / host review; confetti on confirmed win |
+| `host` | Share invite link + open printable QR flyer, player list, pending claims, start playing / end game |
+| `play` | Markable board; host **Share invite link**; win claim / host review; confetti on confirmed win |
+| `print-join` | Full-page printable QR flyer (`/print/join/:code`) for paper handouts |
 
 ---
 
@@ -98,10 +102,10 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
 | Table | Purpose / key fields |
 |-------|----------------------|
 | `public.users` | Profile: `id` → `auth.users`, `username` UNIQUE, optional `display_name` (guests: entered name; UI prefers this over unique `username`) |
-| `public.games` | `code` (5-char PK), `host_id`, `config` JSONB, `status` `active` \| `ended` |
-| `public.game_participants` | `game_code`, `user_id`, `is_host`, UNIQUE(game_code, user_id) |
-| `public.board_states` | Per user per game: `board`, `marked_indices`, `has_won` |
-| `public.win_claims` | `claim_type`, claimed indices/items, `status` pending/confirmed/rejected, `incorrect_indices` |
+| `public.games` | `id` UUID PK; `code` TEXT join key (unique among **active** only); `host_id`, `config` JSONB, `status` `active` \| `ended` |
+| `public.game_participants` | `game_id` → games, `user_id`, `is_host`, UNIQUE(game_id, user_id) |
+| `public.board_states` | Per user per game (`game_id`): `board`, `marked_indices`, `has_won` |
+| `public.win_claims` | `game_id`, `claim_type`, claimed indices/items, `status` pending/confirmed/rejected, `incorrect_indices` |
 | `public.feedback_reports` | In-app reports: `category`, `email`, `subject`, `details`, required `app_version`; optional `user_id`, `screen`, `game_code`, `user_agent`. Client INSERT only (no SELECT). |
 
 **`games.config` shape** (written from setup):
@@ -113,12 +117,20 @@ Incremental schema changes: **`supabase/migrations/`** via Supabase CLI (`npm ru
   "useFreeSpace": true,
   "title": "...",
   "winMode": "standard",
-  "linesToWin": 1
+  "linesToWin": 1,
+  "theme": "party",
+  "generationTone": "family",
+  "generationInstructions": null
 }
 ```
 
 `winMode`: `standard` \| `four_corners` \| `x` \| `blackout` (default `standard` for legacy games).  
-`linesToWin`: 1–3, used only when `winMode` is `standard`. See [`src/lib/winDetection.js`](../src/lib/winDetection.js).
+`linesToWin`: 1–3, used only when `winMode` is `standard`. See [`src/lib/winDetection.js`](../src/lib/winDetection.js).  
+`theme`: `party` \| `sunset` \| `ocean` \| `ink` (default `party` for legacy games). User chrome preference is separate (`localStorage` `mingo.theme`); setup/host/play use the game theme. See [`src/lib/theme.js`](../src/lib/theme.js).  
+`generationTone`: `family` \| `funny` \| `wholesome` \| `office` \| `adult` (default `family`). Used only for AI generate-items / Reuse setup — not shown in play. See [`src/lib/generationTone.js`](../src/lib/generationTone.js).  
+`generationInstructions`: optional short string (max 200 chars) constraining content (e.g. “only 90s song titles”); null/omitted when empty.
+
+**Join codes:** Random default is 5 chars from an ambiguous-safe alphabet. Optional custom vanity codes are 4–12 `A–Z0–9`. Join resolves only `status = 'active'`; after end, the same code may be reused by anyone. Durable identity is `games.id` (boards/claims/realtime/storage). See [`src/lib/joinLink.js`](../src/lib/joinLink.js).
 
 **Signup:** trigger `on_auth_user_created` → `handle_new_user()` inserts `public.users` from `raw_user_meta_data.username` (email local-part fallback) and optional `display_name`. Client also retries/fallback-inserts if needed. Guests store unique `username` as `Name-xxxx` and `display_name` as the entered name.
 

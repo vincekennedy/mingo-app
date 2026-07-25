@@ -56,7 +56,12 @@ export async function deleteSmokeGame(gameCode) {
   }
 
   try {
-    const { error: deleteError } = await supabase.from('games').delete().eq('code', gameCode)
+    // Prefer id: codes can repeat across ended games after custom-entry-codes migration.
+    const { data: active } = await supabase.rpc('get_active_game_by_code', { p_code: gameCode })
+    const row = Array.isArray(active) ? active[0] : active
+    const { error: deleteError } = row?.id
+      ? await supabase.from('games').delete().eq('id', row.id)
+      : await supabase.from('games').delete().eq('code', gameCode).eq('status', 'active')
     if (deleteError) {
       console.warn(`[e2e] failed to delete smoke game ${gameCode}:`, deleteError.message)
     }

@@ -1,4 +1,5 @@
 import { AlertCircle, Copy, Loader2, LogOut, Play, X } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 import PublicLobby from '../components/game/PublicLobby';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import { describeWinRule } from '../lib/winDetection';
@@ -7,6 +8,8 @@ export default function DashboardScreen({
   currentUser,
   gamesLoading,
   userGames,
+  userTheme,
+  onUpdateUserTheme,
   onLogout,
   onSelectGame,
   onEndGame,
@@ -30,6 +33,18 @@ export default function DashboardScreen({
         </button>
       </div>
 
+      <div className="pb-4 border-b border-gray-200">
+        <ThemeSwatchPicker
+          value={userTheme}
+          onChange={onUpdateUserTheme}
+          label="Your theme"
+          idPrefix="dashboard-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Applies on this device outside of a game. Each game can still use its own theme.
+        </p>
+      </div>
+
       {gamesLoading ? (
         <div className="text-center py-8">
           <Loader2 size={32} className="mx-auto mingo-text-brand animate-spin mb-3" />
@@ -49,7 +64,7 @@ export default function DashboardScreen({
         <div className="space-y-3">
           {userGames.map((game) => (
             <div
-              key={game.gameCode}
+              key={game.gameId || game.gameCode}
               className={`w-full p-4 rounded-xl border-2 ${
                 game.pendingWin && game.isHost
                   ? 'border-yellow-500 bg-yellow-50'
@@ -103,7 +118,7 @@ export default function DashboardScreen({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (window.confirm(`Are you sure you want to end game ${game.gameCode}? This will remove it from your games list.`)) {
-                        onEndGame(game.gameCode);
+                        onEndGame(game.gameId);
                       }
                     }}
                     className="flex-1 px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2"

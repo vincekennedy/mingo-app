@@ -1,10 +1,13 @@
 import { LogIn, UserPlus, Users } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
 import PublicLobby from '../components/game/PublicLobby';
 
 export default function HomeScreen({
   currentUser,
   joinCode,
   setJoinCode,
+  userTheme,
+  onUpdateUserTheme,
   onOpenDashboard,
   onLogin,
   onRegister,
@@ -13,6 +16,18 @@ export default function HomeScreen({
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+      <div className="pb-2 border-b border-gray-200">
+        <ThemeSwatchPicker
+          value={userTheme}
+          onChange={onUpdateUserTheme}
+          label="Your theme"
+          idPrefix="home-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Applies on this device outside of a game. Hosts can still pick a different look per game.
+        </p>
+      </div>
+
       {currentUser ? (
         <>
           <div className="text-center mb-4">
@@ -61,13 +76,17 @@ export default function HomeScreen({
         <label className="block text-gray-700 font-semibold text-sm sm:text-base">
           Join Existing Game
         </label>
+        <p className="text-xs sm:text-sm text-gray-500">
+          Enter a code, or open a shared join link / QR from the host.
+        </p>
         <input
           type="text"
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-          placeholder="Enter 5-digit code"
-          maxLength={5}
+          placeholder="Enter join code"
+          maxLength={12}
           className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"
+          data-testid="join-code-input"
         />
         <button
           onClick={() => onJoinGame()}

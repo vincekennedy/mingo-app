@@ -1,9 +1,22 @@
 import { Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
+import {
+  GENERATION_TONE_IDS,
+  GENERATION_TONE_LABELS,
+  MAX_INSTRUCTIONS_LENGTH,
+} from '../lib/generationTone';
+import { isValidCustomEntryCodeOrEmpty } from '../lib/joinLink';
 
 export default function SetupScreen({
   currentUser,
   gameTitle,
   setGameTitle,
+  generationTone,
+  onUpdateGenerationTone,
+  generationInstructions,
+  onUpdateGenerationInstructions,
+  customEntryCode,
+  onUpdateCustomEntryCode,
   generatingItems,
   neededItemCount,
   onGenerateItems,
@@ -17,6 +30,8 @@ export default function SetupScreen({
   onUpdateLinesToWin,
   gameVisibility,
   onUpdateGameVisibility,
+  gameTheme,
+  onUpdateGameTheme,
   items,
   onAddItem,
   onUpdateItem,
@@ -39,6 +54,50 @@ export default function SetupScreen({
           placeholder="Enter a title for your game (used to generate items)"
           className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base"
         />
+
+        <div className="mt-4">
+          <label htmlFor="setup-generation-tone" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+            Generation tone
+          </label>
+          <select
+            id="setup-generation-tone"
+            value={generationTone}
+            onChange={(e) => onUpdateGenerationTone(e.target.value)}
+            className="w-full p-3 border-2 mingo-border-brand rounded-lg mingo-focus-brand text-sm sm:text-base"
+          >
+            {GENERATION_TONE_IDS.map((id) => (
+              <option key={id} value={id}>
+                {GENERATION_TONE_LABELS[id]}
+              </option>
+            ))}
+          </select>
+          {generationTone === 'adult' && (
+            <p className="mt-2 text-xs sm:text-sm text-amber-700">
+              Squares may include spicy / adult humor.
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <label htmlFor="setup-generation-instructions" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+            Extra instructions <span className="font-normal text-gray-500">(optional)</span>
+          </label>
+          <textarea
+            id="setup-generation-instructions"
+            value={generationInstructions}
+            onChange={(e) => onUpdateGenerationInstructions(e.target.value)}
+            maxLength={MAX_INSTRUCTIONS_LENGTH}
+            rows={2}
+            placeholder="e.g. only movie quotes, only song titles from 1985–1995"
+            className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base resize-y"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Optional: constrain content (e.g. only movie quotes). Leave blank for a general list.
+            {' '}
+            {generationInstructions.length}/{MAX_INSTRUCTIONS_LENGTH}
+          </p>
+        </div>
+
         <button
           type="button"
           onClick={onGenerateItems}
@@ -51,7 +110,28 @@ export default function SetupScreen({
             : `Generate ${neededItemCount} items from title`}
         </button>
         <p className="mt-2 text-xs sm:text-sm text-gray-500">
-          Optional: AI fills the item list from your title. You can edit anything before creating the game.
+          Optional: AI fills the item list from your title, tone, and instructions. You can edit anything before creating the game.
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <label htmlFor="setup-entry-code" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+          Entry code <span className="font-normal text-gray-500">(optional)</span>
+        </label>
+        <input
+          id="setup-entry-code"
+          type="text"
+          value={customEntryCode}
+          onChange={(e) => onUpdateCustomEntryCode(e.target.value)}
+          placeholder="Leave blank for a random 5-character code"
+          maxLength={12}
+          className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base font-mono uppercase tracking-wide"
+          data-testid="setup-entry-code"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          4–12 letters/numbers. Reusable after you end the game (e.g. weekly bingo).
         </p>
       </div>
 
@@ -137,6 +217,18 @@ export default function SetupScreen({
         </select>
         <p className="mt-2 text-xs sm:text-sm text-gray-500">
           Private games stay off the public lobby. Anyone with the exact code can still join.
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <ThemeSwatchPicker
+          value={gameTheme}
+          onChange={onUpdateGameTheme}
+          label="Game theme"
+          idPrefix="setup-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Everyone in this game sees this look. Locked when you create the game.
         </p>
       </div>
 
@@ -228,7 +320,8 @@ export default function SetupScreen({
         </button>
         <button
           onClick={onCreateGame}
-          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
+          disabled={!isValidCustomEntryCodeOrEmpty(customEntryCode)}
+          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Play size={20} className="sm:w-6 sm:h-6" /> Create Game
         </button>
