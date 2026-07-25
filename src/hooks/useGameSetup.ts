@@ -6,8 +6,9 @@ import {
   DEFAULT_GENERATION_TONE,
   resolveGenerationTone,
   sanitizeGenerationInstructions,
+  type GenerationToneId,
 } from '../lib/generationTone';
-import { normalizeWinConfig } from '../lib/winDetection';
+import { normalizeWinConfig, type WinMode } from '../lib/winDetection';
 import {
   generateRandomGameCode,
   isValidGameCode,
@@ -15,20 +16,69 @@ import {
 } from '../lib/joinLink';
 import { resolveTheme } from '../lib/theme';
 
-const emptyItems = () => Array(24).fill({ text: '', imageUrl: null });
+type AppUser = { id: string; email?: string | null; username: string; isGuest?: boolean };
+type ShowToast = (
+  message: string,
+  opts?: { variant?: 'error' | 'success' | 'info'; durationMs?: number },
+) => void;
+type GameVisibility = 'private' | 'public';
+
+type SetupItem = { text: string; imageUrl: string | null };
+type SetupItemEntry = SetupItem | string;
+
+type DuplicateGameConfig = {
+  items?: unknown[];
+  boardSize?: number;
+  useFreeSpace?: boolean;
+  title?: string;
+  generationTone?: string;
+  generationInstructions?: string;
+  theme?: string;
+  winMode?: string;
+  linesToWin?: number;
+  [key: string]: unknown;
+};
+
+type GameSummaryForDuplicate = {
+  config?: DuplicateGameConfig | null;
+  visibility?: string | null;
+};
+
+type UseGameSetupContext = {
+  currentUser: AppUser | null;
+  gameTheme: string;
+  showToast: ShowToast;
+  applyThemeFromConfig: (config: DuplicateGameConfig) => void;
+  resetGameThemeToUser: () => void;
+  onNavigateSetup: () => void;
+  onCreated: (payload: {
+    id: string;
+    code: string;
+    config: Record<string, unknown>;
+    visibility: GameVisibility;
+  }) => void | Promise<void>;
+  loadUserGames: (userId: string) => Promise<void>;
+};
+
+const emptyItems = (): SetupItem[] => Array(24).fill({ text: '', imageUrl: null });
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function normalizeConfigItem(item: unknown): SetupItem {
+  if (typeof item === 'string') {
+    return { text: item, imageUrl: null };
+  }
+  if (item && typeof item === 'object') {
+    const obj = item as { text?: string; imageUrl?: string | null };
+    return { text: obj.text || '', imageUrl: obj.imageUrl || null };
+  }
+  return { text: '', imageUrl: null };
+}
 
 /**
  * Setup-screen draft board config (separate from live session).
- * @param {{
- *   currentUser: { id: string } | null,
- *   gameTheme: string,
- *   showToast: (message: string, opts?: object) => void,
- *   applyThemeFromConfig: (config: object) => void,
- *   resetGameThemeToUser: () => void,
- *   onNavigateSetup: () => void,
- *   onCreated: (payload: { id: string, code: string, config: object, visibility: string }) => void | Promise<void>,
- *   loadUserGames: (userId: string) => Promise<void>,
- * }} ctx
  */
 export function useGameSetup({
   currentUser,
@@ -39,15 +89,15 @@ export function useGameSetup({
   onNavigateSetup,
   onCreated,
   loadUserGames,
-}) {
-  const [items, setItems] = useState(emptyItems);
+}: UseGameSetupContext) {
+  const [items, setItems] = useState<SetupItemEntry[]>(() => emptyItems());
   const [boardSize, setBoardSize] = useState(5);
   const [useFreeSpace, setUseFreeSpace] = useState(true);
-  const [winMode, setWinMode] = useState('standard');
+  const [winMode, setWinMode] = useState<WinMode>('standard');
   const [linesToWin, setLinesToWin] = useState(1);
-  const [gameVisibility, setGameVisibility] = useState('private');
+  const [gameVisibility, setGameVisibility] = useState<GameVisibility>('private');
   const [gameTitle, setGameTitle] = useState('');
-  const [generationTone, setGenerationTone] = useState(DEFAULT_GENERATION_TONE);
+  const [generationTone, setGenerationTone] = useState<GenerationToneId>(DEFAULT_GENERATION_TONE);
   const [generationInstructions, setGenerationInstructions] = useState('');
   const [customEntryCode, setCustomEntryCode] = useState('');
   const [generatingItems, setGeneratingItems] = useState(false);
@@ -77,7 +127,7 @@ export function useGameSetup({
     setItems([...items, { text: '', imageUrl: null }]);
   };
 
-  const removeItem = async (index) => {
+  const removeItem = async (index: number) => {
     const item = items[index];
     if (item && typeof item === 'object' && item.imageUrl) {
       try {
@@ -89,18 +139,18 @@ export function useGameSetup({
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const updateItem = (index, value) => {
+  const updateItem = (index: number, value: string) => {
     const newItems = [...items];
     const currentItem = newItems[index];
     if (typeof currentItem === 'string') {
       newItems[index] = { text: value, imageUrl: null };
-    } else {
+    } else if (currentItem) {
       newItems[index] = { ...currentItem, text: value };
     }
     setItems(newItems);
   };
 
-  const updateItemImage = async (index, file) => {
+  const updateItemImage = async (index: number, file: File | null | undefined) => {
     if (!file || !currentUser) {
       showToast('Please log in to upload images.');
       return;
@@ -120,18 +170,19 @@ export function useGameSetup({
       const imageUrl = await storageService.uploadImage(file, storageKey, currentUser.id);
 
       const newItems = [...items];
-      const itemToUpdate = typeof newItems[index] === 'string'
-        ? { text: '', imageUrl: null }
-        : { ...newItems[index] };
+      const itemToUpdate =
+        typeof newItems[index] === 'string'
+          ? { text: '', imageUrl: null }
+          : { ...(newItems[index] as SetupItem) };
       newItems[index] = { ...itemToUpdate, imageUrl, text: itemToUpdate.text || '' };
       setItems(newItems);
     } catch (error) {
       console.error('Error uploading image:', error);
-      showToast(error.message || 'Error uploading image. Please try again.');
+      showToast(getErrorMessage(error, 'Error uploading image. Please try again.'));
     }
   };
 
-  const removeItemImage = async (index) => {
+  const removeItemImage = async (index: number) => {
     const currentItem = items[index];
     if (currentItem && typeof currentItem === 'object' && currentItem.imageUrl) {
       try {
@@ -141,14 +192,15 @@ export function useGameSetup({
       }
     }
     const newItems = [...items];
-    const itemToUpdate = typeof newItems[index] === 'string'
-      ? { text: newItems[index], imageUrl: null }
-      : { ...newItems[index], imageUrl: null };
+    const itemToUpdate =
+      typeof newItems[index] === 'string'
+        ? { text: newItems[index] as string, imageUrl: null }
+        : { ...(newItems[index] as SetupItem), imageUrl: null };
     newItems[index] = itemToUpdate;
     setItems(newItems);
   };
 
-  const updateBoardSize = (size) => {
+  const updateBoardSize = (size: number) => {
     setBoardSize(size);
     const neededItems = useFreeSpace ? size * size - 1 : size * size;
     if (items.length < neededItems) {
@@ -156,7 +208,7 @@ export function useGameSetup({
     }
   };
 
-  const updateFreeSpace = (hasFreeSpace) => {
+  const updateFreeSpace = (hasFreeSpace: boolean) => {
     setUseFreeSpace(hasFreeSpace);
     const neededItems = hasFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
     if (items.length < neededItems) {
@@ -164,29 +216,29 @@ export function useGameSetup({
     }
   };
 
-  const updateWinMode = (mode) => {
-    setWinMode(mode);
+  const updateWinMode = (mode: string) => {
+    setWinMode(mode as WinMode);
     if (mode !== 'standard') setLinesToWin(1);
   };
 
-  const updateLinesToWin = (n) => {
+  const updateLinesToWin = (n: number | string) => {
     const value = Math.min(3, Math.max(1, Number(n) || 1));
     setLinesToWin(value);
   };
 
-  const updateGameVisibility = (value) => {
+  const updateGameVisibility = (value: string) => {
     setGameVisibility(value === 'public' ? 'public' : 'private');
   };
 
-  const updateGenerationTone = (value) => {
+  const updateGenerationTone = (value: string) => {
     setGenerationTone(resolveGenerationTone(value));
   };
 
-  const updateGenerationInstructions = (value) => {
+  const updateGenerationInstructions = (value: string) => {
     setGenerationInstructions(sanitizeGenerationInstructions(value));
   };
 
-  const updateCustomEntryCode = (value) => {
+  const updateCustomEntryCode = (value: string) => {
     setCustomEntryCode(normalizeGameCode(value).slice(0, 12));
   };
 
@@ -214,7 +266,7 @@ export function useGameSetup({
     onNavigateSetup();
   };
 
-  const duplicateSetupFromGame = (game) => {
+  const duplicateSetupFromGame = (game: GameSummaryForDuplicate) => {
     const config = game?.config;
     if (!config?.items || !Array.isArray(config.items) || config.items.length === 0) {
       showToast('This game has no item list to reuse.');
@@ -223,11 +275,7 @@ export function useGameSetup({
     const size = config.boardSize || 5;
     const free = config.useFreeSpace !== undefined ? config.useFreeSpace : true;
     const rules = normalizeWinConfig(config);
-    const normalizedItems = config.items.map((item) =>
-      typeof item === 'string'
-        ? { text: item, imageUrl: null }
-        : { text: item.text || '', imageUrl: item.imageUrl || null }
-    );
+    const normalizedItems = config.items.map(normalizeConfigItem);
     setGameTitle(config.title || '');
     setBoardSize(size);
     setUseFreeSpace(free);
@@ -256,7 +304,7 @@ export function useGameSetup({
 
     if (filledCount > 0) {
       const replace = window.confirm(
-        'This will replace your current bingo item texts (images on slots will be cleared). Continue?'
+        'This will replace your current bingo item texts (images on slots will be cleared). Continue?',
       );
       if (!replace) return;
     }
@@ -271,7 +319,7 @@ export function useGameSetup({
       setItems(generated.map((text) => ({ text, imageUrl: null })));
     } catch (error) {
       console.error('Generate items error:', error);
-      showToast(error.message || 'Could not generate items. Please try again.');
+      showToast(getErrorMessage(error, 'Could not generate items. Please try again.'));
     } finally {
       setGeneratingItems(false);
     }
@@ -290,7 +338,7 @@ export function useGameSetup({
 
     if (validItems.length < neededItems) {
       showToast(
-        `You need at least ${neededItems} items for a ${boardSize}x${boardSize} board${useFreeSpace ? ' (with free space)' : ''}`
+        `You need at least ${neededItems} items for a ${boardSize}x${boardSize} board${useFreeSpace ? ' (with free space)' : ''}`,
       );
       return;
     }
@@ -309,8 +357,8 @@ export function useGameSetup({
       return item;
     });
 
-    const visibility = gameVisibility === 'public' ? 'public' : 'private';
-    const config = {
+    const visibility: GameVisibility = gameVisibility === 'public' ? 'public' : 'private';
+    const config: Record<string, unknown> = {
       items: normalizedItems,
       boardSize,
       useFreeSpace,
@@ -346,7 +394,7 @@ export function useGameSetup({
       }
     } catch (error) {
       console.error('Storage error:', error);
-      showToast(`Could not save game: ${error.message || 'Please try again.'}`);
+      showToast(`Could not save game: ${getErrorMessage(error, 'Please try again.')}`);
     }
   };
 
