@@ -1,29 +1,61 @@
-/** @typedef {'standard' | 'four_corners' | 'x' | 'blackout'} WinMode */
+export type WinMode = 'standard' | 'four_corners' | 'x' | 'blackout'
 
-export const WIN_MODES = /** @type {const} */ ([
+export const WIN_MODES = [
   'standard',
   'four_corners',
   'x',
   'blackout',
-])
+] as const satisfies readonly WinMode[]
 
-/**
- * Normalize win rules from games.config (missing fields = legacy standard 1-line).
- * @param {object | null | undefined} config
- */
-export function normalizeWinConfig(config = {}) {
-  const winMode = WIN_MODES.includes(config.winMode) ? config.winMode : 'standard'
-  let linesToWin = Number(config.linesToWin) || 1
+export type WinConfigFields = {
+  winMode?: string | null
+  linesToWin?: number | string | null
+}
+
+export type NormalizedWinConfig = {
+  winMode: WinMode
+  linesToWin: number
+}
+
+export type BoardCell = { text?: string; isFree?: boolean } | string
+
+export type CompletedLine = {
+  type: 'row' | 'column' | 'diagonal'
+  row?: number
+  column?: number
+  diagonal?: number
+  indices: number[]
+}
+
+export type WinResult = {
+  type: string
+  indices: number[]
+  items: string[]
+  row?: number
+  column?: number
+  diagonal?: number
+  lines?: CompletedLine[]
+}
+
+function isWinMode(value: string | null | undefined): value is WinMode {
+  return WIN_MODES.includes(value as WinMode)
+}
+
+/** Normalize win rules from games.config (missing fields = legacy standard 1-line). */
+export function normalizeWinConfig(
+  config: WinConfigFields | null | undefined = {},
+): NormalizedWinConfig {
+  const winMode = isWinMode(config?.winMode) ? config.winMode : 'standard'
+  let linesToWin = Number(config?.linesToWin) || 1
   if (linesToWin < 1) linesToWin = 1
   if (linesToWin > 3) linesToWin = 3
   return { winMode, linesToWin }
 }
 
-/**
- * Human-readable rule for host/play UI.
- * @param {object | null | undefined} config
- */
-export function describeWinRule(config) {
+/** Human-readable rule for host/play UI. */
+export function describeWinRule(
+  config: WinConfigFields | null | undefined,
+): string {
   const { winMode, linesToWin } = normalizeWinConfig(config)
   switch (winMode) {
     case 'four_corners':
@@ -34,17 +66,14 @@ export function describeWinRule(config) {
       return 'How to win: mark every cell on the board'
     case 'standard':
     default:
-      if (linesToWin <= 1) return 'How to win: complete one line (row, column, or diagonal)'
+      if (linesToWin <= 1)
+        return 'How to win: complete one line (row, column, or diagonal)'
       return `How to win: complete ${linesToWin} lines (rows, columns, or diagonals)`
   }
 }
 
-/**
- * Label for claim / verification UI.
- * @param {string} type
- * @param {number} [linesToWin]
- */
-export function formatClaimType(type, linesToWin = 1) {
+/** Label for claim / verification UI. */
+export function formatClaimType(type: string, linesToWin = 1): string {
   switch (type) {
     case 'row':
       return 'Row'
@@ -66,28 +95,26 @@ export function formatClaimType(type, linesToWin = 1) {
   }
 }
 
-function cellText(board, index) {
+function cellText(board: BoardCell[], index: number): string {
   const cell = board[index]
   if (!cell) return ''
   if (typeof cell === 'string') return cell
   return cell.text || (cell.isFree ? 'FREE' : '') || ''
 }
 
-function itemsForIndices(board, indices) {
+function itemsForIndices(board: BoardCell[], indices: number[]): string[] {
   return indices.map((idx) => cellText(board, idx))
 }
 
-/**
- * @param {Set<number>|number[]} marked
- * @param {number} boardSize
- * @returns {Array<{ type: string, row?: number, column?: number, diagonal?: number, indices: number[] }>}
- */
-export function findCompletedLines(marked, boardSize) {
+export function findCompletedLines(
+  marked: Set<number> | number[],
+  boardSize: number,
+): CompletedLine[] {
   const markedSet = marked instanceof Set ? marked : new Set(marked)
-  const lines = []
+  const lines: CompletedLine[] = []
 
   for (let row = 0; row < boardSize; row++) {
-    const indices = []
+    const indices: number[] = []
     let complete = true
     for (let col = 0; col < boardSize; col++) {
       const index = row * boardSize + col
@@ -101,7 +128,7 @@ export function findCompletedLines(marked, boardSize) {
   }
 
   for (let col = 0; col < boardSize; col++) {
-    const indices = []
+    const indices: number[] = []
     let complete = true
     for (let row = 0; row < boardSize; row++) {
       const index = row * boardSize + col
@@ -115,7 +142,7 @@ export function findCompletedLines(marked, boardSize) {
   }
 
   {
-    const indices = []
+    const indices: number[] = []
     let complete = true
     for (let i = 0; i < boardSize; i++) {
       const index = i * boardSize + i
@@ -129,7 +156,7 @@ export function findCompletedLines(marked, boardSize) {
   }
 
   {
-    const indices = []
+    const indices: number[] = []
     let complete = true
     for (let i = 0; i < boardSize; i++) {
       const index = i * boardSize + (boardSize - 1 - i)
@@ -145,19 +172,18 @@ export function findCompletedLines(marked, boardSize) {
   return lines
 }
 
-function cornerIndices(boardSize) {
+function cornerIndices(boardSize: number): number[] {
   const last = boardSize - 1
-  return [
-    0,
-    last,
-    last * boardSize,
-    last * boardSize + last,
-  ]
+  return [0, last, last * boardSize, last * boardSize + last]
 }
 
-function diagonalIndices(boardSize) {
-  const main = []
-  const anti = []
+function diagonalIndices(boardSize: number): {
+  main: number[]
+  anti: number[]
+  all: number[]
+} {
+  const main: number[] = []
+  const anti: number[] = []
   for (let i = 0; i < boardSize; i++) {
     main.push(i * boardSize + i)
     anti.push(i * boardSize + (boardSize - 1 - i))
@@ -165,27 +191,28 @@ function diagonalIndices(boardSize) {
   return { main, anti, all: [...new Set([...main, ...anti])] }
 }
 
-/**
- * Detect a win for the given mode.
- * @param {{
- *   marked: Set<number>|number[],
- *   board: Array<{ text?: string, isFree?: boolean }|string>,
- *   boardSize: number,
- *   winMode?: WinMode,
- *   linesToWin?: number,
- * }} opts
- * @returns {{ type: string, indices: number[], items: string[], lines?: object[] } | null}
- */
+export type DetectWinOptions = {
+  marked: Set<number> | number[]
+  board: BoardCell[]
+  boardSize: number
+  winMode?: WinMode | string | null
+  linesToWin?: number | string | null
+}
+
+/** Detect a win for the given mode. */
 export function detectWin({
   marked,
   board,
   boardSize,
   winMode = 'standard',
   linesToWin = 1,
-}) {
+}: DetectWinOptions): WinResult | null {
   if (!boardSize || !board?.length) return null
   const markedSet = marked instanceof Set ? marked : new Set(marked)
-  const { winMode: mode, linesToWin: needed } = normalizeWinConfig({ winMode, linesToWin })
+  const { winMode: mode, linesToWin: needed } = normalizeWinConfig({
+    winMode,
+    linesToWin,
+  })
 
   if (mode === 'four_corners') {
     const indices = cornerIndices(boardSize)
@@ -209,7 +236,7 @@ export function detectWin({
   }
 
   if (mode === 'blackout') {
-    const indices = []
+    const indices: number[] = []
     for (let i = 0; i < boardSize * boardSize; i++) {
       if (!markedSet.has(i)) return null
       indices.push(i)
@@ -227,6 +254,7 @@ export function detectWin({
 
   if (needed <= 1) {
     const line = lines[0]
+    if (!line) return null
     return {
       type: line.type,
       row: line.row,
@@ -239,7 +267,7 @@ export function detectWin({
   }
 
   const selected = lines.slice(0, needed)
-  const indexSet = new Set()
+  const indexSet = new Set<number>()
   selected.forEach((line) => line.indices.forEach((i) => indexSet.add(i)))
   const indices = [...indexSet].sort((a, b) => a - b)
   return {

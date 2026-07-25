@@ -1,6 +1,7 @@
 name: PR lint
 
-# ESLint on PRs into develop. Local: npm run lint
+# ESLint + TypeScript check on PRs into develop.
+# Local: npm run lint && npm run typecheck
 
 on:
   pull_request:
@@ -33,3 +34,6 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck

@@ -1,16 +1,27 @@
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+
+type RealtimeHandlers = {
+  onParticipantsChange?: (
+    payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+  ) => void
+  onClaimsChange?: (
+    payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+  ) => void
+  onGameChange?: (
+    row: Record<string, unknown>,
+    payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+  ) => void
+}
 
 /**
  * Subscribe to multiplayer changes for a single game (host / play screens).
- * @param {string} gameId - Game UUID
- * @param {{
- *   onParticipantsChange?: (payload: object) => void,
- *   onClaimsChange?: (payload: object) => void,
- *   onGameChange?: (row: object, payload: object) => void,
- * }} handlers
- * @returns {() => void} unsubscribe
+ * @returns unsubscribe
  */
-export function subscribeGame(gameId, handlers = {}) {
+export function subscribeGame(
+  gameId: string,
+  handlers: RealtimeHandlers = {},
+): () => void {
   if (!gameId) return () => {}
 
   const { onParticipantsChange, onClaimsChange, onGameChange } = handlers
@@ -25,7 +36,7 @@ export function subscribeGame(gameId, handlers = {}) {
         table: 'game_participants',
         filter: `game_id=eq.${gameId}`,
       },
-      (payload) => onParticipantsChange(payload)
+      (payload) => onParticipantsChange(payload),
     )
     channel.on(
       'postgres_changes',
@@ -35,7 +46,7 @@ export function subscribeGame(gameId, handlers = {}) {
         table: 'game_participants',
         filter: `game_id=eq.${gameId}`,
       },
-      (payload) => onParticipantsChange(payload)
+      (payload) => onParticipantsChange(payload),
     )
   }
 
@@ -48,7 +59,7 @@ export function subscribeGame(gameId, handlers = {}) {
         table: 'win_claims',
         filter: `game_id=eq.${gameId}`,
       },
-      (payload) => onClaimsChange(payload)
+      (payload) => onClaimsChange(payload),
     )
     channel.on(
       'postgres_changes',
@@ -58,7 +69,7 @@ export function subscribeGame(gameId, handlers = {}) {
         table: 'win_claims',
         filter: `game_id=eq.${gameId}`,
       },
-      (payload) => onClaimsChange(payload)
+      (payload) => onClaimsChange(payload),
     )
   }
 
@@ -71,7 +82,11 @@ export function subscribeGame(gameId, handlers = {}) {
         table: 'games',
         filter: `id=eq.${gameId}`,
       },
-      (payload) => onGameChange(payload.new, payload)
+      (payload) =>
+        onGameChange(
+          (payload.new ?? {}) as Record<string, unknown>,
+          payload,
+        ),
     )
   }
 
@@ -86,13 +101,20 @@ export function subscribeGame(gameId, handlers = {}) {
   }
 }
 
+type DashboardHandlers = {
+  onChange?: (
+    payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+  ) => void
+}
+
 /**
  * Subscribe to win_claims visible to the current user (dashboard badges).
- * @param {string} userId
- * @param {{ onChange?: (payload: object) => void }} handlers
- * @returns {() => void} unsubscribe
+ * @returns unsubscribe
  */
-export function subscribeDashboard(userId, handlers = {}) {
+export function subscribeDashboard(
+  userId: string,
+  handlers: DashboardHandlers = {},
+): () => void {
   if (!userId) return () => {}
 
   const { onChange } = handlers
@@ -106,7 +128,7 @@ export function subscribeDashboard(userId, handlers = {}) {
         schema: 'public',
         table: 'win_claims',
       },
-      (payload) => onChange(payload)
+      (payload) => onChange(payload),
     )
     channel.on(
       'postgres_changes',
@@ -115,7 +137,7 @@ export function subscribeDashboard(userId, handlers = {}) {
         schema: 'public',
         table: 'win_claims',
       },
-      (payload) => onChange(payload)
+      (payload) => onChange(payload),
     )
   }
 
