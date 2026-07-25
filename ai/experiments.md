@@ -14,6 +14,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 | 2026-07 | Named theme presets (Party / Sunset / Ocean / Ink) | Implemented (`theme.js` + CSS blocks + Setup/Home/Dashboard swatches) | Yes | User pref in `localStorage` (`mingo.theme`); per-game `config.theme`; no mid-game retune |
 | 2026-07 | AI generation tones + extra instructions | Implemented (Setup select + textarea; server-composed Gemini prompt) | Yes | Tones: family/funny/wholesome/office/adult; max 200-char instructions; no raw system-prompt editing |
 | 2026-07 | Custom entry codes (vanity + weekly reuse) | Implemented (`games.id` UUID PK; partial unique active `code`) | Yes | Custom 4–12 A–Z0–9; random stays 5; reuse after end; anyone may reclaim |
+| 2026-07 | Split `App.jsx` into domain hooks | Implemented (`useTheme`, `useGameSetup`, `useDashboardGames`, `useJoinFlow`, `useAuth`, `useActiveGame`) | Yes | App is composition root (~590 lines); board+wins kept together in `useActiveGame` |
 
 ## How to add an entry
 
@@ -23,7 +24,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 
 ## Ideas backlog (not commitments)
 
-- Further split `App.jsx` handlers into domain hooks (`useAuth`, `useBoard`, `useWinClaims`) — screens/chrome already extracted
+- Sub-split `useActiveGame` into `useBoard` / `useWinClaims` if it grows again
 - Stricter TypeScript migration
 - OR-combinable custom win patterns (“any of selected”)
 - Join approval for games (`join_policy` + pending participant + host accept/reject UI)

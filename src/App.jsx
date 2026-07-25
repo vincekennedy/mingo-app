@@ -1,28 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
-import confetti from 'canvas-confetti';
-import { authService, resolveDisplayName } from './services/auth';
-import { gameService } from './services/game';
-import { boardService } from './services/board';
-import { winClaimsService } from './services/winClaims';
-import { storageService } from './services/storage';
-import { generateItemsFromTitle } from './services/generateItems';
-import { supabase } from './lib/supabase';
-import { subscribeGame, subscribeDashboard } from './lib/realtime';
-import { detectWin, normalizeWinConfig } from './lib/winDetection';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import {
   DEFAULT_THEME,
   activeShellTheme,
-  getStoredTheme,
-  resolveTheme,
-  setStoredTheme,
 } from './lib/theme';
-import {
-  DEFAULT_GENERATION_TONE,
-  resolveGenerationTone,
-  sanitizeGenerationInstructions,
-} from './lib/generationTone';
+import { isValidGameCode, normalizeGameCode } from './lib/joinLink';
 import { useReportModal } from './hooks/useReportModal';
 import { useToast } from './hooks/useToast';
+import { useTheme } from './hooks/useTheme';
+import { useDashboardGames } from './hooks/useDashboardGames';
+import { useGameSetup } from './hooks/useGameSetup';
+import {
+  initialPrintJoin,
+  initialJoinCode,
+  useJoinFlow,
+} from './hooks/useJoinFlow';
+import { useAuth } from './hooks/useAuth';
+import { useActiveGame } from './hooks/useActiveGame';
 import AuthLoadingOverlay from './components/chrome/AuthLoadingOverlay';
 import GeneratingItemsOverlay from './components/chrome/GeneratingItemsOverlay';
 import UserProfileBanner from './components/chrome/UserProfileBanner';
@@ -42,78 +35,228 @@ import SetupScreen from './screens/SetupScreen';
 import HostScreen from './screens/HostScreen';
 import PlayScreen from './screens/PlayScreen';
 import PrintJoinFlyerScreen from './screens/PrintJoinFlyerScreen';
-import {
-  buildJoinUrl,
-  clearJoinPathFromUrl,
-  clearPendingJoinCode,
-  generateRandomGameCode,
-  isValidGameCode,
-  normalizeGameCode,
-  parseJoinCodeFromLocation,
-  resolveInitialJoinCode,
-  writePendingJoinCode,
-} from './lib/joinLink';
-import { openPrintableJoinFlyer, resolveInitialPrintJoin } from './lib/printJoinFlyer';
-
-const initialJoinCode = resolveInitialJoinCode();
-const initialPrintJoin = resolveInitialPrintJoin();
 
 export default function Mingo() {
-  const [screen, setScreen] = useState(initialPrintJoin ? 'print-join' : 'home'); // home, login, register, forgot-password, forgot-password-sent, reset-password, email-confirmation, dashboard, setup, host, play, print-join
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userGames, setUserGames] = useState([]);
-  const [items, setItems] = useState(Array(24).fill({ text: '', imageUrl: null }));
-  const [boardSize, setBoardSize] = useState(5);
-  const [board, setBoard] = useState([]);
-  const [marked, setMarked] = useState(new Set());
-  const [hasWon, setHasWon] = useState(false);
-  const [useFreeSpace, setUseFreeSpace] = useState(true);
-  const [winMode, setWinMode] = useState('standard');
-  const [linesToWin, setLinesToWin] = useState(1);
-  const [gameVisibility, setGameVisibility] = useState('private');
-  const [userTheme, setUserTheme] = useState(() => getStoredTheme());
-  const [gameTheme, setGameTheme] = useState(() => getStoredTheme());
-  const [gameCode, setGameCode] = useState('');
-  const [gameId, setGameId] = useState(null);
-  const [customEntryCode, setCustomEntryCode] = useState('');
-  const [joinCode, setJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
-  const [pendingJoinCode, setPendingJoinCode] = useState(initialPrintJoin ? '' : initialJoinCode);
-  const [printFlyer] = useState(initialPrintJoin);
-  const [copied, setCopied] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [gameConfig, setGameConfig] = useState(null);
-  const [gameTitle, setGameTitle] = useState('');
-  const [generationTone, setGenerationTone] = useState(DEFAULT_GENERATION_TONE);
-  const [generationInstructions, setGenerationInstructions] = useState('');
-  const [generatingItems, setGeneratingItems] = useState(false);
-  const [generateStatusIndex, setGenerateStatusIndex] = useState(0);
-  const [registering, setRegistering] = useState(false);
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [guestDisplayName, setGuestDisplayName] = useState('');
-  const [guestJoinError, setGuestJoinError] = useState(null);
-  const [guestJoining, setGuestJoining] = useState(false);
-  const [isHost, setIsHost] = useState(false);
-  const [pendingWinClaim, setPendingWinClaim] = useState(null);
-  const [winConfirmed, setWinConfirmed] = useState(false);
-  const [winRejected, setWinRejected] = useState(false);
-  const [selectedIncorrectItems, setSelectedIncorrectItems] = useState(new Set());
-  const [showEndGameDialog, setShowEndGameDialog] = useState(false);
-  const [gamePlayers, setGamePlayers] = useState([]);
-  const [confirmedWinners, setConfirmedWinners] = useState([]);
-  const confettiIntervalRef = useRef(null);
-  const pendingWinClaimRef = useRef(null);
-  const winConfirmedRef = useRef(false);
-  const winRejectedRef = useRef(false);
-  const passwordRecoveryRef = useRef(false);
-  const gamesLoadIdRef = useRef(0);
-  const authReadyRef = useRef(false);
+  const [screen, setScreen] = useState(initialPrintJoin ? 'print-join' : 'home');
+
   const pendingJoinCodeRef = useRef(initialPrintJoin ? '' : initialJoinCode);
   const printFlyerRef = useRef(Boolean(initialPrintJoin));
   const joinInFlightRef = useRef(false);
-  const [authReady, setAuthReady] = useState(false);
-  const [gamesLoading, setGamesLoading] = useState(false);
+  const passwordRecoveryRef = useRef(false);
+
+  const loadUserGamesRef = useRef(async () => {});
+  const clearUserGamesRef = useRef(() => {});
+  const resumePendingJoinRef = useRef(async () => false);
+  const joinAsUserRef = useRef(async () => {});
+  const resetSessionRef = useRef(() => {});
+  const clearActiveGameRef = useRef(() => {});
+  const saveBoardStateRef = useRef(async () => {});
+  const resetDraftRef = useRef(() => {});
+  const resetJoinCodesRef = useRef(() => {});
+  const resetGameThemeToUserRef = useRef(() => {});
+  const clearPendingJoinRef = useRef(() => {});
+  const closeJoinModalRef = useRef(() => {});
+
+  const { showToast, ToastHost } = useToast();
+  const {
+    userTheme,
+    gameTheme,
+    updateUserTheme,
+    updateGameTheme,
+    applyThemeFromConfig,
+    resetGameThemeToUser,
+  } = useTheme();
+
+  const {
+    currentUser,
+    setCurrentUser,
+    authReady,
+    registering,
+    loggingIn,
+    authError,
+    setAuthError,
+    registerUser,
+    loginUser,
+    completePasswordReset,
+    cancelPasswordRecovery,
+    logoutUser,
+  } = useAuth({
+    setScreen,
+    loadUserGames: (...args) => loadUserGamesRef.current(...args),
+    clearUserGames: () => clearUserGamesRef.current(),
+    resumePendingJoin: (...args) => resumePendingJoinRef.current(...args),
+    pendingJoinCodeRef,
+    printFlyerRef,
+    passwordRecoveryRef,
+    resetSession: () => resetSessionRef.current(),
+  });
+
+  const { userGames, gamesLoading, loadUserGames, clearUserGames } = useDashboardGames({
+    currentUser,
+    screen,
+    authReady,
+  });
+
+  const {
+    boardSize,
+    board,
+    marked,
+    hasWon,
+    gameVisibility,
+    gameCode,
+    gameId,
+    copied,
+    linkCopied,
+    gameConfig,
+    isHost,
+    pendingWinClaim,
+    winConfirmed,
+    winRejected,
+    selectedIncorrectItems,
+    showEndGameDialog,
+    gamePlayers,
+    confirmedWinners,
+    saveBoardState,
+    selectGame,
+    joinGameAsUser,
+    generateBoardFromConfig,
+    copyCode,
+    copyJoinLink,
+    openPrintableQr,
+    confirmWin,
+    handleEndGameAfterWin,
+    handleContinueAfterWin,
+    rejectWin,
+    toggleIncorrectItem,
+    toggleCell,
+    endGame,
+    clearActiveGame,
+    onGameCreated,
+  } = useActiveGame({
+    currentUser,
+    screen,
+    setScreen,
+    showToast,
+    loadUserGames,
+    applyThemeFromConfig,
+    joinInFlightRef,
+    clearPendingJoin: () => clearPendingJoinRef.current(),
+    closeJoinModal: () => closeJoinModalRef.current(),
+  });
+
+  const {
+    joinCode,
+    setJoinCode,
+    pendingJoinCode,
+    printFlyer,
+    showJoinModal,
+    guestDisplayName,
+    setGuestDisplayName,
+    guestJoinError,
+    guestJoining,
+    clearPendingJoin,
+    openJoinModalForCode,
+    closeJoinModal,
+    cancelJoinIntent,
+    goToLoginForJoin,
+    goToRegisterForJoin,
+    joinGame,
+    submitGuestJoin,
+    resumePendingJoin,
+    resetJoinCodes,
+  } = useJoinFlow({
+    authReady,
+    currentUser,
+    screen,
+    passwordRecoveryRef,
+    pendingJoinCodeRef,
+    printFlyerRef,
+    joinInFlightRef,
+    showToast,
+    setScreen,
+    setAuthError,
+    onGuestSignedIn: setCurrentUser,
+    joinAsUser: (...args) => joinAsUserRef.current(...args),
+  });
+
+  const {
+    items,
+    boardSize: setupBoardSize,
+    useFreeSpace,
+    winMode,
+    linesToWin,
+    gameVisibility: setupVisibility,
+    gameTitle,
+    setGameTitle,
+    generationTone,
+    generationInstructions,
+    customEntryCode,
+    generatingItems,
+    generateStatusIndex,
+    neededItemCount,
+    generateLoadingMessages,
+    addItem,
+    removeItem,
+    updateItem,
+    updateItemImage,
+    removeItemImage,
+    updateBoardSize,
+    updateFreeSpace,
+    updateWinMode,
+    updateLinesToWin,
+    updateGameVisibility,
+    updateGenerationTone,
+    updateGenerationInstructions,
+    updateCustomEntryCode,
+    startNewSetup,
+    duplicateSetupFromGame,
+    generateItemsFromGameTitle,
+    createGame,
+    resetDraft,
+  } = useGameSetup({
+    currentUser,
+    gameTheme,
+    showToast,
+    applyThemeFromConfig,
+    resetGameThemeToUser,
+    onNavigateSetup: () => setScreen('setup'),
+    onCreated: onGameCreated,
+    loadUserGames,
+  });
+
+  const resetToHome = () => {
+    if (currentUser && gameId && board.length > 0) {
+      saveBoardStateRef.current(gameId);
+    }
+
+    if (currentUser) {
+      setScreen('dashboard');
+      loadUserGames(currentUser.id);
+    } else {
+      setScreen('home');
+    }
+
+    resetDraftRef.current();
+    clearActiveGameRef.current();
+    resetJoinCodesRef.current();
+    resetGameThemeToUserRef.current();
+  };
+
+  // Bind cross-hook seams before passive effects (auth bootstrap) run.
+  useLayoutEffect(() => {
+    resetGameThemeToUserRef.current = resetGameThemeToUser;
+    loadUserGamesRef.current = loadUserGames;
+    clearUserGamesRef.current = clearUserGames;
+    saveBoardStateRef.current = saveBoardState;
+    clearActiveGameRef.current = clearActiveGame;
+    joinAsUserRef.current = joinGameAsUser;
+    clearPendingJoinRef.current = clearPendingJoin;
+    closeJoinModalRef.current = closeJoinModal;
+    resumePendingJoinRef.current = resumePendingJoin;
+    resetJoinCodesRef.current = resetJoinCodes;
+    resetDraftRef.current = resetDraft;
+    resetSessionRef.current = resetToHome;
+  });
 
   const {
     showReportModal,
@@ -132,1635 +275,6 @@ export default function Mingo() {
     closeReportModal,
     handleSubmitReport,
   } = useReportModal({ currentUser, screen, gameCode });
-  const { showToast, ToastHost } = useToast();
-
-  const loadUserGames = async (userId, { showLoading = false } = {}) => {
-    if (!userId) {
-      setUserGames([]);
-      if (showLoading) setGamesLoading(false);
-      return;
-    }
-
-    const loadId = ++gamesLoadIdRef.current;
-    if (showLoading) setGamesLoading(true);
-    try {
-      // Get games from Supabase
-      const games = await gameService.getUserGames(userId);
-      
-      // Check for pending wins (only for host games)
-      const hostGameIds = games.filter(g => g.isHost).map(g => g.gameId);
-      const pendingWinsMap = hostGameIds.length > 0
-        ? await winClaimsService.checkPendingWinsForGames(hostGameIds)
-        : {};
-
-      // Load board state for each game
-      const gamesWithState = await Promise.all(
-        games.map(async (game) => {
-          const boardState = await boardService.loadBoardState(game.gameId, userId);
-          return {
-            ...game,
-            boardState: boardState ? {
-              board: boardState.board,
-              marked: boardState.marked,
-              hasWon: boardState.hasWon,
-            } : null,
-            pendingWin: pendingWinsMap[game.gameId] || false,
-          };
-        })
-      );
-
-      if (loadId !== gamesLoadIdRef.current) return;
-      setUserGames(gamesWithState);
-    } catch (error) {
-      console.error('Error loading user games:', error);
-      if (loadId !== gamesLoadIdRef.current) return;
-      setUserGames([]);
-    } finally {
-      if (loadId === gamesLoadIdRef.current) {
-        setGamesLoading(false);
-      }
-    }
-  };
-
-  const setPendingJoin = (code) => {
-    const normalized = normalizeGameCode(code);
-    if (!isValidGameCode(normalized)) return '';
-    pendingJoinCodeRef.current = normalized;
-    setPendingJoinCode(normalized);
-    setJoinCode(normalized);
-    writePendingJoinCode(normalized);
-    return normalized;
-  };
-
-  const clearPendingJoin = () => {
-    pendingJoinCodeRef.current = '';
-    setPendingJoinCode('');
-    clearPendingJoinCode();
-  };
-
-  const openJoinModalForCode = (code) => {
-    const normalized = setPendingJoin(code);
-    if (!normalized) return;
-    setGuestJoinError(null);
-    setGuestDisplayName('');
-    setShowJoinModal(true);
-  };
-
-  // Authentication and user management - check on mount
-  useEffect(() => {
-    let cancelled = false;
-    let hydratePromise = null;
-
-    try {
-      const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
-      if (hash && new URLSearchParams(hash).get('type') === 'recovery') {
-        passwordRecoveryRef.current = true;
-      }
-    } catch {
-      /* ignore malformed hash */
-    }
-
-    // Capture /join/:code (or ?join=) before auth redirects to dashboard.
-    // State is already seeded via resolveInitialJoinCode(); keep ref + session in sync.
-    try {
-      const fromUrl = parseJoinCodeFromLocation(window.location);
-      if (fromUrl) {
-        pendingJoinCodeRef.current = fromUrl;
-        writePendingJoinCode(fromUrl);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    const markAuthReady = () => {
-      if (cancelled) return;
-      authReadyRef.current = true;
-      setAuthReady(true);
-    };
-
-    /** Full bootstrap: set user and wait for games before revealing UI */
-    const hydrateLoggedInSession = (user) => {
-      if (authReadyRef.current || cancelled) return Promise.resolve();
-      if (hydratePromise) return hydratePromise;
-
-      hydratePromise = (async () => {
-        try {
-          const profile = await authService.ensureUserProfile(user);
-          if (cancelled) return;
-          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
-          setCurrentUser({
-            id: user.id,
-            email: user.email,
-            username,
-            isGuest: Boolean(user.is_anonymous),
-          });
-          // Deep-link join: stay off dashboard until the pending-join effect runs.
-          // Printable flyer tab: stay on print-join (do not yank to dashboard).
-          if (printFlyerRef.current) {
-            setScreen('print-join');
-          } else if (!pendingJoinCodeRef.current) {
-            setScreen('dashboard');
-          }
-          await loadUserGames(user.id, { showLoading: !printFlyerRef.current });
-        } finally {
-          markAuthReady();
-        }
-      })();
-
-      return hydratePromise;
-    };
-
-    // Check if user is logged in on mount
-    const checkAuth = async () => {
-      try {
-        const user = await authService.getCurrentUser();
-        if (cancelled) return;
-        if (user && passwordRecoveryRef.current) {
-          const profile = await authService.ensureUserProfile(user);
-          if (cancelled) return;
-          const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
-          setCurrentUser({
-            id: user.id,
-            email: user.email,
-            username,
-          });
-          setScreen('reset-password');
-          markAuthReady();
-          return;
-        }
-        if (user && !passwordRecoveryRef.current) {
-          await hydrateLoggedInSession(user);
-        } else {
-          markAuthReady();
-        }
-      } catch (error) {
-        console.error('Error checking auth:', error);
-        markAuthReady();
-      }
-    };
-    
-    // Listen for auth state changes (e.g., token refresh, logout from another tab)
-    const { data: { subscription } } = authService.onAuthStateChange(async (user, event) => {
-      if (cancelled) return;
-      if (event === 'PASSWORD_RECOVERY' && user) {
-        passwordRecoveryRef.current = true;
-        const profile = await authService.getUserProfile(user.id);
-        if (cancelled) return;
-        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
-        setCurrentUser({
-          id: user.id,
-          email: user.email,
-          username,
-        });
-        setScreen('reset-password');
-        markAuthReady();
-        return;
-      }
-      if (event === 'SIGNED_OUT' || !user) {
-        passwordRecoveryRef.current = false;
-        hydratePromise = null;
-        setCurrentUser(null);
-        setUserGames([]);
-        setScreen((prev) =>
-          prev === 'dashboard' || prev === 'host' || prev === 'play' ? 'home' : prev
-        );
-        markAuthReady();
-        return;
-      }
-
-      // Cold start: keep overlay until games are loaded
-      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && !authReadyRef.current) {
-        if (passwordRecoveryRef.current) return;
-        await hydrateLoggedInSession(user);
-        return;
-      }
-
-      // After bootstrap: quiet updates only (no overlay flash)
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (passwordRecoveryRef.current) return;
-        const profile = await authService.ensureUserProfile(user);
-        if (cancelled) return;
-        const username = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
-        setCurrentUser({
-          id: user.id,
-          email: user.email,
-          username,
-          isGuest: Boolean(user.is_anonymous),
-        });
-        // Don't yank users to the dashboard while a join deep-link / login-to-join is pending,
-        // while viewing a printable flyer, or while they are already in host/play.
-        if (!pendingJoinCodeRef.current && !printFlyerRef.current) {
-          setScreen((prev) =>
-            prev === 'home' || prev === 'login' || prev === 'register' ? 'dashboard' : prev
-          );
-        }
-        void loadUserGames(user.id, { showLoading: false });
-      }
-    });
-
-    queueMicrotask(() => {
-      checkAuth();
-    });
-    
-    return () => {
-      cancelled = true;
-      hydratePromise = null;
-      subscription.unsubscribe();
-    };
-  }, []); // Only run on mount
-
-  const generateCode = () => generateRandomGameCode();
-
-  // Authentication functions (Supabase)
-  const registerUser = async (username, email, password) => {
-    setAuthError(null);
-    setRegistering(true);
-    try {
-      // Create user in Supabase auth
-      const user = await authService.signUp(username, email, password);
-      
-      // Check if email confirmation is required (no session means confirmation needed)
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        // Email confirmation is required
-        // Supabase automatically sends confirmation email
-        // Store the email for the confirmation screen
-        setCurrentUser({
-          id: user.id,
-          email: user.email,
-          username: username,
-        });
-        setScreen('email-confirmation');
-        return true;
-      }
-      
-      // User is already confirmed (email confirmation disabled or auto-confirmed)
-      // Get user profile with username
-      let profile = null;
-      try {
-        profile = await authService.getUserProfile(user.id);
-      } catch (profileError) {
-        console.warn('Could not read profile immediately after signup:', profileError.message);
-        console.warn('This is normal if RLS is blocking reads');
-        console.warn('User account was created successfully - profile will be accessible');
-      }
-      
-      // Set current user state
-      const userUsername = resolveDisplayName(profile, username);
-      setCurrentUser({
-        id: user.id,
-        email: user.email,
-        username: userUsername,
-      });
-      
-      // Load user games
-      try {
-        await loadUserGames(user.id);
-      } catch (gamesError) {
-        console.warn('Could not load games immediately after signup:', gamesError.message);
-      }
-
-      const pending = pendingJoinCodeRef.current;
-      if (pending && isValidGameCode(pending)) {
-        setShowJoinModal(false);
-        await joinGameAsUser(
-          { id: user.id, email: user.email, username: userUsername },
-          pending
-        );
-        return true;
-      }
-      
-      setScreen('dashboard');
-      return true;
-    } catch (error) {
-      console.error('Registration error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
-      
-      // Provide user-friendly error messages
-      if (error.message?.includes('already registered') || error.message?.includes('already exists')) {
-        throw new Error('Email already registered. Please use a different email or login.');
-      } else if (error.message?.includes('username') && error.message?.includes('unique')) {
-        throw new Error('Username already taken. Please choose a different username.');
-      } else if (error.message?.includes('password') && error.message?.includes('length')) {
-        throw new Error('Password must be at least 6 characters.');
-      } else if (error.message?.includes('Invalid email') || (error.message?.includes('email') && error.message?.includes('format'))) {
-        throw new Error('Invalid email address format.');
-      } else if (error.message?.includes('row-level security') || error.message?.includes('RLS')) {
-        // Don't change RLS errors - they have specific instructions
-        throw error;
-      } else if (error.message?.includes('timeout') || error.message?.includes('timed out')) {
-        throw new Error('Registration timed out. Your account may have been created. Please try logging in.');
-      }
-      // Pass through the original error message for more specific errors
-      throw error;
-    } finally {
-      setRegistering(false);
-    }
-  };
-
-  const loginUser = async (email, password) => {
-    setAuthError(null);
-    setLoggingIn(true);
-    try {
-      // Sign in with Supabase
-      const user = await authService.signIn(email, password);
-      
-      // Get user profile with username (create row if trigger never ran)
-      const profile = await authService.ensureUserProfile(user);
-      
-      // Set current user state
-      const userUsername = resolveDisplayName(profile, email.split('@')[0]);
-      setCurrentUser({
-        id: user.id,
-        email: user.email,
-        username: userUsername,
-      });
-      
-      // Load user games
-      await loadUserGames(user.id);
-
-      const pending = pendingJoinCodeRef.current;
-      if (pending && isValidGameCode(pending)) {
-        setShowJoinModal(false);
-        await joinGameAsUser(
-          { id: user.id, email: user.email, username: userUsername },
-          pending
-        );
-        return true;
-      }
-
-      setScreen('dashboard');
-      return true;
-    } catch (error) {
-      console.error('Login error:', error);
-      // Provide user-friendly error messages
-      if (error.message?.includes('Invalid login credentials')) {
-        throw new Error('Invalid email or password. Please try again.');
-      } else if (error.message?.includes('Email not confirmed')) {
-        throw new Error('Please check your email to confirm your account.');
-      }
-      throw new Error(error.message || 'Login failed. Please try again.');
-    } finally {
-      setLoggingIn(false);
-    }
-  };
-
-  const completePasswordReset = async (newPassword) => {
-    await authService.updatePassword(newPassword);
-    passwordRecoveryRef.current = false;
-    const user = await authService.getCurrentUser();
-    if (!user) {
-      throw new Error('Could not restore your session. Please log in again.');
-    }
-    const profile = await authService.getUserProfile(user.id);
-    const userUsername = resolveDisplayName(profile, user.email?.split('@')[0] || 'User');
-    setCurrentUser({
-      id: user.id,
-      email: user.email,
-      username: userUsername,
-    });
-    await loadUserGames(user.id);
-    setScreen('dashboard');
-  };
-
-  const cancelPasswordRecovery = async () => {
-    passwordRecoveryRef.current = false;
-    try {
-      await authService.signOut();
-    } catch (e) {
-      console.error('Sign out after cancel recovery:', e);
-    }
-    setCurrentUser(null);
-    setScreen('login');
-  };
-
-  const logoutUser = async () => {
-    try {
-      // Sign out from Supabase
-      await authService.signOut();
-      
-      // Clear local state
-      setCurrentUser(null);
-      setUserGames([]);
-      resetToHome();
-      setScreen('home');
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Even if logout fails, clear local state
-      setCurrentUser(null);
-      setUserGames([]);
-      resetToHome();
-      setScreen('home');
-    }
-  };
-
-  const endGame = async (gameIdToEnd) => {
-    if (!currentUser || !gameIdToEnd) return;
-
-    try {
-      const updatedGame = await gameService.endGame(gameIdToEnd, currentUser.id);
-
-      console.log('Game ended successfully:', updatedGame);
-
-      await loadUserGames(currentUser.id);
-
-      if (gameId === gameIdToEnd && (screen === 'host' || screen === 'play')) {
-        setGameCode('');
-        setGameId(null);
-        setBoard([]);
-        setMarked(new Set());
-        setGameConfig(null);
-        setScreen('dashboard');
-      }
-    } catch (error) {
-      console.error('Error ending game:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details
-      });
-      showToast(error.message || 'Error ending game. Please try again.');
-    }
-  };
-
-  // addGameToUser is no longer needed - handled by gameService.joinGame
-
-  const saveBoardState = async (gameIdToSave) => {
-    if (!currentUser) return;
-    const idToSave = gameIdToSave || gameId;
-    if (!idToSave || !board || board.length === 0) return;
-
-    try {
-      await boardService.saveBoardState(idToSave, currentUser.id, {
-        board,
-        marked,
-        hasWon,
-        pendingWinClaim,
-        winConfirmed,
-        winRejected,
-      });
-    } catch (error) {
-      console.error('Error saving board state:', error);
-    }
-  };
-
-  // Auto-save board state when marked changes or win state changes.
-  // board.length / saveBoardState intentionally omitted from deps: length is gated in
-  // the body; saveBoardState is recreated each render and would thrash the debounce.
-  useEffect(() => {
-    if (currentUser && gameId && board.length > 0 && (screen === 'play' || screen === 'host')) {
-      const timeoutId = setTimeout(() => {
-        saveBoardState(gameId);
-      }, 500); // Debounce saves
-      return () => clearTimeout(timeoutId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
-  }, [marked, hasWon, pendingWinClaim, winConfirmed, winRejected, currentUser, gameId, screen]);
-
-  const loadBoardState = async (gameCodeToLoad) => {
-    if (!currentUser) return false;
-
-    try {
-      // Get game from Supabase (active by code)
-      const game = await gameService.getGame(gameCodeToLoad);
-      if (!game) return false;
-
-      const config = game.config;
-      setGameConfig(config);
-      setGameCode(game.code);
-      setGameId(game.id);
-      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
-      setBoardSize(config.boardSize || 5);
-      setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
-      applyThemeFromConfig(config);
-      {
-        const rules = normalizeWinConfig(config);
-        setWinMode(rules.winMode);
-        setLinesToWin(rules.linesToWin);
-      }
-
-      // Check if user is host
-      setIsHost(game.host_id === currentUser.id);
-
-      // Get board state from Supabase
-      const boardState = await boardService.loadBoardState(game.id, currentUser.id);
-      if (boardState && boardState.board && boardState.board.length > 0) {
-        setBoard(boardState.board);
-        setMarked(boardState.marked);
-        setHasWon(boardState.hasWon || false);
-
-        // Get win claim status
-        const claimStatus = await winClaimsService.getUserClaimStatus(game.id, currentUser.id);
-        if (claimStatus) {
-          setPendingWinClaim(claimStatus.status === 'pending' ? {
-            type: claimStatus.type,
-            indices: claimStatus.indices,
-            items: claimStatus.items,
-            claimId: claimStatus.id,
-            timestamp: claimStatus.timestamp,
-          } : null);
-          setWinConfirmed(claimStatus.status === 'confirmed');
-          setWinRejected(claimStatus.status === 'rejected');
-        } else {
-          setPendingWinClaim(null);
-          setWinConfirmed(false);
-          setWinRejected(false);
-        }
-        
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Error loading board state:', error);
-      return false;
-    }
-  };
-
-  // Fetch players and winners for a game
-  const fetchGamePlayers = async (gameIdToFetch) => {
-    if (!gameIdToFetch) return;
-
-    try {
-      const [players, winners] = await Promise.all([
-        gameService.getGameParticipants(gameIdToFetch),
-        winClaimsService.getConfirmedWinners(gameIdToFetch),
-      ]);
-
-      setGamePlayers(players);
-      setConfirmedWinners(winners);
-    } catch (error) {
-      console.error('Error fetching game players:', error);
-    }
-  };
-
-  const selectGame = async (game) => {
-    // Save current game state if switching games
-    if (gameId && gameId !== game.gameId && currentUser && board.length > 0) {
-      await saveBoardState(gameId);
-    }
-
-    const loaded = await loadBoardState(game.gameCode);
-    if (!loaded) {
-      // If no saved state, set up game config
-      setIsHost(game.isHost);
-      setGameConfig(game.config);
-      setGameCode(game.gameCode);
-      setGameId(game.gameId);
-      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
-      setGameTitle(game.config?.title || '');
-      setBoardSize(game.config.boardSize || 5);
-      setUseFreeSpace(game.config.useFreeSpace !== undefined ? game.config.useFreeSpace : true);
-      applyThemeFromConfig(game.config);
-      {
-        const rules = normalizeWinConfig(game.config);
-        setWinMode(rules.winMode);
-        setLinesToWin(rules.linesToWin);
-      }
-      if (!game.isHost) {
-        // Player: generate board immediately
-        await generateBoardFromConfig(game.config, game.gameId);
-      } else {
-        // Host: show "Game Created!" screen (host screen) - they can click "Start Playing" to generate board
-        setBoard([]);
-        setMarked(new Set());
-        setScreen('host');
-      }
-    } else {
-      // Board state was loaded - show play screen (host or player)
-      setScreen('play');
-    }
-  };
-
-  const addItem = () => {
-    setItems([...items, { text: '', imageUrl: null }]);
-  };
-
-  const removeItem = async (index) => {
-    // If item has an image, delete it from storage
-    const item = items[index];
-    if (item && typeof item === 'object' && item.imageUrl) {
-      try {
-        await storageService.deleteImage(item.imageUrl);
-      } catch (error) {
-        console.error('Error deleting image:', error);
-        // Continue with removal even if delete fails
-      }
-    }
-    setItems(items.filter((_, i) => i !== index));
-  };
-
-  const updateItem = (index, value) => {
-    const newItems = [...items];
-    const currentItem = newItems[index];
-    if (typeof currentItem === 'string') {
-      newItems[index] = { text: value, imageUrl: null };
-    } else {
-      newItems[index] = { ...currentItem, text: value };
-    }
-    setItems(newItems);
-  };
-
-  const updateItemImage = async (index, file) => {
-    if (!file || !currentUser) {
-      showToast('Please log in to upload images.');
-      return;
-    }
-
-    try {
-      // Delete old image if exists
-      const currentItem = items[index];
-      if (currentItem && typeof currentItem === 'object' && currentItem.imageUrl) {
-        try {
-          await storageService.deleteImage(currentItem.imageUrl);
-        } catch (error) {
-          console.error('Error deleting old image:', error);
-        }
-      }
-
-      // Use gameId if available, otherwise use temp identifier
-      const storageKey = gameId || `temp-${Date.now()}`;
-
-      // Upload new image
-      const imageUrl = await storageService.uploadImage(file, storageKey, currentUser.id);
-      
-      const newItems = [...items];
-      const itemToUpdate = typeof newItems[index] === 'string' 
-        ? { text: '', imageUrl: null }
-        : { ...newItems[index] };
-      newItems[index] = { ...itemToUpdate, imageUrl, text: itemToUpdate.text || '' };
-      setItems(newItems);
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      showToast(error.message || 'Error uploading image. Please try again.');
-    }
-  };
-
-  const removeItemImage = async (index) => {
-    const currentItem = items[index];
-    if (currentItem && typeof currentItem === 'object' && currentItem.imageUrl) {
-      try {
-        await storageService.deleteImage(currentItem.imageUrl);
-      } catch (error) {
-        console.error('Error deleting image:', error);
-      }
-    }
-    const newItems = [...items];
-    const itemToUpdate = typeof newItems[index] === 'string' 
-      ? { text: newItems[index], imageUrl: null }
-      : { ...newItems[index], imageUrl: null };
-    newItems[index] = itemToUpdate;
-    setItems(newItems);
-  };
-
-  const updateBoardSize = (size) => {
-    setBoardSize(size);
-    const neededItems = useFreeSpace ? size * size - 1 : size * size;
-    // Adjust items array to match needed items
-    if (items.length < neededItems) {
-      setItems([...items, ...Array(neededItems - items.length).fill({ text: '', imageUrl: null })]);
-    }
-  };
-
-  const updateFreeSpace = (hasFreeSpace) => {
-    setUseFreeSpace(hasFreeSpace);
-    const neededItems = hasFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
-    // Adjust items array to match needed items
-    if (items.length < neededItems) {
-      setItems([...items, ...Array(neededItems - items.length).fill({ text: '', imageUrl: null })]);
-    }
-  };
-
-  const updateWinMode = (mode) => {
-    setWinMode(mode);
-    if (mode !== 'standard') setLinesToWin(1);
-  };
-
-  const updateLinesToWin = (n) => {
-    const value = Math.min(3, Math.max(1, Number(n) || 1));
-    setLinesToWin(value);
-  };
-
-  const updateGameVisibility = (value) => {
-    setGameVisibility(value === 'public' ? 'public' : 'private');
-  };
-
-  const updateUserTheme = (value) => {
-    setUserTheme(setStoredTheme(value));
-  };
-
-  const updateGameTheme = (value) => {
-    setGameTheme(resolveTheme(value));
-  };
-
-  const applyThemeFromConfig = (config) => {
-    setGameTheme(resolveTheme(config?.theme));
-  };
-
-  const updateGenerationTone = (value) => {
-    setGenerationTone(resolveGenerationTone(value));
-  };
-
-  const updateGenerationInstructions = (value) => {
-    setGenerationInstructions(sanitizeGenerationInstructions(value));
-  };
-
-  const startNewSetup = () => {
-    setWinMode('standard');
-    setLinesToWin(1);
-    setGameVisibility('private');
-    setGameTheme(resolveTheme(userTheme));
-    setGenerationTone(DEFAULT_GENERATION_TONE);
-    setGenerationInstructions('');
-    setCustomEntryCode('');
-    setScreen('setup');
-  };
-
-  const duplicateSetupFromGame = (game) => {
-    const config = game?.config;
-    if (!config?.items || !Array.isArray(config.items) || config.items.length === 0) {
-      showToast('This game has no item list to reuse.');
-      return;
-    }
-    const size = config.boardSize || 5;
-    const free = config.useFreeSpace !== undefined ? config.useFreeSpace : true;
-    const rules = normalizeWinConfig(config);
-    const normalizedItems = config.items.map((item) =>
-      typeof item === 'string' ? { text: item, imageUrl: null } : { text: item.text || '', imageUrl: item.imageUrl || null }
-    );
-    setGameTitle(config.title || '');
-    setBoardSize(size);
-    setUseFreeSpace(free);
-    setWinMode(rules.winMode);
-    setLinesToWin(rules.linesToWin);
-    setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
-    applyThemeFromConfig(config);
-    setGenerationTone(resolveGenerationTone(config.generationTone));
-    setGenerationInstructions(sanitizeGenerationInstructions(config.generationInstructions));
-    setCustomEntryCode('');
-    setItems(normalizedItems);
-    setScreen('setup');
-  };
-
-  const neededItemCount = useFreeSpace ? boardSize * boardSize - 1 : boardSize * boardSize;
-
-  const generateLoadingMessages = (() => {
-    const theme = gameTitle.trim() || 'your theme';
-    return [
-      `Dreaming up squares for “${theme}”…`,
-      'Shuffling witty bingo prompts…',
-      'Keeping phrases short and punchy…',
-      `Almost ready — packing ${neededItemCount} items…`,
-    ];
-  })();
-
-  useEffect(() => {
-    if (!generatingItems) return undefined;
-    const id = setInterval(() => {
-      setGenerateStatusIndex((i) => (i + 1) % 4);
-    }, 1600);
-    return () => clearInterval(id);
-  }, [generatingItems]);
-
-  const generateItemsFromGameTitle = async () => {
-    const title = gameTitle.trim();
-    if (!title) {
-      showToast('Enter a game title first, then generate items.');
-      return;
-    }
-
-    const filledCount = items.filter((item) => {
-      if (typeof item === 'string') return item.trim() !== '';
-      return (item.text && item.text.trim() !== '') || item.imageUrl;
-    }).length;
-
-    if (filledCount > 0) {
-      const replace = window.confirm(
-        'This will replace your current bingo item texts (images on slots will be cleared). Continue?'
-      );
-      if (!replace) return;
-    }
-
-    setGeneratingItems(true);
-    setGenerateStatusIndex(0);
-    try {
-      const generated = await generateItemsFromTitle(title, neededItemCount, {
-        tone: resolveGenerationTone(generationTone),
-        instructions: sanitizeGenerationInstructions(generationInstructions),
-      });
-      setItems(generated.map((text) => ({ text, imageUrl: null })));
-    } catch (error) {
-      console.error('Generate items error:', error);
-      showToast(error.message || 'Could not generate items. Please try again.');
-    } finally {
-      setGeneratingItems(false);
-    }
-  };
-
-  const createGame = async () => {
-    // Filter items that have either text or image
-    const validItems = items.filter(item => {
-      if (typeof item === 'string') {
-        // Legacy format: just text string
-        return item.trim() !== '';
-      }
-      // New format: object with text and/or imageUrl
-      return (item.text && item.text.trim() !== '') || item.imageUrl;
-    });
-    
-    const totalCells = boardSize * boardSize;
-    const neededItems = useFreeSpace ? totalCells - 1 : totalCells;
-
-    if (validItems.length < neededItems) {
-      showToast(`You need at least ${neededItems} items for a ${boardSize}x${boardSize} board${useFreeSpace ? ' (with free space)' : ''}`);
-      return;
-    }
-
-    const trimmedCustom = normalizeGameCode(customEntryCode);
-    if (trimmedCustom && !isValidGameCode(trimmedCustom)) {
-      showToast('Entry code must be 4–12 letters or numbers.');
-      return;
-    }
-    const code = trimmedCustom || generateCode();
-
-    // Normalize items format (convert strings to objects for backward compatibility)
-    const normalizedItems = validItems.map(item => {
-      if (typeof item === 'string') {
-        return { text: item, imageUrl: null };
-      }
-      return item;
-    });
-
-    const config = {
-      items: normalizedItems,
-      boardSize,
-      useFreeSpace,
-      title: gameTitle.trim() || null,
-      winMode,
-      linesToWin: winMode === 'standard' ? linesToWin : 1,
-      theme: resolveTheme(gameTheme),
-      generationTone: resolveGenerationTone(generationTone),
-      generationInstructions: sanitizeGenerationInstructions(generationInstructions) || null,
-    };
-
-    if (!currentUser) {
-      showToast('Please log in to create a game.');
-      return;
-    }
-
-    setGameCode(code);
-    setGameConfig(config);
-    setGameVisibility(gameVisibility === 'public' ? 'public' : 'private');
-    setIsHost(true);
-
-    // Store in Supabase
-    try {
-      const created = await gameService.createGame(code, currentUser.id, config, {
-        visibility: gameVisibility,
-      });
-      setGameId(created.id);
-      setCustomEntryCode('');
-      console.log(`Game ${code} created and stored successfully`);
-      setScreen('host');
-      try {
-        await loadUserGames(currentUser.id);
-      } catch (loadError) {
-        console.error('Error refreshing games after create:', loadError);
-      }
-    } catch (error) {
-      console.error('Storage error:', error);
-      setGameCode('');
-      setGameId(null);
-      showToast(`Could not save game: ${error.message || 'Please try again.'}`);
-    }
-  };
-
-  const joinGameAsUser = async (user, code, { isRetry = false } = {}) => {
-    const normalized = normalizeGameCode(code);
-    if (!isRetry) {
-      if (joinInFlightRef.current) return;
-      joinInFlightRef.current = true;
-    }
-    try {
-      // Get game from Supabase
-      const game = await gameService.joinGame(normalized, user.id);
-      
-      if (!game || !game.config) {
-        clearPendingJoin();
-        clearJoinPathFromUrl();
-        showToast('Game not found or invalid. Please check the code and try again.');
-        return;
-      }
-
-      const config = game.config;
-      if (!config.items || !Array.isArray(config.items) || config.items.length === 0) {
-        clearPendingJoin();
-        clearJoinPathFromUrl();
-        showToast('Invalid game configuration. Please check the code and try again.');
-        return;
-      }
-
-      // Reset player state
-      setPendingWinClaim(null);
-      setWinConfirmed(false);
-      setWinRejected(false);
-      setHasWon(false);
-      setMarked(new Set());
-      
-      setGameConfig(config);
-      setGameCode(game.code || normalized);
-      setGameId(game.id);
-      setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
-      setBoardSize(config.boardSize || 5);
-      setUseFreeSpace(config.useFreeSpace !== undefined ? config.useFreeSpace : true);
-      applyThemeFromConfig(config);
-      {
-        const rules = normalizeWinConfig(config);
-        setWinMode(rules.winMode);
-        setLinesToWin(rules.linesToWin);
-      }
-      setIsHost(false);
-      clearPendingJoin();
-      clearJoinPathFromUrl();
-      setShowJoinModal(false);
-
-      // Try to load saved board state first
-      const boardState = await boardService.loadBoardState(game.id, user.id);
-      if (boardState && boardState.board && boardState.board.length > 0) {
-        // Restore board state
-        setBoard(boardState.board);
-        setMarked(boardState.marked);
-        setHasWon(boardState.hasWon || false);
-        setScreen('play');
-
-        // Reload user games to update the list
-        await loadUserGames(user.id);
-      } else {
-        // Generate new board
-        await generateBoardFromConfig(config, game.id, user);
-
-        // Reload user games to update the list
-        await loadUserGames(user.id);
-      }
-    } catch (error) {
-      console.error('Error joining game:', error);
-      if (error.message?.includes('already joined')) {
-        // User already joined, just load the game
-        await joinGameAsUser(user, normalized, { isRetry: true });
-      } else if (error.message?.includes('not found')) {
-        clearPendingJoin();
-        clearJoinPathFromUrl();
-        showToast(`Game "${normalized}" not found. Please check the code and try again.`);
-      } else {
-        clearPendingJoin();
-        clearJoinPathFromUrl();
-        showToast(`Error joining game: ${error.message || 'Please try again.'}`);
-      }
-    } finally {
-      if (!isRetry) {
-        joinInFlightRef.current = false;
-      }
-    }
-  };
-
-  const cancelJoinIntent = () => {
-    if (guestJoining) return;
-    setShowJoinModal(false);
-    setGuestDisplayName('');
-    setGuestJoinError(null);
-    clearPendingJoin();
-    clearJoinPathFromUrl();
-  };
-
-  const goToLoginForJoin = () => {
-    if (guestJoining) return;
-    const code = normalizeGameCode(joinCode || pendingJoinCode);
-    if (isValidGameCode(code)) setPendingJoin(code);
-    setShowJoinModal(false);
-    setGuestJoinError(null);
-    setAuthError(null);
-    setScreen('login');
-  };
-
-  const goToRegisterForJoin = () => {
-    if (guestJoining) return;
-    const code = normalizeGameCode(joinCode || pendingJoinCode);
-    if (isValidGameCode(code)) setPendingJoin(code);
-    setShowJoinModal(false);
-    setGuestJoinError(null);
-    setAuthError(null);
-    setScreen('register');
-  };
-
-  const joinGame = async (codeOverride) => {
-    const code = normalizeGameCode(codeOverride ?? joinCode);
-    if (!isValidGameCode(code)) {
-      showToast('Please enter a 5-character game code');
-      return;
-    }
-
-    setPendingJoin(code);
-
-    if (!currentUser) {
-      openJoinModalForCode(code);
-      return;
-    }
-
-    await joinGameAsUser(currentUser, code);
-  };
-
-  const submitGuestJoin = async (e) => {
-    e.preventDefault();
-    const code = normalizeGameCode(joinCode || pendingJoinCode);
-    if (!isValidGameCode(code)) {
-      setGuestJoinError('Please enter a 4–12 character join code.');
-      return;
-    }
-
-    const desiredName = guestDisplayName.trim();
-    if (!desiredName) {
-      setGuestJoinError('Enter a display name to continue.');
-      return;
-    }
-
-    setGuestJoining(true);
-    setGuestJoinError(null);
-    try {
-      const guest = await authService.signInAsGuest(desiredName);
-      const user = {
-        id: guest.user.id,
-        email: guest.user.email || null,
-        username: guest.displayName || desiredName,
-        isGuest: true,
-      };
-      setCurrentUser(user);
-      setShowJoinModal(false);
-      setGuestDisplayName('');
-      await joinGameAsUser(user, code);
-    } catch (guestError) {
-      setGuestJoinError(
-        guestError.message || 'Could not start guest session. Please log in or try again.'
-      );
-    } finally {
-      setGuestJoining(false);
-    }
-  };
-
-  const generateBoardFromConfig = async (config, gameIdToUse = null, userForSave = null) => {
-    const idToSave = gameIdToUse || gameId;
-    const saveUser = userForSave || currentUser;
-
-    // Board is locked once generated for a user in a game — restore instead of reshuffling
-    if (saveUser && idToSave) {
-      try {
-        const existing = await boardService.loadBoardState(idToSave, saveUser.id);
-        if (existing?.board?.length > 0) {
-          setBoard(existing.board);
-          setMarked(existing.marked);
-          setHasWon(existing.hasWon || false);
-          setPendingWinClaim(null);
-          setWinConfirmed(false);
-          setWinRejected(false);
-          setScreen('play');
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking existing board:', error);
-      }
-    }
-
-    const { items: validItems, boardSize: size, useFreeSpace: freeSpace } = config;
-    const totalCells = size * size;
-    const neededItems = freeSpace ? totalCells - 1 : totalCells;
-
-    // Normalize items format (handle both string and object formats)
-    const normalizedItems = validItems.map(item => {
-      if (typeof item === 'string') {
-        return { text: item, imageUrl: null };
-      }
-      return item;
-    });
-
-    // Better shuffle algorithm (Fisher-Yates)
-    const shuffled = [...normalizedItems];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    
-    // Select items for this board
-    const selected = shuffled.slice(0, neededItems);
-    
-    // Randomize the board positions
-    const positions = [];
-    for (let i = 0; i < selected.length; i++) {
-      positions.push(i);
-    }
-    for (let i = positions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [positions[i], positions[j]] = [positions[j], positions[i]];
-    }
-    
-    const newBoard = [];
-    const centerIndex = Math.floor(totalCells / 2);
-    
-    let itemIndex = 0;
-    for (let i = 0; i < totalCells; i++) {
-      if (freeSpace && i === centerIndex) {
-        newBoard.push({ text: 'FREE', isFree: true, imageUrl: null });
-      } else {
-        const item = selected[positions[itemIndex]];
-        newBoard.push({ 
-          text: item.text || '', 
-          imageUrl: item.imageUrl || null,
-          isFree: false 
-        });
-        itemIndex++;
-      }
-    }
-
-    setBoard(newBoard);
-    setMarked(freeSpace ? new Set([centerIndex]) : new Set());
-    setHasWon(false);
-    setPendingWinClaim(null);
-    setWinConfirmed(false);
-    setWinRejected(false);
-    setScreen('play');
-    
-    // Save generated board to Supabase (locked for this user/game)
-    if (saveUser && idToSave) {
-      try {
-        await boardService.saveGeneratedBoard(idToSave, saveUser.id, config, newBoard, freeSpace ? new Set([centerIndex]) : new Set());
-      } catch (error) {
-        console.error('Error saving generated board:', error);
-      }
-    }
-  };
-
-  const copyCode = () => {
-    if (!gameCode) return;
-    navigator.clipboard.writeText(gameCode);
-    setCopied(true);
-    setLinkCopied(false);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const copyJoinLink = () => {
-    if (!gameCode) return;
-    const url = buildJoinUrl(gameCode);
-    navigator.clipboard.writeText(url);
-    setLinkCopied(true);
-    setCopied(false);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
-  const openPrintableQr = () => {
-    if (!gameCode) return;
-    const opened = openPrintableJoinFlyer(gameCode, gameConfig?.title || '');
-    if (!opened) {
-      showToast('Pop-up blocked — allow pop-ups to open the printable QR flyer.');
-    }
-  };
-
-  // Deep link / pending join: auto-join when signed in, otherwise open the chooser modal
-  useEffect(() => {
-    if (!authReady || passwordRecoveryRef.current) return;
-    if (printFlyerRef.current || screen === 'print-join') return;
-    const code = pendingJoinCodeRef.current || pendingJoinCode;
-    if (!isValidGameCode(code)) return;
-    if (joinInFlightRef.current) return;
-    if (screen === 'play' || screen === 'host' || screen === 'setup') return;
-    if (screen === 'login' || screen === 'register' || screen === 'forgot-password' || screen === 'forgot-password-sent' || screen === 'reset-password' || screen === 'email-confirmation') {
-      return;
-    }
-
-    if (currentUser) {
-      void joinGameAsUser(currentUser, code);
-      return;
-    }
-
-    if (!showJoinModal) {
-      openJoinModalForCode(code);
-    }
-    // joinGameAsUser / openJoinModalForCode are stable enough for this bootstrapping effect;
-    // re-running on every render would risk duplicate joins.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, currentUser, pendingJoinCode, screen, showJoinModal]);
-
-  const confirmWin = async () => {
-    if (!pendingWinClaim?.claimId || !gameCode) return;
-    
-    try {
-      await winClaimsService.confirmClaim(pendingWinClaim.claimId);
-      setPendingWinClaim(null);
-      setSelectedIncorrectItems(new Set()); // Reset selection
-      
-      // Show dialog to choose whether to end game or continue
-      setShowEndGameDialog(true);
-    } catch (error) {
-      console.error('Error confirming win:', error);
-      showToast('Error confirming win. Please try again.');
-    }
-  };
-
-  const handleEndGameAfterWin = async () => {
-    if (!gameId) return;
-
-    try {
-      await gameService.markGameAsEnded(gameId);
-      setShowEndGameDialog(false);
-
-      // Update dashboard
-      if (currentUser) {
-        await loadUserGames(currentUser.id);
-      }
-
-      // If we're currently viewing this game, go back to dashboard
-      if (screen === 'host' || screen === 'play') {
-        setGameCode('');
-        setGameId(null);
-        setBoard([]);
-        setMarked(new Set());
-        setGameConfig(null);
-        setScreen('dashboard');
-      }
-    } catch (error) {
-      console.error('Error ending game after win:', error);
-      showToast('Error ending game. Please try again.');
-    }
-  };
-
-  const handleContinueAfterWin = () => {
-    setShowEndGameDialog(false);
-    // Game continues - players can keep playing
-  };
-
-  const rejectWin = async () => {
-    if (!pendingWinClaim?.claimId) return;
-    
-    try {
-      // Convert selected incorrect items Set to Array
-      const incorrectIndices = Array.from(selectedIncorrectItems);
-      
-      // Map item indices to board indices
-      const incorrectBoardIndices = incorrectIndices.map(itemIdx => {
-        // pendingWinClaim.indices contains the board indices for each item in the win claim
-        return pendingWinClaim.indices[itemIdx];
-      });
-
-      await winClaimsService.rejectClaim(pendingWinClaim.claimId, incorrectBoardIndices);
-      setPendingWinClaim(null);
-      setSelectedIncorrectItems(new Set()); // Reset selection
-      
-      // Update dashboard
-      if (currentUser) {
-        await loadUserGames(currentUser.id);
-      }
-    } catch (error) {
-      console.error('Error rejecting win:', error);
-      showToast('Error rejecting win. Please try again.');
-    }
-  };
-
-  const toggleIncorrectItem = (itemIndex) => {
-    const newSelected = new Set(selectedIncorrectItems);
-    if (newSelected.has(itemIndex)) {
-      newSelected.delete(itemIndex);
-    } else {
-      newSelected.add(itemIndex);
-    }
-    setSelectedIncorrectItems(newSelected);
-  };
-
-  const checkWin = (markedCells = marked) => {
-    const { winMode: mode, linesToWin: needed } = normalizeWinConfig(
-      gameConfig || { winMode, linesToWin }
-    );
-    return detectWin({
-      marked: markedCells,
-      board,
-      boardSize,
-      winMode: mode,
-      linesToWin: needed,
-    });
-  };
-
-  const toggleCell = (index) => {
-    if (board[index].isFree || hasWon || pendingWinClaim || winRejected) return;
-    
-    const newMarked = new Set(marked);
-    if (newMarked.has(index)) {
-      newMarked.delete(index);
-    } else {
-      newMarked.add(index);
-    }
-    setMarked(newMarked);
-    
-    // Save board state after marking if logged in
-    if (currentUser && gameId) {
-      saveBoardState(gameId);
-    }
-
-    // Evaluate win from the updated marks (avoid setState-in-effect)
-    if (
-      screen === 'play' &&
-      !hasWon &&
-      !pendingWinClaim &&
-      !winConfirmed &&
-      !winRejected &&
-      board.length > 0 &&
-      boardSize > 0
-    ) {
-      const winResult = checkWin(newMarked);
-      if (winResult && !isHost) {
-        const submitWinClaim = async () => {
-          if (!currentUser) return;
-          try {
-            const claimData = await winClaimsService.submitClaim(gameId, currentUser.id, {
-              type: winResult.type,
-              items: winResult.items,
-              indices: winResult.indices,
-            });
-            setPendingWinClaim({
-              type: winResult.type,
-              items: winResult.items,
-              indices: winResult.indices,
-              claimId: claimData.id,
-              timestamp: new Date(claimData.created_at).getTime(),
-            });
-          } catch (error) {
-            console.error('Error submitting win claim:', error);
-            showToast('Error submitting win claim. Please try again.');
-          }
-        };
-        submitWinClaim();
-      } else if (winResult && isHost) {
-        setHasWon(true);
-        setWinConfirmed(true);
-      }
-    }
-  };
-
-  // Keep claim flags in refs so realtime handlers stay fresh without resubscribing
-  useEffect(() => {
-    pendingWinClaimRef.current = pendingWinClaim;
-  }, [pendingWinClaim]);
-  useEffect(() => {
-    winConfirmedRef.current = winConfirmed;
-  }, [winConfirmed]);
-  useEffect(() => {
-    winRejectedRef.current = winRejected;
-  }, [winRejected]);
-
-  // Realtime: player list, claims, and game ended while on host/play
-  useEffect(() => {
-    if (!gameId || (screen !== 'play' && screen !== 'host') || !currentUser) {
-      return;
-    }
-
-    const id = gameId;
-
-    const refreshHostClaims = async () => {
-      try {
-        const claims = await winClaimsService.getPendingClaims(id);
-        if (claims && claims.length > 0) {
-          const latestClaim = claims[0];
-          const prev = pendingWinClaimRef.current;
-          if (!prev || prev.claimId !== latestClaim.id) {
-            setPendingWinClaim({
-              type: latestClaim.type,
-              items: latestClaim.items,
-              indices: latestClaim.indices,
-              claimId: latestClaim.id,
-              userId: latestClaim.userId,
-              username: latestClaim.username,
-              timestamp: latestClaim.timestamp,
-            });
-            setSelectedIncorrectItems(new Set());
-          }
-        } else if (pendingWinClaimRef.current) {
-          setPendingWinClaim(null);
-        }
-      } catch (error) {
-        console.error('Error refreshing win claims:', error);
-      }
-    };
-
-    const refreshPlayerClaim = async () => {
-      try {
-        const claimStatus = await winClaimsService.getUserClaimStatus(id, currentUser.id);
-        if (!claimStatus) return;
-
-        if (claimStatus.status === 'confirmed' && !winConfirmedRef.current) {
-          setWinConfirmed(true);
-          setHasWon(true);
-          setPendingWinClaim(null);
-        } else if (claimStatus.status === 'rejected' && !winRejectedRef.current) {
-          if (claimStatus.incorrectIndices && Array.isArray(claimStatus.incorrectIndices) && claimStatus.incorrectIndices.length > 0) {
-            setMarked((prevMarked) => {
-              const newMarked = new Set(prevMarked);
-              claimStatus.incorrectIndices.forEach((boardIndex) => {
-                newMarked.delete(boardIndex);
-              });
-              return newMarked;
-            });
-          }
-
-          setWinRejected(true);
-          setPendingWinClaim(null);
-          setHasWon(false);
-
-          setTimeout(() => {
-            setWinRejected(false);
-          }, 4000);
-        }
-      } catch (error) {
-        console.error('Error refreshing claim status:', error);
-      }
-    };
-
-    const leaveEndedGame = () => {
-      setGameCode('');
-      setGameId(null);
-      setBoard([]);
-      setMarked(new Set());
-      setGameConfig(null);
-      setPendingWinClaim(null);
-      setGamePlayers([]);
-      setConfirmedWinners([]);
-      setIsHost(false);
-      setScreen('dashboard');
-      loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
-        console.error('Error reloading games after end:', error);
-      });
-    };
-
-    fetchGamePlayers(id);
-    if (isHost) {
-      refreshHostClaims();
-    } else if (screen === 'play') {
-      refreshPlayerClaim();
-    }
-
-    const unsubscribe = subscribeGame(id, {
-      onParticipantsChange: () => {
-        fetchGamePlayers(id);
-      },
-      onClaimsChange: () => {
-        fetchGamePlayers(id);
-        if (isHost) {
-          refreshHostClaims();
-        } else if (screen === 'play') {
-          refreshPlayerClaim();
-        }
-      },
-      onGameChange: (row) => {
-        if (row?.status === 'ended') {
-          leaveEndedGame();
-        }
-      },
-    });
-
-    return () => {
-      unsubscribe();
-      setGamePlayers([]);
-      setConfirmedWinners([]);
-    };
-  }, [gameId, screen, isHost, currentUser]);
-
-  // Realtime: dashboard pending-win badges (RLS scopes win_claims events)
-  useEffect(() => {
-    if (!currentUser || screen !== 'dashboard' || !authReady) return;
-
-    const unsubscribe = subscribeDashboard(currentUser.id, {
-      onChange: () => {
-        loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
-          console.error('Error refreshing dashboard from realtime:', error);
-        });
-      },
-    });
-
-    return unsubscribe;
-  }, [currentUser, screen, authReady]);
-
-  // Trigger confetti when win is confirmed
-  useEffect(() => {
-    if (hasWon && winConfirmed && screen === 'play' && !isHost) {
-      // Trigger confetti animation when win is confirmed by host
-      const duration = 3000;
-      const animationEnd = Date.now() + duration;
-
-      function randomInRange(min, max) {
-        return Math.random() * (max - min) + min;
-      }
-
-      // Initial confetti burst from center
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-
-      // Continuous confetti for duration
-      confettiIntervalRef.current = setInterval(function() {
-        const timeLeft = animationEnd - Date.now();
-
-        if (timeLeft <= 0) {
-          if (confettiIntervalRef.current) {
-            clearInterval(confettiIntervalRef.current);
-            confettiIntervalRef.current = null;
-          }
-          return;
-        }
-
-        const particleCount = Math.floor(50 * (timeLeft / duration));
-        
-        // Launch confetti from different positions
-        confetti({
-          startVelocity: 30,
-          spread: 360,
-          ticks: 60,
-          zIndex: 0,
-          particleCount,
-          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
-        });
-        confetti({
-          startVelocity: 30,
-          spread: 360,
-          ticks: 60,
-          zIndex: 0,
-          particleCount,
-          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
-        });
-      }, 250);
-
-      // Cleanup interval after duration
-      const timeoutId = setTimeout(() => {
-        if (confettiIntervalRef.current) {
-          clearInterval(confettiIntervalRef.current);
-          confettiIntervalRef.current = null;
-        }
-      }, duration);
-
-      // Cleanup on unmount or when dependencies change
-      return () => {
-        if (confettiIntervalRef.current) {
-          clearInterval(confettiIntervalRef.current);
-          confettiIntervalRef.current = null;
-        }
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-      };
-    }
-  }, [hasWon, winConfirmed, screen, isHost]);
-
-  const resetToHome = () => {
-    // Save current board state if logged in and in a game
-    if (currentUser && gameId && board.length > 0) {
-      saveBoardState(gameId);
-    }
-
-    // Navigate to dashboard if logged in, otherwise home
-    if (currentUser) {
-      setScreen('dashboard');
-      loadUserGames(currentUser.id);
-    } else {
-      setScreen('home');
-    }
-
-    setItems(Array(24).fill({ text: '', imageUrl: null }));
-    setBoardSize(5);
-    setBoard([]);
-    setMarked(new Set());
-    setHasWon(false);
-    setUseFreeSpace(true);
-    setWinMode('standard');
-    setLinesToWin(1);
-    setGameTheme(resolveTheme(userTheme));
-    setGameCode('');
-    setGameId(null);
-    setCustomEntryCode('');
-    setJoinCode('');
-    setGameConfig(null);
-    setGameTitle('');
-    setGenerationTone(DEFAULT_GENERATION_TONE);
-    setGenerationInstructions('');
-    setIsHost(false);
-    setPendingWinClaim(null);
-    setWinConfirmed(false);
-    setWinRejected(false);
-    setSelectedIncorrectItems(new Set());
-    setGamePlayers([]);
-    setConfirmedWinners([]);
-  };
-
 
   const shellTheme = screen === 'print-join'
     ? DEFAULT_THEME
@@ -1980,11 +494,11 @@ export default function Mingo() {
             generationInstructions={generationInstructions}
             onUpdateGenerationInstructions={updateGenerationInstructions}
             customEntryCode={customEntryCode}
-            onUpdateCustomEntryCode={(value) => setCustomEntryCode(normalizeGameCode(value).slice(0, 12))}
+            onUpdateCustomEntryCode={updateCustomEntryCode}
             generatingItems={generatingItems}
             neededItemCount={neededItemCount}
             onGenerateItems={generateItemsFromGameTitle}
-            boardSize={boardSize}
+            boardSize={setupBoardSize}
             onUpdateBoardSize={updateBoardSize}
             useFreeSpace={useFreeSpace}
             onUpdateFreeSpace={updateFreeSpace}
@@ -1992,7 +506,7 @@ export default function Mingo() {
             onUpdateWinMode={updateWinMode}
             linesToWin={linesToWin}
             onUpdateLinesToWin={updateLinesToWin}
-            gameVisibility={gameVisibility}
+            gameVisibility={setupVisibility}
             onUpdateGameVisibility={updateGameVisibility}
             gameTheme={gameTheme}
             onUpdateGameTheme={updateGameTheme}
