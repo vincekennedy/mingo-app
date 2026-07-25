@@ -128,6 +128,7 @@ export default function PlayScreen({
 
         <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-8">
           <div
+            data-testid="bingo-board"
             className="grid gap-1.5 sm:gap-2 mx-auto w-full"
             style={{
               gridTemplateColumns: `repeat(${boardSize}, minmax(0, 1fr))`,

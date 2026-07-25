@@ -55,7 +55,7 @@ test.describe('Four corners win mode', () => {
       await guestModal.getByLabel(/Display name/i).fill(guestName)
       await guestModal.getByRole('button', { name: /Join as guest/i }).click()
 
-      const board = guestPage.locator('.bg-white.rounded-2xl.shadow-2xl .grid')
+      const board = guestPage.getByTestId('bingo-board')
       await expect(board).toBeVisible({ timeout: 60_000 })
       await expect(guestPage.getByText(/four corners/i)).toBeVisible()
 

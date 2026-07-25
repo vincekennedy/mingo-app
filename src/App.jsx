@@ -1027,18 +1027,18 @@ export default function Mingo() {
       setGameId(created.id);
       setCustomEntryCode('');
       console.log(`Game ${code} created and stored successfully`);
-
-      // Reload user games to show the new game
-      await loadUserGames(currentUser.id);
+      setScreen('host');
+      try {
+        await loadUserGames(currentUser.id);
+      } catch (loadError) {
+        console.error('Error refreshing games after create:', loadError);
+      }
     } catch (error) {
       console.error('Storage error:', error);
       setGameCode('');
       setGameId(null);
       showToast(`Could not save game: ${error.message || 'Please try again.'}`);
-      return;
     }
-
-    setScreen('host');
   };
 
   const joinGameAsUser = async (user, code, { isRetry = false } = {}) => {
@@ -1179,7 +1179,7 @@ export default function Mingo() {
     e.preventDefault();
     const code = normalizeGameCode(joinCode || pendingJoinCode);
     if (!isValidGameCode(code)) {
-      setGuestJoinError('Please enter a 5-character game code.');
+      setGuestJoinError('Please enter a 4–12 character join code.');
       return;
     }
 

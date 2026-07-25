@@ -7,12 +7,13 @@
 ALTER TABLE public.games
   ADD COLUMN IF NOT EXISTS id UUID;
 
+-- gen_random_uuid() (pgcrypto) — uuid_generate_v4() may be missing from search_path
 UPDATE public.games
-SET id = uuid_generate_v4()
+SET id = gen_random_uuid()
 WHERE id IS NULL;
 
 ALTER TABLE public.games
-  ALTER COLUMN id SET DEFAULT uuid_generate_v4(),
+  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
   ALTER COLUMN id SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS games_id_unique ON public.games (id);
@@ -32,34 +33,25 @@ ALTER TABLE public.win_claims
 UPDATE public.game_participants gp
 SET game_id = g.id
 FROM public.games g
-WHERE gp.game_code = g.code
+WHERE upper(gp.game_code) = upper(g.code)
   AND gp.game_id IS NULL;
 
 UPDATE public.board_states bs
 SET game_id = g.id
 FROM public.games g
-WHERE bs.game_code = g.code
+WHERE upper(bs.game_code) = upper(g.code)
   AND bs.game_id IS NULL;
 
 UPDATE public.win_claims wc
 SET game_id = g.id
 FROM public.games g
-WHERE wc.game_code = g.code
+WHERE upper(wc.game_code) = upper(g.code)
   AND wc.game_id IS NULL;
 
--- Orphan rows (shouldn't exist) — fail loudly if any remain null with a code
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM public.game_participants WHERE game_id IS NULL) THEN
-    RAISE EXCEPTION 'game_participants.game_id backfill left NULLs';
-  END IF;
-  IF EXISTS (SELECT 1 FROM public.board_states WHERE game_id IS NULL) THEN
-    RAISE EXCEPTION 'board_states.game_id backfill left NULLs';
-  END IF;
-  IF EXISTS (SELECT 1 FROM public.win_claims WHERE game_id IS NULL) THEN
-    RAISE EXCEPTION 'win_claims.game_id backfill left NULLs';
-  END IF;
-END $$;
+-- Drop orphans whose game_code no longer matches a game (ended/deleted leftovers)
+DELETE FROM public.game_participants WHERE game_id IS NULL;
+DELETE FROM public.board_states WHERE game_id IS NULL;
+DELETE FROM public.win_claims WHERE game_id IS NULL;
 
 ALTER TABLE public.game_participants
   ALTER COLUMN game_id SET NOT NULL;

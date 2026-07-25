@@ -65,7 +65,7 @@ test.describe('Game lifecycle smoke', () => {
       await guestModal.getByRole('button', { name: /Join as guest/i }).click()
 
       // Play board: white card with CSS grid of cell buttons
-      const board = guestPage.locator('.bg-white.rounded-2xl.shadow-2xl .grid')
+      const board = guestPage.getByTestId('bingo-board')
       await expect(board).toBeVisible({ timeout: 60_000 })
 
       await expect(hostPage.getByText(guestName, { exact: true })).toBeVisible({ timeout: 30_000 })

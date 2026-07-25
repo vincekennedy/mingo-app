@@ -64,7 +64,7 @@ export default function DashboardScreen({
         <div className="space-y-3">
           {userGames.map((game) => (
             <div
-              key={game.gameCode}
+              key={game.gameId || game.gameCode}
               className={`w-full p-4 rounded-xl border-2 ${
                 game.pendingWin && game.isHost
                   ? 'border-yellow-500 bg-yellow-50'

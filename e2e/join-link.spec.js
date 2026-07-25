@@ -103,7 +103,7 @@ test.describe('Join link end-to-end', () => {
       await modal.getByLabel(/Display name/i).fill(guestName)
       await modal.getByRole('button', { name: /Join as guest/i }).click()
 
-      const board = guestPage.locator('.bg-white.rounded-2xl.shadow-2xl .grid')
+      const board = guestPage.getByTestId('bingo-board')
       await expect(board).toBeVisible({ timeout: 60_000 })
       await expect(hostPage.getByText(guestName, { exact: true })).toBeVisible({ timeout: 30_000 })
     } finally {

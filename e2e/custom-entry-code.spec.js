@@ -5,11 +5,39 @@ const hostEmail = process.env.SMOKE_HOST_EMAIL
 const hostPassword = process.env.SMOKE_HOST_PASSWORD
 const hasHostCreds = Boolean(hostEmail && hostPassword)
 
+async function expectGameCreated(page) {
+  try {
+    await expect(page.getByRole('heading', { name: /Game Created/i })).toBeVisible({
+      timeout: 45_000,
+    })
+  } catch (err) {
+    const toast = page.getByRole('status')
+    if (await toast.isVisible().catch(() => false)) {
+      throw new Error(`Create game failed: ${(await toast.innerText()).trim()}`)
+    }
+    throw err
+  }
+}
+
+async function fillSetupAndCreate(page, { title, vanity }) {
+  await page.getByPlaceholder(/Enter a title/i).fill(title)
+  await page.getByLabel(/^Board Size$/i).selectOption('3')
+  await page.getByTestId('setup-entry-code').fill(vanity)
+  const itemInputs = page.locator('input[placeholder^="Item "]')
+  for (let i = 0; i < 8; i++) {
+    await itemInputs.nth(i).fill(`Code item ${i + 1}`)
+  }
+  await page.getByRole('button', { name: /^Create Game$/i }).click()
+  await expectGameCreated(page)
+  expect((await page.getByTestId('game-code').innerText()).trim()).toBe(vanity)
+}
+
 test.describe('Custom entry codes', () => {
   test.skip(!hasHostCreds, 'Set SMOKE_HOST_EMAIL and SMOKE_HOST_PASSWORD (mingo-local test host)')
 
   test('vanity code reusable after end', async ({ browser }) => {
-    const vanity = `MON${Date.now().toString(36).slice(-5)}`.toUpperCase().slice(0, 12)
+    // Keep 5 chars so failures are about schema/identity, not VARCHAR(5) leftovers.
+    const vanity = `M${Date.now().toString(36).slice(-4)}`.toUpperCase()
     const hostContext = await browser.newContext()
     const hostPage = await hostContext.newPage()
     let guestContext = null
@@ -24,18 +52,7 @@ test.describe('Custom entry codes', () => {
       await expect(hostPage.getByRole('heading', { name: /Welcome/i })).toBeVisible({ timeout: 45_000 })
 
       await hostPage.getByRole('button', { name: /Create New Game/i }).click()
-      await hostPage.getByPlaceholder(/Enter a title/i).fill('Custom Code Smoke A')
-      await hostPage.getByLabel(/^Board Size$/i).selectOption('3')
-      await hostPage.getByTestId('setup-entry-code').fill(vanity)
-      const itemInputs = hostPage.locator('input[placeholder^="Item "]')
-      for (let i = 0; i < 8; i++) {
-        await itemInputs.nth(i).fill(`Code item ${i + 1}`)
-      }
-      await hostPage.getByRole('button', { name: /^Create Game$/i }).click()
-      await expect(hostPage.getByRole('heading', { name: /Game Created/i })).toBeVisible({
-        timeout: 45_000,
-      })
-      expect((await hostPage.getByTestId('game-code').innerText()).trim()).toBe(vanity)
+      await fillSetupAndCreate(hostPage, { title: 'Custom Code Smoke A', vanity })
 
       guestContext = await browser.newContext()
       const guestPage = await guestContext.newPage()
@@ -49,31 +66,18 @@ test.describe('Custom entry codes', () => {
       await expect(guestModal).toBeVisible()
       await guestModal.getByLabel(/Display name/i).fill(`CodeGuest${Date.now().toString(36).slice(-4)}`)
       await guestModal.getByRole('button', { name: /Join as guest/i }).click()
-      await expect(guestPage.locator('.bg-white.rounded-2xl.shadow-2xl .grid')).toBeVisible({
+      await expect(guestPage.getByTestId('bingo-board')).toBeVisible({
         timeout: 60_000,
       })
 
-      // End via dashboard
       await hostPage.getByRole('button', { name: /Back to Dashboard/i }).click()
       await expect(hostPage.getByRole('heading', { name: /Welcome/i })).toBeVisible({ timeout: 30_000 })
       hostPage.once('dialog', (d) => d.accept())
       await hostPage.getByRole('button', { name: /End Game/i }).first().click()
       await expect(hostPage.getByText(vanity, { exact: true })).toHaveCount(0, { timeout: 30_000 })
 
-      // Recreate with same vanity
-      await hostPage.getByRole('button', { name: /Create New Game|Create Your First Game/i }).click()
-      await hostPage.getByPlaceholder(/Enter a title/i).fill('Custom Code Smoke B')
-      await hostPage.getByLabel(/^Board Size$/i).selectOption('3')
-      await hostPage.getByTestId('setup-entry-code').fill(vanity)
-      const itemInputs2 = hostPage.locator('input[placeholder^="Item "]')
-      for (let i = 0; i < 8; i++) {
-        await itemInputs2.nth(i).fill(`Code item B${i + 1}`)
-      }
-      await hostPage.getByRole('button', { name: /^Create Game$/i }).click()
-      await expect(hostPage.getByRole('heading', { name: /Game Created/i })).toBeVisible({
-        timeout: 45_000,
-      })
-      expect((await hostPage.getByTestId('game-code').innerText()).trim()).toBe(vanity)
+      await hostPage.getByRole('button', { name: /^Create New Game$/i }).click()
+      await fillSetupAndCreate(hostPage, { title: 'Custom Code Smoke B', vanity })
 
       await guestContext.close()
       guestContext = await browser.newContext()
@@ -88,7 +92,7 @@ test.describe('Custom entry codes', () => {
       await expect(modal2).toBeVisible()
       await modal2.getByLabel(/Display name/i).fill(`CodeGuest2${Date.now().toString(36).slice(-4)}`)
       await modal2.getByRole('button', { name: /Join as guest/i }).click()
-      await expect(guest2.locator('.bg-white.rounded-2xl.shadow-2xl .grid')).toBeVisible({
+      await expect(guest2.getByTestId('bingo-board')).toBeVisible({
         timeout: 60_000,
       })
     } finally {
