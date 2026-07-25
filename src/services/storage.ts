@@ -3,12 +3,9 @@ import { supabase } from '../lib/supabase'
 export const storageService = {
   /**
    * Upload an image file to Supabase Storage
-   * @param {File} file - Image file to upload
-   * @param {string} gameId - Game UUID (or temp id during setup)
-   * @param {string} userId - User ID
-   * @returns {Promise<string>} Public URL of the uploaded image
+   * @returns Public URL of the uploaded image
    */
-  async uploadImage(file, gameId, userId) {
+  async uploadImage(file: File, gameId: string, userId: string): Promise<string> {
     try {
       // Validate file type
       if (!file.type.startsWith('image/')) {
@@ -31,22 +28,27 @@ export const storageService = {
         .from('game-images')
         .upload(filePath, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
         })
 
       if (error) {
         console.error('Upload error:', error)
         // Check if it's a bucket not found error
-        if (error.message?.includes('Bucket not found') || error.message?.includes('not found')) {
-          throw new Error('Storage bucket not set up. Please run SETUP_STORAGE.sql in Supabase SQL Editor.')
+        if (
+          error.message?.includes('Bucket not found') ||
+          error.message?.includes('not found')
+        ) {
+          throw new Error(
+            'Storage bucket not set up. Please run SETUP_STORAGE.sql in Supabase SQL Editor.',
+          )
         }
         throw error
       }
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('game-images')
-        .getPublicUrl(data.path)
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('game-images').getPublicUrl(data.path)
 
       return publicUrl
     } catch (error) {
@@ -55,20 +57,16 @@ export const storageService = {
     }
   },
 
-  /**
-   * Delete an image from Supabase Storage
-   * @param {string} imageUrl - Public URL of the image to delete
-   * @returns {Promise<void>}
-   */
-  async deleteImage(imageUrl) {
+  /** Delete an image from Supabase Storage */
+  async deleteImage(imageUrl: string): Promise<void> {
     try {
       // Extract path from URL
       // Supabase public URL format: https://project.supabase.co/storage/v1/object/public/bucket-name/path/to/file
       const url = new URL(imageUrl)
-      const pathParts = url.pathname.split('/').filter(part => part !== '')
-      
+      const pathParts = url.pathname.split('/').filter((part) => part !== '')
+
       // Find the bucket name in the path
-      const bucketIndex = pathParts.findIndex(part => part === 'game-images')
+      const bucketIndex = pathParts.findIndex((part) => part === 'game-images')
       if (bucketIndex !== -1) {
         // Path after bucket name
         const filePath = pathParts.slice(bucketIndex + 1).join('/')
@@ -78,11 +76,13 @@ export const storageService = {
         if (error) throw error
         return
       }
-      
+
       // Try alternative path format: /storage/v1/object/public/game-images/userId/gameCode/file
-      const storageIndex = pathParts.findIndex(part => part === 'storage')
+      const storageIndex = pathParts.findIndex((part) => part === 'storage')
       if (storageIndex !== -1 && pathParts[storageIndex + 1] === 'v1') {
-        const publicIndex = pathParts.findIndex((part, idx) => idx > storageIndex && part === 'public')
+        const publicIndex = pathParts.findIndex(
+          (part, idx) => idx > storageIndex && part === 'public',
+        )
         if (publicIndex !== -1) {
           const filePath = pathParts.slice(publicIndex + 2).join('/') // Skip 'public' and 'game-images'
           const { error } = await supabase.storage
@@ -92,11 +92,11 @@ export const storageService = {
           return
         }
       }
-      
+
       throw new Error('Invalid image URL format')
     } catch (error) {
       console.error('Storage delete error:', error)
       throw error
     }
-  }
+  },
 }
