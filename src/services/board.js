@@ -2,81 +2,73 @@ import { supabase } from '../lib/supabase'
 
 export const boardService = {
   /**
-   * Save board state for a user in a game
-   * @param {string} gameCode - Game code
-   * @param {string} userId - User ID
-   * @param {Object} boardState - Board state {board, marked, hasWon, pendingWinClaim, winConfirmed, winRejected}
-   * @returns {Promise<void>}
+   * @param {string} gameId - Game UUID
+   * @param {string} userId
+   * @param {Object} boardState
    */
-  async saveBoardState(gameCode, userId, boardState) {
+  async saveBoardState(gameId, userId, boardState) {
     try {
       const { error } = await supabase
         .from('board_states')
         .upsert({
-          game_code: gameCode,
+          game_id: gameId,
           user_id: userId,
           board: boardState.board,
           marked_indices: Array.from(boardState.marked || []),
           has_won: boardState.hasWon || false,
           updated_at: new Date().toISOString(),
         }, {
-          onConflict: 'game_code,user_id'
+          onConflict: 'game_id,user_id',
         })
-      
+
       if (error) throw error
     } catch (error) {
       console.error('Save board state error:', error)
       throw error
     }
   },
-  
+
   /**
-   * Load board state for a user in a game
-   * @param {string} gameCode - Game code
-   * @param {string} userId - User ID
-   * @returns {Promise<Object|null>} Board state or null if not found
+   * @param {string} gameId
+   * @param {string} userId
    */
-  async loadBoardState(gameCode, userId) {
+  async loadBoardState(gameId, userId) {
     try {
       const { data, error } = await supabase
         .from('board_states')
         .select('*')
-        .eq('game_code', gameCode)
+        .eq('game_id', gameId)
         .eq('user_id', userId)
         .single()
-      
+
       if (error) {
         if (error.code === 'PGRST116') {
-          return null // No board state found
+          return null
         }
         throw error
       }
-      
+
       return {
         board: data.board,
         marked: new Set(data.marked_indices || []),
         hasWon: data.has_won || false,
-        // Note: pendingWinClaim, winConfirmed, winRejected are stored in win_claims table
       }
     } catch (error) {
       console.error('Load board state error:', error)
       return null
     }
   },
-  
+
   /**
-   * Save a newly generated board for a user.
-   * Boards are locked after first generation — callers should not reshuffle.
-   * @param {string} gameCode - Game code
-   * @param {string} userId - User ID
-   * @param {Object} config - Game configuration
-   * @param {Array} board - Generated board array
-   * @param {Set} marked - Marked cells set
-   * @returns {Promise<void>}
+   * @param {string} gameId
+   * @param {string} userId
+   * @param {Object} config
+   * @param {Array} board
+   * @param {Set} marked
    */
-  async saveGeneratedBoard(gameCode, userId, config, board, marked) {
+  async saveGeneratedBoard(gameId, userId, config, board, marked) {
     try {
-      await this.saveBoardState(gameCode, userId, {
+      await this.saveBoardState(gameId, userId, {
         board,
         marked,
         hasWon: false,

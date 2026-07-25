@@ -83,8 +83,8 @@ export default function HomeScreen({
           type="text"
           value={joinCode}
           onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-          placeholder="Enter 5-digit code"
-          maxLength={5}
+          placeholder="Enter join code"
+          maxLength={12}
           className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"
           data-testid="join-code-input"
         />

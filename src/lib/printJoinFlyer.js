@@ -19,7 +19,7 @@ export function buildPrintJoinUrl(code, title = '', origin = typeof window !== '
 export function parsePrintJoinFromLocation(loc = typeof window !== 'undefined' ? window.location : null) {
   if (!loc) return null;
   try {
-    const pathMatch = String(loc.pathname || '').match(/^\/print\/join\/([A-Za-z0-9]{5})\/?$/i);
+    const pathMatch = String(loc.pathname || '').match(/^\/print\/join\/([A-Za-z0-9]{4,12})\/?$/i);
     if (!pathMatch || !isValidGameCode(pathMatch[1])) return null;
     const params = new URLSearchParams(loc.search || '');
     const title = (params.get('title') || '').trim();

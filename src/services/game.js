@@ -3,29 +3,27 @@ import { supabase } from '../lib/supabase'
 export const gameService = {
   /**
    * Create a new game
-   * @param {string} code - Game code (5 characters)
+   * @param {string} code - Join code (4–12 chars vanity or 5-char random)
    * @param {string} hostId - User ID of the host
-   * @param {Object} config - Game configuration {items, boardSize, useFreeSpace, title, winMode, linesToWin, theme, generationTone, generationInstructions}
+   * @param {Object} config - Game configuration
    * @param {{ visibility?: 'private' | 'public' }} [options]
-   * @returns {Promise<Object>} Created game data
+   * @returns {Promise<Object>} Created game data (includes id + code)
    */
   async createGame(code, hostId, config, options = {}) {
     try {
       const visibility = options.visibility === 'public' ? 'public' : 'private'
 
-      // Verify user profile exists first
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('id')
         .eq('id', hostId)
         .single()
-      
+
       if (profileError || !userProfile) {
         console.error('User profile not found:', hostId, profileError)
         throw new Error('User profile not found. Please ensure your account was created correctly. Try logging out and back in.')
       }
-      
-      // Create game
+
       const { data: game, error: gameError } = await supabase
         .from('games')
         .insert({
@@ -37,41 +35,43 @@ export const gameService = {
         })
         .select()
         .single()
-      
+
       if (gameError) {
-        // Provide more helpful error message for foreign key constraint
         if (gameError.code === '23503' && gameError.message?.includes('host_id_fkey')) {
           throw new Error('User profile not found in database. Please try logging out and back in, or contact support if the issue persists.')
         }
+        if (gameError.code === '23505') {
+          const err = new Error('That entry code is already in use by an active game. End that game or pick another code.')
+          err.code = 'CODE_IN_USE'
+          throw err
+        }
         throw gameError
       }
-      
-      // Add host as participant
+
       const { error: participantError } = await supabase
         .from('game_participants')
         .insert({
-          game_code: code,
+          game_id: game.id,
           user_id: hostId,
           is_host: true,
         })
-      
+
       if (participantError) {
-        // If participant insert fails, try to clean up the game
-        await supabase.from('games').delete().eq('code', code)
+        await supabase.from('games').delete().eq('id', game.id)
         throw participantError
       }
-      
+
       return game
     } catch (error) {
       console.error('Create game error:', error)
       throw error
     }
   },
-  
+
   /**
-   * Get game by code (works for private games before the caller is a participant)
-   * @param {string} code - Game code
-   * @returns {Promise<Object>} Game data
+   * Get active game by join code
+   * @param {string} code
+   * @returns {Promise<Object>}
    */
   async getGame(code) {
     try {
@@ -96,7 +96,6 @@ export const gameService = {
   /**
    * List open public games for the lobby
    * @param {number} [limit=10]
-   * @returns {Promise<Array<{ code: string, title: string|null, playerCount: number, boardSize: number, winMode: string, createdAt: string }>>}
    */
   async listPublicGames(limit = 10) {
     try {
@@ -107,6 +106,7 @@ export const gameService = {
       if (error) throw error
 
       return (data || []).map((row) => ({
+        id: row.id,
         code: row.code,
         title: row.title || null,
         playerCount: Number(row.player_count) || 0,
@@ -119,59 +119,52 @@ export const gameService = {
       throw error
     }
   },
-  
+
   /**
-   * Join a game
-   * @param {string} code - Game code
-   * @param {string} userId - User ID
-   * @returns {Promise<Object>} Game data
+   * Join a game by code
+   * @param {string} code
+   * @param {string} userId
    */
   async joinGame(code, userId) {
     try {
-      // Check if game exists
       const game = await this.getGame(code)
-      
-      // Check if user is already a participant
+
       const { data: existingParticipant } = await supabase
         .from('game_participants')
         .select('*')
-        .eq('game_code', code)
+        .eq('game_id', game.id)
         .eq('user_id', userId)
         .single()
-      
+
       if (existingParticipant) {
-        // User already joined, return game
         return game
       }
-      
-      // Add as participant
+
       const { error } = await supabase
         .from('game_participants')
         .insert({
-          game_code: code,
+          game_id: game.id,
           user_id: userId,
           is_host: false,
         })
-      
+
       if (error) {
         if (error.code === '23505') {
-          // Already joined (race condition)
           return game
         }
         throw error
       }
-      
+
       return game
     } catch (error) {
       console.error('Join game error:', error)
       throw error
     }
   },
-  
+
   /**
-   * Get all games for a user
-   * @param {string} userId - User ID
-   * @returns {Promise<Array>} Array of games with participant info
+   * Get all active games for a user
+   * @param {string} userId
    */
   async getUserGames(userId) {
     try {
@@ -183,112 +176,86 @@ export const gameService = {
         `)
         .eq('user_id', userId)
         .order('joined_at', { ascending: false })
-      
+
       if (error) throw error
-      
-      // Filter out ended games and transform data to match expected format
-      const activeGames = data.filter(participant => {
-        // Check if game exists and is not ended
+
+      const activeGames = data.filter((participant) => {
         if (!participant.game) {
           console.warn('Participant has no game data:', participant)
           return false
         }
-        const gameStatus = participant.game.status
-        const isActive = gameStatus === 'active'
-        if (!isActive) {
-          console.log('Filtering out ended game:', participant.game_code, 'status:', gameStatus)
-        }
-        return isActive
+        return participant.game.status === 'active'
       })
-      
-      return activeGames.map(participant => ({
-        gameCode: participant.game_code,
+
+      return activeGames.map((participant) => ({
+        gameId: participant.game_id || participant.game.id,
+        gameCode: participant.game.code,
         isHost: participant.is_host,
         joinedAt: participant.joined_at,
         config: participant.game?.config || null,
         visibility: participant.game?.visibility === 'public' ? 'public' : 'private',
-        pendingWin: false, // Will be set by checking win_claims
+        pendingWin: false,
       }))
     } catch (error) {
       console.error('Get user games error:', error)
       throw error
     }
   },
-  
+
   /**
    * End/delete a game (host only)
-   * @param {string} code - Game code
-   * @param {string} userId - User ID (must be host)
-   * @returns {Promise<void>}
+   * @param {string} gameId - Game UUID
+   * @param {string} userId
    */
-  async endGame(code, userId) {
+  async endGame(gameId, userId) {
     try {
-      // Verify user is host
       const { data: game, error: fetchError } = await supabase
         .from('games')
         .select('host_id, status')
-        .eq('code', code)
+        .eq('id', gameId)
         .single()
-      
+
       if (fetchError) {
         console.error('Error fetching game:', fetchError)
         throw fetchError
       }
-      
+
       if (!game) {
         throw new Error('Game not found')
       }
-      
+
       if (game.host_id !== userId) {
         throw new Error('Only the host can end the game')
       }
-      
-      console.log('Updating game status to ended:', { code, userId, currentStatus: game.status })
-      
-      // Update game status to ended
+
       const { data: updatedGame, error } = await supabase
         .from('games')
         .update({ status: 'ended' })
-        .eq('code', code)
+        .eq('id', gameId)
         .select()
         .single()
-      
+
       if (error) {
-        console.error('Error updating game status:', error)
-        console.error('Error details:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        })
-        
-        // Check if it's an RLS policy error
         if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
           throw new Error(
             'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
             'FIX: Ensure "Hosts can update their games" RLS exists (FULL_SCHEMA_RESTORE.sql), or apply sql/archive/FIX_GAMES_UPDATE_POLICY.sql on a legacy project.'
           )
         }
-        
         throw error
       }
-      
-      console.log('Game status updated successfully:', updatedGame)
-      
-      // Return updated game for verification
+
       return updatedGame
     } catch (error) {
       console.error('End game error:', error)
       throw error
     }
   },
-  
+
   /**
-   * Get all participants for a game with their usernames
-   * @param {string} code - Game code
-   * @returns {Promise<Array>} Array of participants with usernames
+   * @param {string} gameId
    */
-  async getGameParticipants(code) {
+  async getGameParticipants(gameId) {
     try {
       const { data, error } = await supabase
         .from('game_participants')
@@ -298,12 +265,12 @@ export const gameService = {
           joined_at,
           user:users(username, display_name)
         `)
-        .eq('game_code', code)
+        .eq('game_id', gameId)
         .order('joined_at', { ascending: true })
-      
+
       if (error) throw error
-      
-      return data.map(participant => ({
+
+      return data.map((participant) => ({
         id: participant.user_id,
         username: participant.user?.display_name || participant.user?.username || 'Unknown',
         isHost: participant.is_host,
@@ -316,42 +283,27 @@ export const gameService = {
   },
 
   /**
-   * Mark a game as ended (used when win is confirmed)
-   * @param {string} code - Game code
-   * @returns {Promise<void>}
+   * @param {string} gameId
    */
-  async markGameAsEnded(code) {
+  async markGameAsEnded(gameId) {
     try {
-      console.log('Marking game as ended:', code)
-      
       const { data: updatedGame, error } = await supabase
         .from('games')
         .update({ status: 'ended' })
-        .eq('code', code)
+        .eq('id', gameId)
         .select()
         .single()
-      
+
       if (error) {
-        console.error('Error marking game as ended:', error)
-        console.error('Error details:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        })
-        
-        // Check if it's an RLS policy error
         if (error.code === '42501' || error.message?.includes('row-level security') || error.message?.includes('policy')) {
           throw new Error(
             'Permission denied: Cannot update game status. This is likely an RLS policy issue.\n\n' +
             'FIX: Ensure "Hosts can update their games" RLS exists (FULL_SCHEMA_RESTORE.sql), or apply sql/archive/FIX_GAMES_UPDATE_POLICY.sql on a legacy project.'
           )
         }
-        
         throw error
       }
-      
-      console.log('Game marked as ended successfully:', updatedGame)
+
       return updatedGame
     } catch (error) {
       console.error('Mark game as ended error:', error)

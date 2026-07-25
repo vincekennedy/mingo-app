@@ -73,7 +73,7 @@ test.describe('Named theme presets', () => {
         await expect(guestPage.getByRole('button', { name: /^Join Game$/i })).toBeVisible({
           timeout: 60_000,
         })
-        await guestPage.getByPlaceholder(/Enter 5-digit code/i).fill(gameCode)
+        await guestPage.getByPlaceholder(/Enter join code/i).fill(gameCode)
         await guestPage.getByRole('button', { name: /^Join Game$/i }).click()
 
         const guestModal = guestPage.getByRole('dialog', { name: /Join game/i })

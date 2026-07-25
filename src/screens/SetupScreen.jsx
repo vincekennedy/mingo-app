@@ -5,6 +5,7 @@ import {
   GENERATION_TONE_LABELS,
   MAX_INSTRUCTIONS_LENGTH,
 } from '../lib/generationTone';
+import { isValidCustomEntryCodeOrEmpty } from '../lib/joinLink';
 
 export default function SetupScreen({
   currentUser,
@@ -14,6 +15,8 @@ export default function SetupScreen({
   onUpdateGenerationTone,
   generationInstructions,
   onUpdateGenerationInstructions,
+  customEntryCode,
+  onUpdateCustomEntryCode,
   generatingItems,
   neededItemCount,
   onGenerateItems,
@@ -108,6 +111,27 @@ export default function SetupScreen({
         </button>
         <p className="mt-2 text-xs sm:text-sm text-gray-500">
           Optional: AI fills the item list from your title, tone, and instructions. You can edit anything before creating the game.
+        </p>
+      </div>
+
+      <div className="mb-6">
+        <label htmlFor="setup-entry-code" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">
+          Entry code <span className="font-normal text-gray-500">(optional)</span>
+        </label>
+        <input
+          id="setup-entry-code"
+          type="text"
+          value={customEntryCode}
+          onChange={(e) => onUpdateCustomEntryCode(e.target.value)}
+          placeholder="Leave blank for a random 5-character code"
+          maxLength={12}
+          className="w-full p-3 border-2 border-gray-300 rounded-lg mingo-focus-brand text-sm sm:text-base font-mono uppercase tracking-wide"
+          data-testid="setup-entry-code"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          4–12 letters/numbers. Reusable after you end the game (e.g. weekly bingo).
         </p>
       </div>
 
@@ -296,7 +320,8 @@ export default function SetupScreen({
         </button>
         <button
           onClick={onCreateGame}
-          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
+          disabled={!isValidCustomEntryCodeOrEmpty(customEntryCode)}
+          className="flex-1 flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Play size={20} className="sm:w-6 sm:h-6" /> Create Game
         </button>
