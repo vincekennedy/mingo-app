@@ -20,6 +20,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 | 2026-07 | Stricter TypeScript (phase 2: `src/services`) | Implemented — auth/game/board/claims/storage/feedback/generateItems → `.ts` | Yes | Local row types (no generated Supabase schema yet) |
 | 2026-07 | Stricter TypeScript (phase 3: `src/hooks`) | Implemented — all domain hooks → `.ts`/`.tsx` + `src/types/app.ts` | Yes | Shared AppUser/Screen/ShowToast |
 | 2026-07 | Stricter TypeScript (phase 4: UI + App) | Implemented — screens, components, `App.tsx`, `main.tsx` | Yes | `src/` app code is fully TypeScript; tooling (`api/`, e2e, vite config) still JS |
+| 2026-07 | Roster board peek (participant spectator) | Implemented — click roster → read-only peer board | Yes | RLS SELECT for `is_participant_of`; no public `/watch`; self not clickable |
 
 ## How to add an entry
 
@@ -31,15 +32,15 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 
 ### Product
 
-- Spectator mode / view — join or open a game as watch-only (no personal board / no win claims). See roster, pending/confirmed wins, and optionally a host “TV” layout for a shared screen. Distinct from player join; likely a `/watch/:code` (or role on participant) so guests can observe without competing.
-- Called-items rail — host marks items as “called”; all players/spectators see a shared called list (classic bingo caller energy; separate from personal cell marks)
+- Roster board peek — **shipped** (any participant clicks roster → read-only board). Public `/watch/:code` / anonymous lobby spectators deferred (low value for party invite games). Optional later: host TV layout, live `board_states` realtime while peek modal is open.
+- Called-items rail — host marks items as “called”; all players see a shared called list (classic bingo caller energy; separate from personal cell marks)
 - Rematch / next round — same item pack + win mode, reshuffle boards, clear marks/claims without re-setup
 - Saved packs / templates — host reuses favorite item lists across games (beyond today’s duplicate-from-past-game)
 - Live reactions — lightweight emoji/burst on win confirm or host “cheer” (realtime, ephemeral; no chat spam)
 - Prize / stakes line — optional short “playing for …” on host lobby + play header
 - Dauber / stamp motion — richer mark animation + optional sound toggle (local preference)
 - Multi-board player — optional 2–3 boards per player for bigger rooms / higher chaos
-- Team mode — shared marks or shared win across a small team (heavier; park after spectator + rematch)
+- Team mode — shared marks or shared win across a small team (heavier; park after rematch)
 
 ### Engineering / moderation
 

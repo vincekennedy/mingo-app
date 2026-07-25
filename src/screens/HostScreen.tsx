@@ -3,7 +3,8 @@ import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
-import { describeWinRule, type WinConfigFields } from '../lib/winDetection';
+import ViewPlayerBoardModal from '../components/modals/ViewPlayerBoardModal';
+import { describeWinRule, type BoardCell, type WinConfigFields } from '../lib/winDetection';
 import type { GameParticipantSummary, GameVisibility } from '../services/game';
 import type { AppUser } from '../types/app';
 
@@ -23,6 +24,10 @@ type ActiveWinClaim = {
   username?: string;
 };
 
+type PeekBoardCell =
+  | BoardCell
+  | { text?: string; isFree?: boolean; imageUrl?: string | null };
+
 type HostScreenProps = {
   gameCode: string;
   gameConfig: ScreenGameConfig | null;
@@ -36,6 +41,15 @@ type HostScreenProps = {
   copied: boolean;
   linkCopied: boolean;
   currentUser: AppUser | null;
+  peekPlayer: GameParticipantSummary | null;
+  peekBoard: PeekBoardCell[] | null;
+  peekMarked: Set<number>;
+  peekBoardSize: number;
+  peekLoading: boolean;
+  peekError: string | null;
+  peekEmptyMessage: string | null;
+  onSelectPlayer: (player: GameParticipantSummary) => void;
+  onClosePlayerBoard: () => void;
   onToggleIncorrectItem: (itemIndex: number) => void;
   onRejectWin: () => void | Promise<void>;
   onConfirmWin: () => void | Promise<void>;
@@ -61,6 +75,15 @@ export default function HostScreen({
   copied,
   linkCopied,
   currentUser,
+  peekPlayer,
+  peekBoard,
+  peekMarked,
+  peekBoardSize,
+  peekLoading,
+  peekError,
+  peekEmptyMessage,
+  onSelectPlayer,
+  onClosePlayerBoard,
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
@@ -80,16 +103,33 @@ export default function HostScreen({
         gamePlayers={gamePlayers}
         confirmedWinners={confirmedWinners}
         emptyLabel="No players yet..."
+        currentUserId={currentUser?.id}
+        onSelectPlayer={onSelectPlayer}
       />
 
-      <div className="flex-1 space-y-4 sm:space-y-6">
-        <WinVerificationModal
-          pendingWinClaim={pendingWinClaim}
-          selectedIncorrectItems={selectedIncorrectItems}
-          onToggleIncorrectItem={onToggleIncorrectItem}
-          onReject={onRejectWin}
-          onConfirm={onConfirmWin}
+      {peekPlayer && (
+        <ViewPlayerBoardModal
+          playerName={peekPlayer.username}
+          board={peekBoard}
+          marked={peekMarked}
+          boardSize={peekBoardSize}
+          loading={peekLoading}
+          error={peekError}
+          emptyMessage={peekEmptyMessage}
+          onClose={onClosePlayerBoard}
         />
+      )}
+
+      <div className="flex-1 space-y-4 sm:space-y-6">
+        {!showEndGameDialog && (
+          <WinVerificationModal
+            pendingWinClaim={pendingWinClaim}
+            selectedIncorrectItems={selectedIncorrectItems}
+            onToggleIncorrectItem={onToggleIncorrectItem}
+            onReject={onRejectWin}
+            onConfirm={onConfirmWin}
+          />
+        )}
 
         {showEndGameDialog && isHost && (
           <EndGameDialog
