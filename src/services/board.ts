@@ -1,25 +1,38 @@
+import type { BoardCell } from '../lib/winDetection'
 import { supabase } from '../lib/supabase'
 
+export type BoardStatePayload = {
+  board: BoardCell[]
+  marked?: Set<number> | number[]
+  hasWon?: boolean
+}
+
+export type LoadedBoardState = {
+  board: BoardCell[]
+  marked: Set<number>
+  hasWon: boolean
+}
+
 export const boardService = {
-  /**
-   * @param {string} gameId - Game UUID
-   * @param {string} userId
-   * @param {Object} boardState
-   */
-  async saveBoardState(gameId, userId, boardState) {
+  async saveBoardState(
+    gameId: string,
+    userId: string,
+    boardState: BoardStatePayload,
+  ): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('board_states')
-        .upsert({
+      const { error } = await supabase.from('board_states').upsert(
+        {
           game_id: gameId,
           user_id: userId,
           board: boardState.board,
           marked_indices: Array.from(boardState.marked || []),
           has_won: boardState.hasWon || false,
           updated_at: new Date().toISOString(),
-        }, {
+        },
+        {
           onConflict: 'game_id,user_id',
-        })
+        },
+      )
 
       if (error) throw error
     } catch (error) {
@@ -28,11 +41,10 @@ export const boardService = {
     }
   },
 
-  /**
-   * @param {string} gameId
-   * @param {string} userId
-   */
-  async loadBoardState(gameId, userId) {
+  async loadBoardState(
+    gameId: string,
+    userId: string,
+  ): Promise<LoadedBoardState | null> {
     try {
       const { data, error } = await supabase
         .from('board_states')
@@ -48,10 +60,16 @@ export const boardService = {
         throw error
       }
 
+      const row = data as {
+        board: BoardCell[]
+        marked_indices?: number[] | null
+        has_won?: boolean | null
+      }
+
       return {
-        board: data.board,
-        marked: new Set(data.marked_indices || []),
-        hasWon: data.has_won || false,
+        board: row.board,
+        marked: new Set(row.marked_indices || []),
+        hasWon: row.has_won || false,
       }
     } catch (error) {
       console.error('Load board state error:', error)
@@ -59,14 +77,13 @@ export const boardService = {
     }
   },
 
-  /**
-   * @param {string} gameId
-   * @param {string} userId
-   * @param {Object} config
-   * @param {Array} board
-   * @param {Set} marked
-   */
-  async saveGeneratedBoard(gameId, userId, config, board, marked) {
+  async saveGeneratedBoard(
+    gameId: string,
+    userId: string,
+    _config: unknown,
+    board: BoardCell[],
+    marked: Set<number> | number[],
+  ): Promise<void> {
     try {
       await this.saveBoardState(gameId, userId, {
         board,

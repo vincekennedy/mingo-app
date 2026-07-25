@@ -1,19 +1,34 @@
 import { supabase } from '../lib/supabase'
 
-const CATEGORIES = new Set(['bug', 'feature', 'enhancement', 'account', 'other'])
+export type FeedbackCategory =
+  | 'bug'
+  | 'feature'
+  | 'enhancement'
+  | 'account'
+  | 'other'
+
+const CATEGORIES = new Set<FeedbackCategory>([
+  'bug',
+  'feature',
+  'enhancement',
+  'account',
+  'other',
+])
+
+export type FeedbackReportInput = {
+  category: string
+  email: string
+  subject: string
+  details: string
+  appVersion: string
+  screen?: string | null
+  gameCode?: string | null
+  userId?: string | null
+  userAgent?: string | null
+}
 
 /**
  * Submit an issue / feedback report (works for anon and authenticated users).
- * @param {Object} report
- * @param {string} report.category
- * @param {string} report.email
- * @param {string} report.subject
- * @param {string} report.details
- * @param {string} report.appVersion
- * @param {string} [report.screen]
- * @param {string} [report.gameCode]
- * @param {string} [report.userId]
- * @param {string} [report.userAgent]
  */
 export async function submitReport({
   category,
@@ -25,7 +40,7 @@ export async function submitReport({
   gameCode = null,
   userId = null,
   userAgent = null,
-}) {
+}: FeedbackReportInput): Promise<void> {
   const trimmed = {
     category: typeof category === 'string' ? category.trim() : '',
     email: typeof email === 'string' ? email.trim() : '',
@@ -34,7 +49,7 @@ export async function submitReport({
     appVersion: typeof appVersion === 'string' ? appVersion.trim() : '',
   }
 
-  if (!CATEGORIES.has(trimmed.category)) {
+  if (!CATEGORIES.has(trimmed.category as FeedbackCategory)) {
     throw new Error('Please choose a valid category.')
   }
   if (!trimmed.email || !trimmed.email.includes('@')) {
@@ -59,7 +74,9 @@ export async function submitReport({
     screen: screen || null,
     game_code: gameCode || null,
     user_id: userId || null,
-    user_agent: userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : null),
+    user_agent:
+      userAgent ||
+      (typeof navigator !== 'undefined' ? navigator.userAgent : null),
   }
 
   const { error } = await supabase.from('feedback_reports').insert(row)
@@ -69,10 +86,11 @@ export async function submitReport({
   }
 }
 
-export const FEEDBACK_CATEGORIES = [
-  { value: 'bug', label: 'Bug / Issue' },
-  { value: 'feature', label: 'Feature request' },
-  { value: 'enhancement', label: 'Enhancement' },
-  { value: 'account', label: 'Account / login' },
-  { value: 'other', label: 'Other' },
-]
+export const FEEDBACK_CATEGORIES: Array<{ value: FeedbackCategory; label: string }> =
+  [
+    { value: 'bug', label: 'Bug / Issue' },
+    { value: 'feature', label: 'Feature request' },
+    { value: 'enhancement', label: 'Enhancement' },
+    { value: 'account', label: 'Account / login' },
+    { value: 'other', label: 'Other' },
+  ]

@@ -1,12 +1,12 @@
 /**
  * Client helper for AI bingo item generation.
  * Calls /api/generate-items (Vercel serverless in prod; Vite middleware in local dev).
- *
- * @param {string} title
- * @param {number} count
- * @param {{ tone?: string, instructions?: string }} [options]
  */
-export async function generateItemsFromTitle(title, count, options = {}) {
+export async function generateItemsFromTitle(
+  title: string,
+  count: number,
+  options: { tone?: string; instructions?: string } = {},
+): Promise<string[]> {
   const response = await fetch('/api/generate-items', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -18,9 +18,9 @@ export async function generateItemsFromTitle(title, count, options = {}) {
     }),
   })
 
-  let data = null
+  let data: { error?: string; items?: string[] } | null = null
   try {
-    data = await response.json()
+    data = (await response.json()) as { error?: string; items?: string[] }
   } catch {
     data = null
   }

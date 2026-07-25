@@ -1,12 +1,37 @@
 import { supabase } from '../lib/supabase'
 
+export type WinClaimInput = {
+  type: string
+  indices: number[]
+  items: string[]
+}
+
+export type PendingWinClaim = {
+  id: string
+  userId: string
+  username: string
+  type: string
+  indices: number[]
+  items: string[]
+  timestamp: number
+}
+
+export type UserClaimStatus = {
+  id: string
+  status: string
+  type: string
+  indices: number[]
+  items: string[]
+  incorrectIndices: number[]
+  timestamp: number
+}
+
 export const winClaimsService = {
-  /**
-   * @param {string} gameId
-   * @param {string} userId
-   * @param {Object} claim
-   */
-  async submitClaim(gameId, userId, claim) {
+  async submitClaim(
+    gameId: string,
+    userId: string,
+    claim: WinClaimInput,
+  ): Promise<Record<string, unknown>> {
     try {
       const { data, error } = await supabase
         .from('win_claims')
@@ -22,46 +47,63 @@ export const winClaimsService = {
         .single()
 
       if (error) throw error
-      return data
+      return data as Record<string, unknown>
     } catch (error) {
       console.error('Submit claim error:', error)
       throw error
     }
   },
 
-  /**
-   * @param {string} gameId
-   */
-  async getPendingClaims(gameId) {
+  async getPendingClaims(gameId: string): Promise<PendingWinClaim[]> {
     try {
       const { data, error } = await supabase
         .from('win_claims')
-        .select(`
+        .select(
+          `
           *,
           user:users(username, display_name)
-        `)
+        `,
+        )
         .eq('game_id', gameId)
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
 
       if (error) throw error
 
-      return data.map((claim) => ({
-        id: claim.id,
-        userId: claim.user_id,
-        username: claim.user?.display_name || claim.user?.username || 'Unknown',
-        type: claim.claim_type,
-        indices: claim.claimed_indices,
-        items: claim.claimed_items,
-        timestamp: new Date(claim.created_at).getTime(),
-      }))
+      type ClaimRow = {
+        id: string
+        user_id: string
+        claim_type: string
+        claimed_indices: number[]
+        claimed_items: string[]
+        created_at: string
+        user:
+          | { username?: string; display_name?: string | null }
+          | { username?: string; display_name?: string | null }[]
+          | null
+      }
+
+      const rows = (data || []) as ClaimRow[]
+
+      return rows.map((claim) => {
+        const user = Array.isArray(claim.user) ? claim.user[0] : claim.user
+        return {
+          id: claim.id,
+          userId: claim.user_id,
+          username: user?.display_name || user?.username || 'Unknown',
+          type: claim.claim_type,
+          indices: claim.claimed_indices,
+          items: claim.claimed_items,
+          timestamp: new Date(claim.created_at).getTime(),
+        }
+      })
     } catch (error) {
       console.error('Get pending claims error:', error)
       throw error
     }
   },
 
-  async confirmClaim(claimId) {
+  async confirmClaim(claimId: string): Promise<void> {
     try {
       const { error } = await supabase
         .from('win_claims')
@@ -78,7 +120,7 @@ export const winClaimsService = {
     }
   },
 
-  async rejectClaim(claimId, incorrectIndices) {
+  async rejectClaim(claimId: string, incorrectIndices: number[]): Promise<void> {
     try {
       const { error } = await supabase
         .from('win_claims')
@@ -96,11 +138,10 @@ export const winClaimsService = {
     }
   },
 
-  /**
-   * @param {string} gameId
-   * @param {string} userId
-   */
-  async getUserClaimStatus(gameId, userId) {
+  async getUserClaimStatus(
+    gameId: string,
+    userId: string,
+  ): Promise<UserClaimStatus | null> {
     try {
       const { data, error } = await supabase
         .from('win_claims')
@@ -118,14 +159,24 @@ export const winClaimsService = {
         throw error
       }
 
+      const row = data as {
+        id: string
+        status: string
+        claim_type: string
+        claimed_indices: number[]
+        claimed_items: string[]
+        incorrect_indices?: number[] | null
+        created_at: string
+      }
+
       return {
-        id: data.id,
-        status: data.status,
-        type: data.claim_type,
-        indices: data.claimed_indices,
-        items: data.claimed_items,
-        incorrectIndices: data.incorrect_indices || [],
-        timestamp: new Date(data.created_at).getTime(),
+        id: row.id,
+        status: row.status,
+        type: row.claim_type,
+        indices: row.claimed_indices,
+        items: row.claimed_items,
+        incorrectIndices: row.incorrect_indices || [],
+        timestamp: new Date(row.created_at).getTime(),
       }
     } catch (error) {
       console.error('Get user claim status error:', error)
@@ -133,10 +184,7 @@ export const winClaimsService = {
     }
   },
 
-  /**
-   * @param {string} gameId
-   */
-  async getConfirmedWinners(gameId) {
+  async getConfirmedWinners(gameId: string): Promise<string[]> {
     try {
       const { data, error } = await supabase
         .from('win_claims')
@@ -146,18 +194,18 @@ export const winClaimsService = {
 
       if (error) throw error
 
-      return [...new Set(data.map((claim) => claim.user_id))]
+      const rows = (data || []) as Array<{ user_id: string }>
+      return [...new Set(rows.map((claim) => claim.user_id))]
     } catch (error) {
       console.error('Get confirmed winners error:', error)
       return []
     }
   },
 
-  /**
-   * @param {string[]} gameIds
-   * @returns {Promise<Object>} Map of gameId -> hasPendingWin
-   */
-  async checkPendingWinsForGames(gameIds) {
+  /** Map of gameId -> hasPendingWin */
+  async checkPendingWinsForGames(
+    gameIds: string[],
+  ): Promise<Record<string, boolean>> {
     if (!gameIds || gameIds.length === 0) return {}
 
     try {
@@ -169,9 +217,10 @@ export const winClaimsService = {
 
       if (error) throw error
 
-      const pendingMap = {}
+      const rows = (data || []) as Array<{ game_id: string }>
+      const pendingMap: Record<string, boolean> = {}
       gameIds.forEach((id) => {
-        pendingMap[id] = data.some((claim) => claim.game_id === id)
+        pendingMap[id] = rows.some((claim) => claim.game_id === id)
       })
 
       return pendingMap
