@@ -235,7 +235,9 @@ export function useGameSetup({
   };
 
   const updateGenerationInstructions = (value: string) => {
-    setGenerationInstructions(sanitizeGenerationInstructions(value));
+    setGenerationInstructions(
+      sanitizeGenerationInstructions(value, { trimEnds: false }),
+    );
   };
 
   const updateCustomEntryCode = (value: string) => {

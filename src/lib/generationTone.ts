@@ -33,9 +33,14 @@ export function resolveGenerationTone(
   return isGenerationToneId(value) ? value : DEFAULT_GENERATION_TONE
 }
 
-/** Trim, strip control chars, hard-cap length. */
+/**
+ * Strip control chars and hard-cap length.
+ * Set `trimEnds: false` while typing in a controlled input so spaces are kept;
+ * default trim is for generate/create/persist.
+ */
 export function sanitizeGenerationInstructions(
   value: string | null | undefined,
+  { trimEnds = true }: { trimEnds?: boolean } = {},
 ): string {
   if (typeof value !== 'string') return ''
   let cleaned = ''
@@ -45,5 +50,6 @@ export function sanitizeGenerationInstructions(
       cleaned += ch
     }
   }
-  return cleaned.trim().slice(0, MAX_INSTRUCTIONS_LENGTH)
+  const normalized = trimEnds ? cleaned.trim() : cleaned
+  return normalized.slice(0, MAX_INSTRUCTIONS_LENGTH)
 }
