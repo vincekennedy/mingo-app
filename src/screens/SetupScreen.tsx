@@ -291,7 +291,7 @@ export default function SetupScreen({
           </button>
         </div>
 
-        <div className="space-y-2 max-h-64 sm:max-h-96 overflow-y-auto">
+        <div className="space-y-2 max-h-[28rem] sm:max-h-[36rem] overflow-y-auto">
           {items.map((item, index) => {
             const itemValue = typeof item === 'string' ? item : (item?.text || '');
             const itemImageUrl = typeof item === 'string' ? null : (item?.imageUrl || null);
