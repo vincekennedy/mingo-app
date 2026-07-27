@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useId, useState } from 'react'
 import { MoreVertical, Trophy, Users } from 'lucide-react'
 import type { GameParticipantSummary } from '../../services/game'
+import ModeratePlayerModal from '../modals/ModeratePlayerModal'
 
 type PlayerListSidebarProps = {
   gamePlayers: GameParticipantSummary[]
@@ -26,29 +27,20 @@ export default function PlayerListSidebar({
   isHostViewer = false,
   onRemovePlayer,
 }: PlayerListSidebarProps) {
-  const [menuPlayerId, setMenuPlayerId] = useState<string | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [moderatePlayer, setModeratePlayer] = useState<GameParticipantSummary | null>(null)
+  const [moderateBusy, setModerateBusy] = useState(false)
   const listLabelId = useId()
 
-  useEffect(() => {
-    if (!menuPlayerId) return
-
-    const onPointerDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuPlayerId(null)
-      }
+  const runModerate = async (ban: boolean) => {
+    if (!moderatePlayer || !onRemovePlayer) return
+    setModerateBusy(true)
+    try {
+      await onRemovePlayer(moderatePlayer, { ban })
+      setModeratePlayer(null)
+    } finally {
+      setModerateBusy(false)
     }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuPlayerId(null)
-    }
-
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menuPlayerId])
+  }
 
   return (
     <div className="lg:w-64 flex-shrink-0">
@@ -109,7 +101,7 @@ export default function PlayerListSidebar({
               )
 
               return (
-                <li key={player.id} className="relative">
+                <li key={player.id}>
                   <div className="flex items-stretch gap-1">
                     {canPeek ? (
                       <button
@@ -125,44 +117,17 @@ export default function PlayerListSidebar({
                     )}
 
                     {canModerate && (
-                      <div className="relative flex-shrink-0" ref={menuPlayerId === player.id ? menuRef : undefined}>
-                        <button
-                          type="button"
-                          className="h-full px-2 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                          aria-label={`Moderate ${player.username}`}
-                          aria-expanded={menuPlayerId === player.id}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setMenuPlayerId((prev) => (prev === player.id ? null : player.id))
-                          }}
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-                        {menuPlayerId === player.id && (
-                          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-50"
-                              onClick={() => {
-                                setMenuPlayerId(null)
-                                void onRemovePlayer?.(player, { ban: false })
-                              }}
-                            >
-                              Remove from game
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
-                              onClick={() => {
-                                setMenuPlayerId(null)
-                                void onRemovePlayer?.(player, { ban: true })
-                              }}
-                            >
-                              Ban from this game
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        className="flex-shrink-0 rounded-lg border border-gray-200 bg-white px-2 text-gray-600 hover:bg-gray-50"
+                        aria-label={`Manage ${player.username}`}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setModeratePlayer(player)
+                        }}
+                      >
+                        <MoreVertical size={16} />
+                      </button>
                     )}
                   </div>
                 </li>
@@ -171,6 +136,18 @@ export default function PlayerListSidebar({
           </ul>
         )}
       </div>
+
+      {moderatePlayer && (
+        <ModeratePlayerModal
+          player={moderatePlayer}
+          busy={moderateBusy}
+          onClose={() => {
+            if (!moderateBusy) setModeratePlayer(null)
+          }}
+          onRemove={() => runModerate(false)}
+          onBan={() => runModerate(true)}
+        />
+      )}
     </div>
   )
 }
