@@ -147,6 +147,7 @@ export default function Mingo() {
     peekEmptyMessage,
     openPlayerBoard,
     closePlayerBoard,
+    removePlayerFromGame,
   } = useActiveGame({
     currentUser,
     screen,
@@ -568,6 +569,7 @@ export default function Mingo() {
             peekEmptyMessage={peekEmptyMessage}
             onSelectPlayer={openPlayerBoard}
             onClosePlayerBoard={closePlayerBoard}
+            onRemovePlayer={removePlayerFromGame}
             onToggleIncorrectItem={toggleIncorrectItem}
             onRejectWin={rejectWin}
             onConfirmWin={confirmWin}
@@ -616,6 +618,7 @@ export default function Mingo() {
             peekEmptyMessage={peekEmptyMessage}
             onSelectPlayer={openPlayerBoard}
             onClosePlayerBoard={closePlayerBoard}
+            onRemovePlayer={removePlayerFromGame}
             onToggleIncorrectItem={toggleIncorrectItem}
             onRejectWin={rejectWin}
             onConfirmWin={confirmWin}

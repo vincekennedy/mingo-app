@@ -131,6 +131,7 @@ export function useActiveGame({
   const winRejectedRef = useRef(false)
   const claimSubmitInFlightRef = useRef(false)
   const showEndGameDialogRef = useRef(false)
+  const wasParticipantRef = useRef(false)
 
   const applyLiveConfig = (
     config: GameConfig,
@@ -177,6 +178,7 @@ export function useActiveGame({
     setPeekEmptyMessage(null)
     claimSubmitInFlightRef.current = false
     showEndGameDialogRef.current = false
+    wasParticipantRef.current = false
   }
 
   const hydrateActiveGame = ({
@@ -288,7 +290,7 @@ export function useActiveGame({
   }
 
   const fetchGamePlayers = async (gameIdToFetch: string) => {
-    if (!gameIdToFetch) return
+    if (!gameIdToFetch) return [] as GameParticipantSummary[]
 
     try {
       const [players, winners] = await Promise.all([
@@ -298,8 +300,55 @@ export function useActiveGame({
 
       setGamePlayers(players)
       setConfirmedWinners(winners)
+
+      if (currentUser && players.some((player) => player.id === currentUser.id)) {
+        wasParticipantRef.current = true
+      }
+
+      return players
     } catch (error) {
       console.error('Error fetching game players:', error)
+      return [] as GameParticipantSummary[]
+    }
+  }
+
+  const removePlayerFromGame = async (
+    player: GameParticipantSummary,
+    { ban }: { ban: boolean },
+  ) => {
+    if (!gameId || !isHost) return
+
+    const action = ban ? 'ban' : 'remove'
+    const confirmed = window.confirm(
+      ban
+        ? `Ban ${player.username} from this game? They will not be able to rejoin.`
+        : `Remove ${player.username} from this game? They can rejoin with the code unless you ban them.`,
+    )
+    if (!confirmed) return
+
+    try {
+      await gameService.removePlayer(gameId, player.id, { ban })
+      showToast(
+        ban
+          ? `${player.username} was banned from this game.`
+          : `${player.username} was removed from this game.`,
+      )
+      if (peekPlayer?.id === player.id) {
+        setPeekPlayer(null)
+        setPeekBoard(null)
+        setPeekMarked(new Set())
+        setPeekLoading(false)
+        setPeekError(null)
+        setPeekEmptyMessage(null)
+      }
+      if (pendingWinClaim?.userId === player.id) {
+        setPendingWinClaim(null)
+        setSelectedIncorrectItems(new Set())
+      }
+      await fetchGamePlayers(gameId)
+    } catch (error) {
+      console.error(`Error trying to ${action} player:`, error)
+      showToast(`Could not ${action} ${player.username}. Please try again.`)
     }
   }
 
@@ -773,6 +822,16 @@ export function useActiveGame({
       })
     }
 
+    const leaveAfterHostRemoval = () => {
+      wasParticipantRef.current = false
+      clearActiveGame()
+      showToast('You were removed from this game by the host.')
+      setScreen('dashboard')
+      loadUserGames(currentUser.id, { showLoading: false }).catch((error) => {
+        console.error('Error reloading games after removal:', error)
+      })
+    }
+
     fetchGamePlayers(id)
     if (isHost) {
       refreshHostClaims()
@@ -781,8 +840,16 @@ export function useActiveGame({
     }
 
     const unsubscribe = subscribeGame(id, {
-      onParticipantsChange: () => {
-        fetchGamePlayers(id)
+      onParticipantsChange: async () => {
+        const players = await fetchGamePlayers(id)
+        if (
+          !isHost &&
+          currentUser &&
+          wasParticipantRef.current &&
+          !players.some((player) => player.id === currentUser.id)
+        ) {
+          leaveAfterHostRemoval()
+        }
       },
       onClaimsChange: () => {
         fetchGamePlayers(id)
@@ -995,6 +1062,7 @@ export function useActiveGame({
     peekEmptyMessage,
     openPlayerBoard,
     closePlayerBoard,
+    removePlayerFromGame,
     saveBoardState,
     loadBoardState,
     selectGame,

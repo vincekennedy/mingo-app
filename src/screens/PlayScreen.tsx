@@ -62,6 +62,10 @@ type PlayScreenProps = {
   peekEmptyMessage: string | null;
   onSelectPlayer: (player: GameParticipantSummary) => void;
   onClosePlayerBoard: () => void;
+  onRemovePlayer?: (
+    player: GameParticipantSummary,
+    options: { ban: boolean },
+  ) => void | Promise<void>;
   onToggleIncorrectItem: (itemIndex: number) => void;
   onRejectWin: () => void | Promise<void>;
   onConfirmWin: () => void | Promise<void>;
@@ -97,6 +101,7 @@ export default function PlayScreen({
   peekEmptyMessage,
   onSelectPlayer,
   onClosePlayerBoard,
+  onRemovePlayer,
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
@@ -115,6 +120,8 @@ export default function PlayScreen({
         emptyLabel="Loading players..."
         currentUserId={currentUser?.id}
         onSelectPlayer={onSelectPlayer}
+        isHostViewer={isHost}
+        onRemovePlayer={onRemovePlayer}
       />
 
       {peekPlayer && (
