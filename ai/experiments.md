@@ -49,4 +49,4 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 - Stricter TypeScript follow-ups — optional: generated Supabase `Database` types; migrate `api/` + Vite/Playwright configs; eslint typescript-eslint for `.ts`/`.tsx`; drop `allowJs` once tooling is typed
 - OR-combinable custom win patterns (“any of selected”)
 - Join approval for games (`join_policy` + pending participant + host accept/reject UI)
-- Anti-spam for public lobbies (rate-limit cell toggles / max claims per window; host-only claim confirm already exists)
+- Anti-spam for public lobbies — claim hygiene later (one pending / post-reject cooldown); **host kick/ban per game** covers offensive names / trolls (see `host_remove_player` / `game_bans`)

@@ -50,6 +50,10 @@ type HostScreenProps = {
   peekEmptyMessage: string | null;
   onSelectPlayer: (player: GameParticipantSummary) => void;
   onClosePlayerBoard: () => void;
+  onRemovePlayer?: (
+    player: GameParticipantSummary,
+    options: { ban: boolean },
+  ) => void | Promise<void>;
   onToggleIncorrectItem: (itemIndex: number) => void;
   onRejectWin: () => void | Promise<void>;
   onConfirmWin: () => void | Promise<void>;
@@ -84,6 +88,7 @@ export default function HostScreen({
   peekEmptyMessage,
   onSelectPlayer,
   onClosePlayerBoard,
+  onRemovePlayer,
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
@@ -105,6 +110,8 @@ export default function HostScreen({
         emptyLabel="No players yet..."
         currentUserId={currentUser?.id}
         onSelectPlayer={onSelectPlayer}
+        isHostViewer={isHost}
+        onRemovePlayer={onRemovePlayer}
       />
 
       {peekPlayer && (

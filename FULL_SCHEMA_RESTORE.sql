@@ -5,7 +5,7 @@
 -- Safe to re-run (uses IF NOT EXISTS / DROP POLICY IF EXISTS).
 --
 -- After running:
--- 1. Confirm tables in Table Editor: users, games, game_participants,
+-- 1. Confirm tables in Table Editor: users, games, game_participants, game_bans,
 --    board_states, win_claims
 -- 2. Confirm Storage bucket: game-images
 -- 3. Auth → URL Configuration: add your Vercel + localhost redirect URLs
@@ -52,6 +52,15 @@ CREATE TABLE IF NOT EXISTS public.game_participants (
   UNIQUE(game_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS public.game_bans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  banned_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (game_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS public.board_states (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
@@ -88,6 +97,8 @@ CREATE INDEX IF NOT EXISTS idx_games_public_lobby
   WHERE status = 'active' AND visibility = 'public';
 CREATE INDEX IF NOT EXISTS idx_participants_game ON public.game_participants(game_id);
 CREATE INDEX IF NOT EXISTS idx_participants_user ON public.game_participants(user_id);
+CREATE INDEX IF NOT EXISTS idx_game_bans_game ON public.game_bans(game_id);
+CREATE INDEX IF NOT EXISTS idx_game_bans_user ON public.game_bans(user_id);
 CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_win_claims_game ON public.win_claims(game_id);
 CREATE INDEX IF NOT EXISTS idx_win_claims_status ON public.win_claims(status) WHERE status = 'pending';
@@ -126,6 +137,7 @@ CREATE INDEX IF NOT EXISTS idx_feedback_reports_category
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.game_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_bans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.board_states ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.win_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.feedback_reports ENABLE ROW LEVEL SECURITY;
@@ -147,6 +159,11 @@ DROP POLICY IF EXISTS "Participants can read their games" ON public.game_partici
 DROP POLICY IF EXISTS "Hosts can read participants of their games" ON public.game_participants;
 DROP POLICY IF EXISTS "Participants can read fellow participants" ON public.game_participants;
 DROP POLICY IF EXISTS "Users can join games" ON public.game_participants;
+
+DROP POLICY IF EXISTS "Hosts can read bans for their games" ON public.game_bans;
+DROP POLICY IF EXISTS "Users can read own bans" ON public.game_bans;
+DROP POLICY IF EXISTS "Hosts can insert bans for their games" ON public.game_bans;
+DROP POLICY IF EXISTS "Hosts can delete bans for their games" ON public.game_bans;
 
 DROP POLICY IF EXISTS "Users can update own board" ON public.board_states;
 DROP POLICY IF EXISTS "Users can insert own board" ON public.board_states;
@@ -194,6 +211,59 @@ $$;
 
 REVOKE ALL ON FUNCTION public.is_participant_of(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_participant_of(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.host_remove_player(
+  p_game_id uuid,
+  p_user_id uuid,
+  p_ban boolean DEFAULT false
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.games g
+    WHERE g.id = p_game_id AND g.host_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'not authorized';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.games g
+    WHERE g.id = p_game_id AND g.host_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'cannot remove the host';
+  END IF;
+
+  IF p_ban THEN
+    INSERT INTO public.game_bans (game_id, user_id, banned_by)
+    VALUES (p_game_id, p_user_id, auth.uid())
+    ON CONFLICT (game_id, user_id) DO NOTHING;
+  END IF;
+
+  DELETE FROM public.win_claims
+  WHERE game_id = p_game_id
+    AND user_id = p_user_id
+    AND status = 'pending';
+
+  DELETE FROM public.board_states
+  WHERE game_id = p_game_id
+    AND user_id = p_user_id;
+
+  DELETE FROM public.game_participants
+  WHERE game_id = p_game_id
+    AND user_id = p_user_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.host_remove_player(uuid, uuid, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.host_remove_player(uuid, uuid, boolean) TO authenticated;
 
 -- Load any active game by exact code (private join path before participant row exists).
 CREATE OR REPLACE FUNCTION public.get_active_game_by_code(p_code text)
@@ -299,7 +369,50 @@ CREATE POLICY "Participants can read fellow participants"
   USING (public.is_participant_of(game_id));
 
 CREATE POLICY "Users can join games" ON public.game_participants
-  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = user_id
+    AND NOT EXISTS (
+      SELECT 1 FROM public.game_bans b
+      WHERE b.game_id = game_participants.game_id
+        AND b.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Hosts can read bans for their games" ON public.game_bans
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = game_bans.game_id
+        AND g.host_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can read own bans" ON public.game_bans
+  FOR SELECT TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Hosts can insert bans for their games" ON public.game_bans
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = banned_by
+    AND EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = game_bans.game_id
+        AND g.host_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Hosts can delete bans for their games" ON public.game_bans
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = game_bans.game_id
+        AND g.host_id = auth.uid()
+    )
+  );
 
 -- -----------------------------------------------------------------------------
 -- RLS: board_states
@@ -658,7 +771,7 @@ END $$;
 SELECT 'tables' AS check_type, tablename
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename IN ('users', 'games', 'game_participants', 'board_states', 'win_claims', 'feedback_reports')
+  AND tablename IN ('users', 'games', 'game_participants', 'game_bans', 'board_states', 'win_claims', 'feedback_reports')
 ORDER BY tablename;
 
 SELECT 'trigger' AS check_type, trigger_name, event_object_table

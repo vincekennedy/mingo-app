@@ -173,10 +173,51 @@ export const gameService = {
     }
   },
 
+  /** Remove a player from a game. Optionally ban them from rejoining this game. */
+  async removePlayer(
+    gameId: string,
+    userId: string,
+    { ban = false }: { ban?: boolean } = {},
+  ): Promise<void> {
+    try {
+      const { error } = await supabase.rpc('host_remove_player', {
+        p_game_id: gameId,
+        p_user_id: userId,
+        p_ban: ban,
+      })
+      if (error) throw error
+    } catch (error) {
+      console.error('Remove player error:', error)
+      throw error
+    }
+  },
+
+  /** True if this user is banned from the game. */
+  async isUserBanned(gameId: string, userId: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('game_bans')
+        .select('id')
+        .eq('game_id', gameId)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (error) throw error
+      return Boolean(data)
+    } catch (error) {
+      console.error('Check ban error:', error)
+      return false
+    }
+  },
+
   /** Join a game by code */
   async joinGame(code: string, userId: string): Promise<GameRow> {
     try {
       const game = await this.getGame(code)
+
+      if (await this.isUserBanned(game.id, userId)) {
+        throw new Error('You were banned from this game by the host.')
+      }
 
       const { data: existingParticipant } = await supabase
         .from('game_participants')
@@ -198,6 +239,13 @@ export const gameService = {
       if (error) {
         if (error.code === '23505') {
           return game
+        }
+        // RLS rejection when banned (policy WITH CHECK)
+        if (
+          error.code === '42501' ||
+          /policy|permission|row-level/i.test(error.message || '')
+        ) {
+          throw new Error('You were banned from this game by the host.')
         }
         throw error
       }
