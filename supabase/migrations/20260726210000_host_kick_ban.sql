@@ -1,8 +1,9 @@
 -- Host can remove (kick) players and optionally ban them from rejoining this game.
 -- Especially important for public lobbies (offensive display names, trolls).
+-- Use gen_random_uuid() (pgcrypto) so migrations succeed when uuid-ossp is not on search_path
 
 CREATE TABLE IF NOT EXISTS public.game_bans (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   banned_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
