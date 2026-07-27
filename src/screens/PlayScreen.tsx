@@ -141,38 +141,9 @@ export default function PlayScreen({
           />
         )}
 
-        {gameCode && (
-          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
-            <div className="text-center mb-2">
-              <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
-              <p className="text-xl sm:text-2xl font-bold font-mono mingo-text-brand">{gameCode}</p>
-              <div className="mt-2 flex justify-center">
-                <VisibilityBadge visibility={gameVisibility} />
-              </div>
-              <p className="mt-2 text-xs sm:text-sm mingo-text-brand-strong font-medium">{winRule}</p>
-            </div>
-
-            {isHost && (
-              <div className="mt-3 space-y-2">
-                <button
-                  type="button"
-                  onClick={onCopyJoinLink}
-                  className="w-full px-4 py-2.5 mingo-btn-primary text-sm font-bold rounded-lg transition flex items-center justify-center gap-2"
-                  data-testid="share-invite-link"
-                >
-                  {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
-                  {linkCopied ? 'Invite link copied!' : 'Share invite link'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenPrintableQr}
-                  className="w-full px-4 py-2 mingo-btn-brand text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
-                  data-testid="open-printable-qr"
-                >
-                  <Printer size={16} /> Printable QR flyer
-                </button>
-              </div>
-            )}
+        {gameConfig?.title && (
+          <div className="text-center mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">{gameConfig.title}</h2>
           </div>
         )}
 
@@ -199,12 +170,6 @@ export default function PlayScreen({
             <Trophy size={40} className="sm:w-12 sm:h-12 mx-auto mb-2" />
             <h2 className="text-2xl sm:text-3xl font-bold">BINGO! 🎉</h2>
             <p className="text-base sm:text-lg">You won! Win confirmed!</p>
-          </div>
-        )}
-
-        {gameConfig?.title && (
-          <div className="text-center mb-4">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">{gameConfig.title}</h2>
           </div>
         )}
 
@@ -248,6 +213,41 @@ export default function PlayScreen({
             })}
           </div>
         </div>
+
+        {gameCode && (
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-4">
+            <div className="text-center mb-2">
+              <p className="text-xs sm:text-sm text-gray-600 mb-1">Game Code</p>
+              <p className="text-xl sm:text-2xl font-bold font-mono mingo-text-brand">{gameCode}</p>
+              <div className="mt-2 flex justify-center">
+                <VisibilityBadge visibility={gameVisibility} />
+              </div>
+              <p className="mt-2 text-xs sm:text-sm mingo-text-brand-strong font-medium">{winRule}</p>
+            </div>
+
+            {isHost && (
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={onCopyJoinLink}
+                  className="w-full px-4 py-2.5 mingo-btn-primary text-sm font-bold rounded-lg transition flex items-center justify-center gap-2"
+                  data-testid="share-invite-link"
+                >
+                  {linkCopied ? <Check size={16} /> : <Link2 size={16} />}
+                  {linkCopied ? 'Invite link copied!' : 'Share invite link'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenPrintableQr}
+                  className="w-full px-4 py-2 mingo-btn-brand text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
+                  data-testid="open-printable-qr"
+                >
+                  <Printer size={16} /> Printable QR flyer
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col sm:gap-4 sm:flex-row gap-3">
           <button
