@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Home, Link2, Printer, RotateCcw, Trophy, X } from 'lucide-react';
+import { AlertCircle, Check, Link2, Printer, RotateCcw, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
 import WinVerificationModal from '../components/modals/WinVerificationModal';
@@ -172,15 +172,6 @@ export default function PlayScreen({
                   <Printer size={16} /> Printable QR flyer
                 </button>
               </div>
-            )}
-
-            {currentUser && (
-              <button
-                onClick={onResetToHome}
-                className="w-full mt-2 px-4 py-2 mingo-btn-brand text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <Home size={16} /> Back to Dashboard
-              </button>
             )}
           </div>
         )}
