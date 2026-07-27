@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.game_participants (
 );
 
 CREATE TABLE IF NOT EXISTS public.game_bans (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   banned_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
