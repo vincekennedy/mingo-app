@@ -1,0 +1,116 @@
+import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
+import { LogIn, UserPlus, Users } from 'lucide-react';
+import ThemeSwatchPicker from '../components/chrome/ThemeSwatchPicker';
+import PublicLobby from '../components/game/PublicLobby';
+import type { ThemeId } from '../lib/theme';
+import type { AppUser } from '../types/app';
+
+type HomeScreenProps = {
+  currentUser: AppUser | null;
+  joinCode: string;
+  setJoinCode: Dispatch<SetStateAction<string>>;
+  userTheme: ThemeId;
+  onUpdateUserTheme: (value: string | null | undefined) => void;
+  onOpenDashboard: () => void;
+  onLogin: () => void;
+  onRegister: () => void;
+  onJoinGame: () => void | Promise<void>;
+  onJoinPublicGame?: () => void | Promise<void>;
+};
+
+export default function HomeScreen({
+  currentUser,
+  joinCode,
+  setJoinCode,
+  userTheme,
+  onUpdateUserTheme,
+  onOpenDashboard,
+  onLogin,
+  onRegister,
+  onJoinGame,
+  onJoinPublicGame,
+}: HomeScreenProps) {
+  return (
+    <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-8 space-y-4">
+      <div className="pb-2 border-b border-gray-200">
+        <ThemeSwatchPicker
+          value={userTheme}
+          onChange={onUpdateUserTheme}
+          label="Your theme"
+          idPrefix="home-theme"
+        />
+        <p className="mt-2 text-xs sm:text-sm text-gray-500">
+          Applies on this device outside of a game. Hosts can still pick a different look per game.
+        </p>
+      </div>
+
+      {currentUser ? (
+        <>
+          <div className="text-center mb-4">
+            <p className="text-gray-600 mb-2">Logged in as: <span className="font-bold mingo-text-brand">{currentUser.username}</span></p>
+            <button
+              onClick={onOpenDashboard}
+              className="mingo-link-brand font-semibold text-sm"
+            >
+              Go to Dashboard →
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="text-center mb-4">
+            <p className="text-gray-600 mb-4">Sign in to save your games and play multiple boards</p>
+          </div>
+          <button
+            onClick={onLogin}
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-primary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
+          >
+            <LogIn size={20} /> Login
+          </button>
+          <button
+            onClick={onRegister}
+            className="w-full flex items-center justify-center gap-2 px-6 py-3 sm:py-4 mingo-btn-secondary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
+          >
+            <UserPlus size={20} /> Create Account
+          </button>
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-white text-gray-500">or continue as guest</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="pt-2 border-t border-gray-200">
+        <PublicLobby onJoinGame={onJoinPublicGame || onJoinGame} />
+      </div>
+
+      <div className="space-y-3 pt-2 border-t border-gray-200">
+        <label className="block text-gray-700 font-semibold text-sm sm:text-base">
+          Join Existing Game
+        </label>
+        <p className="text-xs sm:text-sm text-gray-500">
+          Enter a code, or open a shared join link / QR from the host.
+        </p>
+        <input
+          type="text"
+          value={joinCode}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => setJoinCode(e.target.value.toUpperCase())}
+          placeholder="Enter join code"
+          maxLength={12}
+          className="w-full p-3 sm:p-4 border-2 border-gray-300 rounded-lg mingo-focus-brand text-center text-xl sm:text-2xl font-mono uppercase"
+          data-testid="join-code-input"
+        />
+        <button
+          onClick={() => onJoinGame()}
+          className="w-full flex items-center justify-center gap-3 px-6 py-3 sm:py-4 mingo-btn-secondary font-bold text-base sm:text-lg rounded-xl transition shadow-lg"
+        >
+          <Users size={20} className="sm:w-6 sm:h-6" /> Join Game
+        </button>
+      </div>
+    </div>
+  );
+}
