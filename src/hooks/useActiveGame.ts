@@ -319,12 +319,6 @@ export function useActiveGame({
     if (!gameId || !isHost) return
 
     const action = ban ? 'ban' : 'remove'
-    const confirmed = window.confirm(
-      ban
-        ? `Ban ${player.username} from this game? They will not be able to rejoin.`
-        : `Remove ${player.username} from this game? They can rejoin with the code unless you ban them.`,
-    )
-    if (!confirmed) return
 
     try {
       await gameService.removePlayer(gameId, player.id, { ban })
@@ -349,6 +343,7 @@ export function useActiveGame({
     } catch (error) {
       console.error(`Error trying to ${action} player:`, error)
       showToast(`Could not ${action} ${player.username}. Please try again.`)
+      throw error
     }
   }
 
