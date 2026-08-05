@@ -75,7 +75,8 @@ INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES
  ('20260721210000','games_visibility'),('20260722010000','smoke_test_data_cleanup'),
  ('20260725150000','games_uuid_custom_codes'),
  ('20260725200000','board_states_participant_read'),
- ('20260726210000','host_kick_ban') ON CONFLICT (version) DO NOTHING;
+ ('20260726210000','host_kick_ban'),
+ ('20260805150000','board_cell_proofs') ON CONFLICT (version) DO NOTHING;
 SQL
 ```
 

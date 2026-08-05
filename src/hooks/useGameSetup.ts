@@ -95,6 +95,7 @@ export function useGameSetup({
   const [useFreeSpace, setUseFreeSpace] = useState(true);
   const [winMode, setWinMode] = useState<WinMode>('standard');
   const [linesToWin, setLinesToWin] = useState(1);
+  const [photoProof, setPhotoProof] = useState(false);
   const [gameVisibility, setGameVisibility] = useState<GameVisibility>('private');
   const [gameTitle, setGameTitle] = useState('');
   const [generationTone, setGenerationTone] = useState<GenerationToneId>(DEFAULT_GENERATION_TONE);
@@ -226,6 +227,10 @@ export function useGameSetup({
     setLinesToWin(value);
   };
 
+  const updatePhotoProof = (enabled: boolean) => {
+    setPhotoProof(Boolean(enabled));
+  };
+
   const updateGameVisibility = (value: string) => {
     setGameVisibility(value === 'public' ? 'public' : 'private');
   };
@@ -250,6 +255,7 @@ export function useGameSetup({
     setUseFreeSpace(true);
     setWinMode('standard');
     setLinesToWin(1);
+    setPhotoProof(false);
     setGameVisibility('private');
     setGameTitle('');
     setGenerationTone(DEFAULT_GENERATION_TONE);
@@ -260,6 +266,7 @@ export function useGameSetup({
   const startNewSetup = () => {
     setWinMode('standard');
     setLinesToWin(1);
+    setPhotoProof(false);
     setGameVisibility('private');
     resetGameThemeToUser();
     setGenerationTone(DEFAULT_GENERATION_TONE);
@@ -283,6 +290,7 @@ export function useGameSetup({
     setUseFreeSpace(free);
     setWinMode(rules.winMode);
     setLinesToWin(rules.linesToWin);
+    setPhotoProof(config.photoProof === true);
     setGameVisibility(game.visibility === 'public' ? 'public' : 'private');
     applyThemeFromConfig(config);
     setGenerationTone(resolveGenerationTone(config.generationTone));
@@ -367,6 +375,7 @@ export function useGameSetup({
       title: gameTitle.trim() || null,
       winMode,
       linesToWin: winMode === 'standard' ? linesToWin : 1,
+      photoProof,
       theme: resolveTheme(gameTheme),
       generationTone: resolveGenerationTone(generationTone),
       generationInstructions: sanitizeGenerationInstructions(generationInstructions) || null,
@@ -406,6 +415,7 @@ export function useGameSetup({
     useFreeSpace,
     winMode,
     linesToWin,
+    photoProof,
     gameVisibility,
     gameTitle,
     setGameTitle,
@@ -425,6 +435,7 @@ export function useGameSetup({
     updateFreeSpace,
     updateWinMode,
     updateLinesToWin,
+    updatePhotoProof,
     updateGameVisibility,
     updateGenerationTone,
     updateGenerationInstructions,

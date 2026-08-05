@@ -1,7 +1,10 @@
-import { AlertCircle, Check, Link2, Printer, RotateCcw, Trophy, X } from 'lucide-react';
+import { AlertCircle, Camera, Check, Link2, Printer, RotateCcw, Trophy, X } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
-import WinVerificationModal from '../components/modals/WinVerificationModal';
+import CaptureProofModal from '../components/modals/CaptureProofModal';
+import WinVerificationModal, {
+  type ClaimProofThumb,
+} from '../components/modals/WinVerificationModal';
 import ViewPlayerBoardModal from '../components/modals/ViewPlayerBoardModal';
 import { describeWinRule, type BoardCell, type WinConfigFields } from '../lib/winDetection';
 import type { GameParticipantSummary, GameVisibility } from '../services/game';
@@ -11,6 +14,7 @@ type ScreenGameConfig = WinConfigFields & {
   title?: string;
   boardSize?: number;
   useFreeSpace?: boolean;
+  photoProof?: boolean;
 };
 
 /** Board cell in active play (object form may include imageUrl). */
@@ -73,6 +77,18 @@ type PlayScreenProps = {
   onToggleCell: (index: number) => void;
   onCopyJoinLink: () => void;
   onOpenPrintableQr: () => void;
+  photoProofMode?: boolean;
+  claimProofs?: ClaimProofThumb[];
+  photoApprovedItems?: Set<number>;
+  proofsLoading?: boolean;
+  onPhotoApprove?: (itemIndex: number) => void;
+  onPhotoDeny?: (itemIndex: number) => void;
+  myProofUrls?: Record<number, string>;
+  proofCaptureIndex?: number | null;
+  proofCaptureBusy?: boolean;
+  proofCaptureError?: string | null;
+  onCancelProofCapture?: () => void;
+  onSubmitProofCapture?: (file: File) => void | Promise<void>;
 };
 
 export default function PlayScreen({
@@ -109,8 +125,24 @@ export default function PlayScreen({
   onToggleCell,
   onCopyJoinLink,
   onOpenPrintableQr,
+  photoProofMode = false,
+  claimProofs = [],
+  photoApprovedItems = new Set(),
+  proofsLoading = false,
+  onPhotoApprove,
+  onPhotoDeny,
+  myProofUrls = {},
+  proofCaptureIndex = null,
+  proofCaptureBusy = false,
+  proofCaptureError = null,
+  onCancelProofCapture,
+  onSubmitProofCapture,
 }: PlayScreenProps) {
   const winRule = describeWinRule(gameConfig);
+  const capturePrompt =
+    proofCaptureIndex !== null && board[proofCaptureIndex] !== undefined
+      ? normalizePlayCell(board[proofCaptureIndex]!).text || 'This square'
+      : '';
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
@@ -137,6 +169,16 @@ export default function PlayScreen({
         />
       )}
 
+      {proofCaptureIndex !== null && onCancelProofCapture && onSubmitProofCapture && (
+        <CaptureProofModal
+          promptText={capturePrompt}
+          busy={proofCaptureBusy}
+          error={proofCaptureError}
+          onCancel={onCancelProofCapture}
+          onFile={onSubmitProofCapture}
+        />
+      )}
+
       <div className="flex-1 space-y-4 sm:space-y-6">
         {isHost && (
           <WinVerificationModal
@@ -145,6 +187,12 @@ export default function PlayScreen({
             onToggleIncorrectItem={onToggleIncorrectItem}
             onReject={onRejectWin}
             onConfirm={onConfirmWin}
+            photoProofMode={photoProofMode}
+            claimProofs={claimProofs}
+            photoApprovedItems={photoApprovedItems}
+            onPhotoApprove={onPhotoApprove}
+            onPhotoDeny={onPhotoDeny}
+            proofsLoading={proofsLoading}
           />
         )}
 
@@ -152,6 +200,12 @@ export default function PlayScreen({
           <div className="text-center mb-4">
             <h2 className="text-3xl sm:text-4xl font-bold text-white drop-shadow-lg">{gameConfig.title}</h2>
           </div>
+        )}
+
+        {photoProofMode && !pendingWinClaim && !hasWon && (
+          <p className="text-center text-sm text-white/90 drop-shadow">
+            Photo proof on — tap a square to attach a photo and mark it.
+          </p>
         )}
 
         {pendingWinClaim && !winConfirmed && !winRejected && (
@@ -191,13 +245,15 @@ export default function PlayScreen({
           >
             {board.map((cell, index) => {
               const { text, isFree, imageUrl } = normalizePlayCell(cell);
+              const proofUrl = myProofUrls[index];
+              const showThumb = proofUrl || imageUrl;
 
               return (
                 <button
                   key={index}
                   onClick={() => onToggleCell(index)}
                   className={`
-                  mingo-board-cell w-full p-1 sm:p-2 rounded-lg font-semibold flex items-center justify-center text-center transition-all
+                  mingo-board-cell relative w-full p-1 sm:p-2 rounded-lg font-semibold flex items-center justify-center text-center transition-all overflow-hidden
                   ${isFree
                     ? 'mingo-cell-free text-gray-900 cursor-default'
                     : marked.has(index)
@@ -206,14 +262,19 @@ export default function PlayScreen({
                   }
                 `}
                 >
-                  {imageUrl ? (
+                  {showThumb ? (
                     <img
-                      src={imageUrl}
+                      src={proofUrl || imageUrl || ''}
                       alt={text || 'Bingo item'}
                       className="w-full h-full object-cover rounded"
                     />
                   ) : (
                     <span className="mingo-board-cell-text">{text}</span>
+                  )}
+                  {photoProofMode && marked.has(index) && !isFree && proofUrl && (
+                    <span className="absolute bottom-1 right-1 rounded-full bg-black/55 p-0.5 text-white">
+                      <Camera size={12} />
+                    </span>
                   )}
                 </button>
               );

@@ -119,6 +119,13 @@ export default function Mingo() {
     winConfirmed,
     winRejected,
     selectedIncorrectItems,
+    photoApprovedItems,
+    claimProofs,
+    claimProofsLoading,
+    proofCaptureIndex,
+    proofCaptureBusy,
+    proofCaptureError,
+    myProofUrls,
     showEndGameDialog,
     gamePlayers,
     confirmedWinners,
@@ -134,7 +141,11 @@ export default function Mingo() {
     handleContinueAfterWin,
     rejectWin,
     toggleIncorrectItem,
+    photoApproveItem,
+    photoDenyItem,
     toggleCell,
+    cancelProofCapture,
+    submitProofCapture,
     endGame,
     clearActiveGame,
     onGameCreated,
@@ -204,6 +215,7 @@ export default function Mingo() {
     useFreeSpace,
     winMode,
     linesToWin,
+    photoProof,
     gameVisibility: setupVisibility,
     gameTitle,
     setGameTitle,
@@ -223,6 +235,7 @@ export default function Mingo() {
     updateFreeSpace,
     updateWinMode,
     updateLinesToWin,
+    updatePhotoProof,
     updateGameVisibility,
     updateGenerationTone,
     updateGenerationInstructions,
@@ -525,6 +538,8 @@ export default function Mingo() {
             onUpdateWinMode={updateWinMode}
             linesToWin={linesToWin}
             onUpdateLinesToWin={updateLinesToWin}
+            photoProof={photoProof}
+            onUpdatePhotoProof={updatePhotoProof}
             gameVisibility={setupVisibility}
             onUpdateGameVisibility={updateGameVisibility}
             gameTheme={gameTheme}
@@ -555,6 +570,12 @@ export default function Mingo() {
             confirmedWinners={confirmedWinners}
             pendingWinClaim={pendingWinClaim}
             selectedIncorrectItems={selectedIncorrectItems}
+            photoProofMode={Boolean(gameConfig && (gameConfig as { photoProof?: boolean }).photoProof)}
+            claimProofs={claimProofs}
+            photoApprovedItems={photoApprovedItems}
+            proofsLoading={claimProofsLoading}
+            onPhotoApprove={photoApproveItem}
+            onPhotoDeny={photoDenyItem}
             showEndGameDialog={showEndGameDialog}
             isHost={isHost}
             copied={copied}
@@ -601,6 +622,12 @@ export default function Mingo() {
             isHost={isHost}
             pendingWinClaim={pendingWinClaim}
             selectedIncorrectItems={selectedIncorrectItems}
+            photoProofMode={Boolean(gameConfig && (gameConfig as { photoProof?: boolean }).photoProof)}
+            claimProofs={claimProofs}
+            photoApprovedItems={photoApprovedItems}
+            proofsLoading={claimProofsLoading}
+            onPhotoApprove={photoApproveItem}
+            onPhotoDeny={photoDenyItem}
             winConfirmed={winConfirmed}
             winRejected={winRejected}
             hasWon={hasWon}
@@ -626,6 +653,12 @@ export default function Mingo() {
             onToggleCell={toggleCell}
             onCopyJoinLink={copyJoinLink}
             onOpenPrintableQr={openPrintableQr}
+            myProofUrls={myProofUrls}
+            proofCaptureIndex={proofCaptureIndex}
+            proofCaptureBusy={proofCaptureBusy}
+            proofCaptureError={proofCaptureError}
+            onCancelProofCapture={cancelProofCapture}
+            onSubmitProofCapture={submitProofCapture}
           />
         )}
       </div>
