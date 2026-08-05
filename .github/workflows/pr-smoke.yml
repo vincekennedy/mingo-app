@@ -3,6 +3,10 @@ name: PR Smoke Tests
 # Playwright smoke on PRs into develop: landing + /api + lifecycle.
 # Broader specs (e.g. win modes) run locally before push and on master merge.
 # Requires mingo-local secrets (anon key + dedicated smoke host). Not for production.
+#
+# Dependabot-triggered workflows do not receive Actions secrets, so smoke is
+# skipped for dependabot[bot] (lint/typecheck still run). See:
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions
 
 on:
   pull_request:
@@ -22,23 +26,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Skip smoke when Actions secrets are unavailable
+        id: gate
+        run: |
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Skipping Playwright smoke for Dependabot: Actions secrets are not available to Dependabot-triggered workflows."
+            echo "Lint/typecheck still gate the PR. Full smoke runs on non-Dependabot PRs and on master e2e."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
 
       - name: Set up Node
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
 
       - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
         run: npm ci
 
       - name: Install Playwright Chromium
+        if: steps.gate.outputs.skip != 'true'
         run: npx playwright install chromium --with-deps
 
       # Anon key is a public client credential — accept Actions secret OR variable.
       # Presence lines never print values (only true/false).
       - name: Require mingo-local smoke secrets
+        if: steps.gate.outputs.skip != 'true'
         env:
           SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
           SMOKE_HOST_EMAIL: ${{ secrets.SMOKE_HOST_EMAIL }}
@@ -64,6 +84,7 @@ jobs:
           [ "$ok" = 1 ] || exit 1
 
       - name: Configure Vite env for smoke
+        if: steps.gate.outputs.skip != 'true'
         env:
           SECRET_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           SECRET_ANON: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
@@ -76,6 +97,7 @@ jobs:
           fi
 
       - name: Run Playwright smoke
+        if: steps.gate.outputs.skip != 'true'
         run: npm run test:e2e:smoke
         env:
           CI: true
@@ -83,7 +105,7 @@ jobs:
           SMOKE_HOST_PASSWORD: ${{ secrets.SMOKE_HOST_PASSWORD }}
 
       - name: Upload Playwright report on failure
-        if: failure()
+        if: failure() && steps.gate.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
