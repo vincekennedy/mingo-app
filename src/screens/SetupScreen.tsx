@@ -36,6 +36,8 @@ type SetupScreenProps = {
   onUpdateWinMode: (mode: string) => void;
   linesToWin: number;
   onUpdateLinesToWin: (n: number | string) => void;
+  photoProof: boolean;
+  onUpdatePhotoProof: (enabled: boolean) => void;
   gameVisibility: GameVisibility;
   onUpdateGameVisibility: (value: string) => void;
   gameTheme: ThemeId;
@@ -71,6 +73,8 @@ export default function SetupScreen({
   onUpdateWinMode,
   linesToWin,
   onUpdateLinesToWin,
+  photoProof,
+  onUpdatePhotoProof,
   gameVisibility,
   onUpdateGameVisibility,
   gameTheme,
@@ -244,6 +248,24 @@ export default function SetupScreen({
           </select>
         </div>
       )}
+
+      <div className="mb-6">
+        <label className="flex items-start gap-2 text-gray-700 font-semibold text-sm sm:text-base">
+          <input
+            type="checkbox"
+            checked={photoProof}
+            onChange={(e) => onUpdatePhotoProof(e.target.checked)}
+            className="mt-1 w-4 h-4 sm:w-5 sm:h-5"
+          />
+          <span>
+            Photo proof (scavenger hunt)
+            <span className="mt-1 block text-xs sm:text-sm font-normal text-gray-500">
+              Players must attach a photo to mark each square. You review photos when someone
+              claims bingo.
+            </span>
+          </span>
+        </label>
+      </div>
 
       <div className="mb-6">
         <label htmlFor="setup-visibility" className="block text-gray-700 font-semibold mb-2 text-sm sm:text-base">

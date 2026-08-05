@@ -41,6 +41,7 @@ Log trials, tool evaluations, and discarded approaches so future sessions don’
 - Dauber / stamp motion — richer mark animation + optional sound toggle (local preference)
 - Multi-board player — optional 2–3 boards per player for bigger rooms / higher chaos
 - Team mode — shared marks or shared win across a small team (heavier; park after rematch)
+- Photo proof / scavenger mark — **shipped in progress on `feature/photo-proof`** (opt-in `config.photoProof`, compressed private `cell-proofs`, host per-photo review, end-game + 7-day purge)
 
 ### Engineering / moderation
 

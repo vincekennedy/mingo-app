@@ -85,6 +85,19 @@ CREATE TABLE IF NOT EXISTS public.win_claims (
   resolved_at TIMESTAMP WITH TIME ZONE
 );
 
+CREATE TABLE IF NOT EXISTS public.board_cell_proofs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  cell_index INTEGER NOT NULL CHECK (cell_index >= 0),
+  storage_path TEXT NOT NULL,
+  mime_type TEXT NOT NULL DEFAULT 'image/jpeg',
+  byte_size INTEGER NOT NULL DEFAULT 0 CHECK (byte_size >= 0),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (game_id, user_id, cell_index)
+);
+
 -- -----------------------------------------------------------------------------
 -- Indexes
 -- -----------------------------------------------------------------------------
@@ -102,6 +115,9 @@ CREATE INDEX IF NOT EXISTS idx_game_bans_user ON public.game_bans(user_id);
 CREATE INDEX IF NOT EXISTS idx_board_states_game_user ON public.board_states(game_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_win_claims_game ON public.win_claims(game_id);
 CREATE INDEX IF NOT EXISTS idx_win_claims_status ON public.win_claims(status) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_board_cell_proofs_game ON public.board_cell_proofs(game_id);
+CREATE INDEX IF NOT EXISTS idx_board_cell_proofs_user_game
+  ON public.board_cell_proofs(game_id, user_id);
 
 -- Feedback / issue reports (unauthenticated submit allowed via RLS INSERT)
 CREATE TABLE IF NOT EXISTS public.feedback_reports (
@@ -251,6 +267,10 @@ BEGIN
   WHERE game_id = p_game_id
     AND user_id = p_user_id
     AND status = 'pending';
+
+  DELETE FROM public.board_cell_proofs
+  WHERE game_id = p_game_id
+    AND user_id = p_user_id;
 
   DELETE FROM public.board_states
   WHERE game_id = p_game_id
@@ -462,6 +482,49 @@ CREATE POLICY "Hosts can update claims" ON public.win_claims
   );
 
 -- -----------------------------------------------------------------------------
+-- RLS: board_cell_proofs (photo-proof scavenger marks)
+-- -----------------------------------------------------------------------------
+ALTER TABLE public.board_cell_proofs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Participants can read cell proofs" ON public.board_cell_proofs
+  FOR SELECT TO authenticated
+  USING (
+    auth.uid() = user_id
+    OR public.is_participant_of(game_id)
+    OR EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = board_cell_proofs.game_id
+        AND g.host_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert own cell proofs" ON public.board_cell_proofs
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = user_id
+    AND public.is_participant_of(game_id)
+  );
+
+CREATE POLICY "Users can update own cell proofs" ON public.board_cell_proofs
+  FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own cell proofs" ON public.board_cell_proofs
+  FOR DELETE TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Hosts can delete game cell proofs" ON public.board_cell_proofs
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = board_cell_proofs.game_id
+        AND g.host_id = auth.uid()
+    )
+  );
+
+-- -----------------------------------------------------------------------------
 -- RLS: feedback_reports (insert-only for clients)
 -- -----------------------------------------------------------------------------
 CREATE POLICY "Anyone can submit feedback" ON public.feedback_reports
@@ -542,6 +605,73 @@ CREATE POLICY "Users can delete own game images" ON storage.objects
   USING (
     bucket_id = 'game-images'
     AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'cell-proofs',
+  'cell-proofs',
+  false,
+  1048576,
+  ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Participants can read cell proof objects" ON storage.objects;
+DROP POLICY IF EXISTS "Players can upload own cell proof objects" ON storage.objects;
+DROP POLICY IF EXISTS "Players can update own cell proof objects" ON storage.objects;
+DROP POLICY IF EXISTS "Players can delete own cell proof objects" ON storage.objects;
+DROP POLICY IF EXISTS "Hosts can delete cell proof objects" ON storage.objects;
+
+CREATE POLICY "Participants can read cell proof objects" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'cell-proofs'
+    AND (
+      public.is_participant_of(((storage.foldername(name))[1])::uuid)
+      OR EXISTS (
+        SELECT 1 FROM public.games g
+        WHERE g.id = ((storage.foldername(name))[1])::uuid
+          AND g.host_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Players can upload own cell proof objects" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'cell-proofs'
+    AND (storage.foldername(name))[2] = auth.uid()::text
+    AND public.is_participant_of(((storage.foldername(name))[1])::uuid)
+  );
+
+CREATE POLICY "Players can update own cell proof objects" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'cell-proofs'
+    AND (storage.foldername(name))[2] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'cell-proofs'
+    AND (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+CREATE POLICY "Players can delete own cell proof objects" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'cell-proofs'
+    AND (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+CREATE POLICY "Hosts can delete cell proof objects" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'cell-proofs'
+    AND EXISTS (
+      SELECT 1 FROM public.games g
+      WHERE g.id = ((storage.foldername(name))[1])::uuid
+        AND g.host_id = auth.uid()
+    )
   );
 
 -- -----------------------------------------------------------------------------

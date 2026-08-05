@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import confetti from 'canvas-confetti'
 import { gameService, type GameParticipantSummary, type GameVisibility, type UserGameSummary } from '../services/game'
 import { boardService, type BoardStatePayload } from '../services/board'
+import { cellProofsService } from '../services/cellProofs'
 import { winClaimsService } from '../services/winClaims'
 import { subscribeGame } from '../lib/realtime'
 import type { AppUser, Screen, SetScreen, ShowToast } from '../types/app'
@@ -32,7 +33,25 @@ type GameConfig = {
   title?: string
   winMode?: string
   linesToWin?: number
+  photoProof?: boolean
   [key: string]: unknown
+}
+
+export type ClaimProofThumb = {
+  cellIndex: number
+  itemIndex: number
+  prompt: string
+  signedUrl?: string | null
+}
+
+function isPhotoProofConfig(config: GameConfig | null | undefined): boolean {
+  return Boolean(config && config.photoProof === true)
+}
+
+function cellPromptText(cell: LiveBoardCell | undefined): string {
+  if (cell === undefined) return 'This square'
+  if (typeof cell === 'string') return cell
+  return cell.text || 'This square'
 }
 
 type ActiveWinClaim = {
@@ -114,6 +133,13 @@ export function useActiveGame({
   const [winConfirmed, setWinConfirmed] = useState(false)
   const [winRejected, setWinRejected] = useState(false)
   const [selectedIncorrectItems, setSelectedIncorrectItems] = useState<Set<number>>(new Set())
+  const [photoApprovedItems, setPhotoApprovedItems] = useState<Set<number>>(new Set())
+  const [claimProofs, setClaimProofs] = useState<ClaimProofThumb[]>([])
+  const [claimProofsLoading, setClaimProofsLoading] = useState(false)
+  const [proofCaptureIndex, setProofCaptureIndex] = useState<number | null>(null)
+  const [proofCaptureBusy, setProofCaptureBusy] = useState(false)
+  const [proofCaptureError, setProofCaptureError] = useState<string | null>(null)
+  const [myProofUrls, setMyProofUrls] = useState<Record<number, string>>({})
   const [showEndGameDialog, setShowEndGameDialog] = useState(false)
   const [gamePlayers, setGamePlayers] = useState<GameParticipantSummary[]>([])
   const [confirmedWinners, setConfirmedWinners] = useState<string[]>([])
@@ -132,6 +158,8 @@ export function useActiveGame({
   const claimSubmitInFlightRef = useRef(false)
   const showEndGameDialogRef = useRef(false)
   const wasParticipantRef = useRef(false)
+  const gameConfigRef = useRef<GameConfig | null>(null)
+  gameConfigRef.current = gameConfig
 
   const applyLiveConfig = (
     config: GameConfig,
@@ -165,6 +193,13 @@ export function useActiveGame({
     setWinConfirmed(false)
     setWinRejected(false)
     setSelectedIncorrectItems(new Set())
+    setPhotoApprovedItems(new Set())
+    setClaimProofs([])
+    setClaimProofsLoading(false)
+    setProofCaptureIndex(null)
+    setProofCaptureBusy(false)
+    setProofCaptureError(null)
+    setMyProofUrls({})
     setShowEndGameDialog(false)
     setGamePlayers([])
     setConfirmedWinners([])
@@ -322,6 +357,9 @@ export function useActiveGame({
 
     try {
       await gameService.removePlayer(gameId, player.id, { ban })
+      void cellProofsService.purgeUserPrefix(gameId, player.id).catch((err) => {
+        console.error('Error purging player proof storage:', err)
+      })
       showToast(
         ban
           ? `${player.username} was banned from this game.`
@@ -338,6 +376,8 @@ export function useActiveGame({
       if (pendingWinClaim?.userId === player.id) {
         setPendingWinClaim(null)
         setSelectedIncorrectItems(new Set())
+        setPhotoApprovedItems(new Set())
+        setClaimProofs([])
       }
       await fetchGamePlayers(gameId)
     } catch (error) {
@@ -573,10 +613,23 @@ export function useActiveGame({
   const confirmWin = async () => {
     if (!pendingWinClaim?.claimId || !gameCode) return
 
+    if (isPhotoProofConfig(gameConfig)) {
+      const reviewable = claimProofs.length || pendingWinClaim.items?.length || 0
+      if (
+        photoApprovedItems.size < reviewable ||
+        selectedIncorrectItems.size > 0
+      ) {
+        showToast('Approve every photo before confirming the win.')
+        return
+      }
+    }
+
     try {
       await winClaimsService.confirmClaim(pendingWinClaim.claimId)
       setPendingWinClaim(null)
       setSelectedIncorrectItems(new Set())
+      setPhotoApprovedItems(new Set())
+      setClaimProofs([])
       showEndGameDialogRef.current = true
       setShowEndGameDialog(true)
     } catch (error) {
@@ -589,6 +642,11 @@ export function useActiveGame({
     if (!gameId) return
 
     try {
+      try {
+        await cellProofsService.purgeGameProofs(gameId)
+      } catch (purgeError) {
+        console.error('Error purging cell proofs on end:', purgeError)
+      }
       await gameService.markGameAsEnded(gameId)
       showEndGameDialogRef.current = false
       setShowEndGameDialog(false)
@@ -614,6 +672,10 @@ export function useActiveGame({
 
   const rejectWin = async () => {
     if (!pendingWinClaim?.claimId) return
+    if (selectedIncorrectItems.size === 0) {
+      showToast('Mark at least one incorrect item to reject.')
+      return
+    }
 
     try {
       const incorrectIndices = Array.from(selectedIncorrectItems)
@@ -624,6 +686,8 @@ export function useActiveGame({
       await winClaimsService.rejectClaim(pendingWinClaim.claimId, incorrectBoardIndices)
       setPendingWinClaim(null)
       setSelectedIncorrectItems(new Set())
+      setPhotoApprovedItems(new Set())
+      setClaimProofs([])
 
       if (currentUser) {
         await loadUserGames(currentUser.id)
@@ -642,6 +706,29 @@ export function useActiveGame({
       newSelected.add(itemIndex)
     }
     setSelectedIncorrectItems(newSelected)
+    setPhotoApprovedItems((prev) => {
+      const next = new Set(prev)
+      next.delete(itemIndex)
+      return next
+    })
+  }
+
+  const photoApproveItem = (itemIndex: number) => {
+    setPhotoApprovedItems((prev) => new Set(prev).add(itemIndex))
+    setSelectedIncorrectItems((prev) => {
+      const next = new Set(prev)
+      next.delete(itemIndex)
+      return next
+    })
+  }
+
+  const photoDenyItem = (itemIndex: number) => {
+    setSelectedIncorrectItems((prev) => new Set(prev).add(itemIndex))
+    setPhotoApprovedItems((prev) => {
+      const next = new Set(prev)
+      next.delete(itemIndex)
+      return next
+    })
   }
 
   const checkWin = (markedCells: Set<number> = marked): WinResult | null => {
@@ -657,23 +744,7 @@ export function useActiveGame({
     })
   }
 
-  const toggleCell = (index: number) => {
-    if (
-      isLiveCellFree(board[index]) ||
-      hasWon ||
-      pendingWinClaim ||
-      winRejected ||
-      claimSubmitInFlightRef.current
-    ) {
-      return
-    }
-
-    const newMarked = new Set(marked)
-    if (newMarked.has(index)) {
-      newMarked.delete(index)
-    } else {
-      newMarked.add(index)
-    }
+  const applyMarkAndMaybeClaim = (newMarked: Set<number>) => {
     setMarked(newMarked)
 
     if (currentUser && gameId) {
@@ -691,8 +762,6 @@ export function useActiveGame({
     ) {
       const winResult = checkWin(newMarked)
       if (winResult && !isHost) {
-        // Synchronously block further submits before the async claim returns
-        // (rapid clicks otherwise create multiple pending claims).
         claimSubmitInFlightRef.current = true
         const submitWinClaim = async () => {
           if (!currentUser) {
@@ -700,6 +769,19 @@ export function useActiveGame({
             return
           }
           try {
+            if (isPhotoProofConfig(gameConfig) && gameId) {
+              const ok = await cellProofsService.hasProofsForIndices(
+                gameId,
+                currentUser.id,
+                winResult.indices,
+                board,
+              )
+              if (!ok) {
+                claimSubmitInFlightRef.current = false
+                showToast('Every claimed square needs a photo proof first.')
+                return
+              }
+            }
             const claimData = await winClaimsService.submitClaim(gameId!, currentUser.id, {
               type: winResult.type,
               items: winResult.items,
@@ -718,13 +800,100 @@ export function useActiveGame({
             showToast('Error submitting win claim. Please try again.')
           }
         }
-        submitWinClaim()
+        void submitWinClaim()
       } else if (winResult && isHost) {
         setHasWon(true)
         setWinConfirmed(true)
       }
     }
   }
+
+  const cancelProofCapture = () => {
+    if (proofCaptureBusy) return
+    setProofCaptureIndex(null)
+    setProofCaptureError(null)
+  }
+
+  const submitProofCapture = async (file: File) => {
+    if (
+      proofCaptureIndex === null ||
+      !currentUser ||
+      !gameId ||
+      proofCaptureBusy
+    ) {
+      return
+    }
+    const index = proofCaptureIndex
+    setProofCaptureBusy(true)
+    setProofCaptureError(null)
+    try {
+      const proof = await cellProofsService.uploadAndUpsert(
+        gameId,
+        currentUser.id,
+        index,
+        file,
+      )
+      if (proof.signedUrl) {
+        setMyProofUrls((prev) => ({ ...prev, [index]: proof.signedUrl! }))
+      }
+      const newMarked = new Set(marked)
+      newMarked.add(index)
+      setProofCaptureIndex(null)
+      applyMarkAndMaybeClaim(newMarked)
+    } catch (error) {
+      console.error('Error uploading cell proof:', error)
+      setProofCaptureError(errorMessage(error, 'Could not upload photo. Try again.'))
+    } finally {
+      setProofCaptureBusy(false)
+    }
+  }
+
+  const toggleCell = (index: number) => {
+    if (
+      isLiveCellFree(board[index]) ||
+      hasWon ||
+      pendingWinClaim ||
+      winRejected ||
+      claimSubmitInFlightRef.current
+    ) {
+      return
+    }
+
+    const photoMode = isPhotoProofConfig(gameConfig)
+
+    if (marked.has(index)) {
+      const newMarked = new Set(marked)
+      newMarked.delete(index)
+      if (photoMode && currentUser && gameId) {
+        void cellProofsService.deleteProof(gameId, currentUser.id, index).catch((err) => {
+          console.error('Error deleting cell proof:', err)
+        })
+        setMyProofUrls((prev) => {
+          const next = { ...prev }
+          delete next[index]
+          return next
+        })
+      }
+      applyMarkAndMaybeClaim(newMarked)
+      return
+    }
+
+    if (photoMode) {
+      if (!currentUser || !gameId) {
+        showToast('Join the game before marking squares.')
+        return
+      }
+      setProofCaptureError(null)
+      setProofCaptureIndex(index)
+      return
+    }
+
+    const newMarked = new Set(marked)
+    newMarked.add(index)
+    applyMarkAndMaybeClaim(newMarked)
+  }
+
+  // toggleCell / applyMarkAndMaybeClaim defined above
 
   useEffect(() => {
     pendingWinClaimRef.current = pendingWinClaim
@@ -763,9 +932,13 @@ export function useActiveGame({
               timestamp: latestClaim.timestamp,
             })
             setSelectedIncorrectItems(new Set())
+            setPhotoApprovedItems(new Set())
+            setClaimProofs([])
           }
         } else if (pendingWinClaimRef.current) {
           setPendingWinClaim(null)
+          setClaimProofs([])
+          setPhotoApprovedItems(new Set())
         }
       } catch (error) {
         console.error('Error refreshing win claims:', error)
@@ -787,13 +960,26 @@ export function useActiveGame({
             Array.isArray(claimStatus.incorrectIndices) &&
             claimStatus.incorrectIndices.length > 0
           ) {
+            const denied = [...claimStatus.incorrectIndices]
             setMarked((prevMarked) => {
               const newMarked = new Set(prevMarked)
-              claimStatus.incorrectIndices.forEach((boardIndex) => {
+              denied.forEach((boardIndex) => {
                 newMarked.delete(boardIndex)
               })
               return newMarked
             })
+            if (isPhotoProofConfig(gameConfigRef.current || gameConfig) && gameId) {
+              void cellProofsService
+                .deleteProofsForIndices(id, currentUser.id, denied)
+                .catch((err) => console.error('Error deleting denied proofs:', err))
+              setMyProofUrls((prev) => {
+                const next = { ...prev }
+                denied.forEach((i) => {
+                  delete next[i]
+                })
+                return next
+              })
+            }
           }
 
           setWinRejected(true)
@@ -938,6 +1124,11 @@ export function useActiveGame({
     if (!currentUser || !gameIdToEnd) return
 
     try {
+      try {
+        await cellProofsService.purgeGameProofs(gameIdToEnd)
+      } catch (purgeError) {
+        console.error('Error purging cell proofs on end:', purgeError)
+      }
       const updatedGame = await gameService.endGame(gameIdToEnd, currentUser.id)
       console.log('Game ended successfully:', updatedGame)
       await loadUserGames(currentUser.id)
@@ -960,6 +1151,88 @@ export function useActiveGame({
       showToast(errorMessage(error, 'Error ending game. Please try again.'))
     }
   }
+
+  useEffect(() => {
+    if (!gameId || !currentUser || screen !== 'play') return
+    if (!isPhotoProofConfig(gameConfig)) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const proofs = await cellProofsService.listForUser(gameId, currentUser.id, {
+          withSignedUrls: true,
+        })
+        if (cancelled) return
+        const urls: Record<number, string> = {}
+        for (const p of proofs) {
+          if (p.signedUrl) urls[p.cellIndex] = p.signedUrl
+        }
+        setMyProofUrls(urls)
+      } catch (error) {
+        console.error('Error loading own cell proofs:', error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [gameId, currentUser, screen, gameConfig])
+
+  useEffect(() => {
+    if (!pendingWinClaim || !isHost || !gameId) {
+      return
+    }
+    if (!isPhotoProofConfig(gameConfig)) {
+      setClaimProofs([])
+      return
+    }
+    const claimUserId = pendingWinClaim.userId
+    if (!claimUserId) {
+      setClaimProofs([])
+      return
+    }
+
+    let cancelled = false
+    setClaimProofsLoading(true)
+    void (async () => {
+      try {
+        const proofs = await cellProofsService.listForIndices(
+          gameId,
+          claimUserId,
+          pendingWinClaim.indices,
+          { withSignedUrls: true },
+        )
+        if (cancelled) return
+        const byIndex = new Map(proofs.map((p) => [p.cellIndex, p]))
+        const thumbs: ClaimProofThumb[] = pendingWinClaim.indices.map((cellIndex, itemIndex) => {
+          const proof = byIndex.get(cellIndex)
+          return {
+            cellIndex,
+            itemIndex,
+            prompt: pendingWinClaim.items[itemIndex] || cellPromptText(board[cellIndex]),
+            signedUrl: proof?.signedUrl ?? null,
+          }
+        })
+        setClaimProofs(thumbs)
+      } catch (error) {
+        console.error('Error loading claim proofs:', error)
+        if (!cancelled) {
+          setClaimProofs(
+            pendingWinClaim.indices.map((cellIndex, itemIndex) => ({
+              cellIndex,
+              itemIndex,
+              prompt: pendingWinClaim.items[itemIndex] || 'Square',
+              signedUrl: null,
+            })),
+          )
+        }
+      } finally {
+        if (!cancelled) setClaimProofsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pendingWinClaim, isHost, gameId, gameConfig, board])
 
   const onGameCreated = async ({
     id,
@@ -1045,6 +1318,13 @@ export function useActiveGame({
     winConfirmed,
     winRejected,
     selectedIncorrectItems,
+    photoApprovedItems,
+    claimProofs,
+    claimProofsLoading,
+    proofCaptureIndex,
+    proofCaptureBusy,
+    proofCaptureError,
+    myProofUrls,
     showEndGameDialog,
     gamePlayers,
     confirmedWinners,
@@ -1071,7 +1351,11 @@ export function useActiveGame({
     handleContinueAfterWin,
     rejectWin,
     toggleIncorrectItem,
+    photoApproveItem,
+    photoDenyItem,
     toggleCell,
+    cancelProofCapture,
+    submitProofCapture,
     endGame,
     clearActiveGame,
     hydrateActiveGame,
