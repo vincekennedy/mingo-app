@@ -1,22 +1,23 @@
-name: Master full e2e
+name: Master Playwright
 
-# Prefer master-playwright.yml for PR-required "Playwright full suite".
-# This file keeps a manual / recovery path only (dispatch does not satisfy
-# Protect Master's PR rollup by itself).
+# Required PR check for PRs into master (Protect Master: "Playwright full suite").
+# Separate from master-e2e.yml so the required check is always PR-attached;
+# workflow_dispatch-only runs do not appear in the PR status rollup.
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [master]
 
 concurrency:
-  group: master-e2e-manual-${{ github.run_id }}
-  cancel-in-progress: false
+  group: master-playwright-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   playwright-full:
-    name: Playwright full suite (manual)
+    name: Playwright full suite
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
