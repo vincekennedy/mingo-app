@@ -1,7 +1,9 @@
 import { Check, Copy, Link2, Play, Printer } from 'lucide-react';
 import PlayerListSidebar from '../components/game/PlayerListSidebar';
 import VisibilityBadge from '../components/game/VisibilityBadge';
-import WinVerificationModal from '../components/modals/WinVerificationModal';
+import WinVerificationModal, {
+  type ClaimProofThumb,
+} from '../components/modals/WinVerificationModal';
 import EndGameDialog from '../components/modals/EndGameDialog';
 import ViewPlayerBoardModal from '../components/modals/ViewPlayerBoardModal';
 import { describeWinRule, type BoardCell, type WinConfigFields } from '../lib/winDetection';
@@ -12,6 +14,7 @@ type ScreenGameConfig = WinConfigFields & {
   title?: string;
   boardSize?: number;
   useFreeSpace?: boolean;
+  photoProof?: boolean;
 };
 
 type ActiveWinClaim = {
@@ -57,6 +60,12 @@ type HostScreenProps = {
   onToggleIncorrectItem: (itemIndex: number) => void;
   onRejectWin: () => void | Promise<void>;
   onConfirmWin: () => void | Promise<void>;
+  photoProofMode?: boolean;
+  claimProofs?: ClaimProofThumb[];
+  photoApprovedItems?: Set<number>;
+  proofsLoading?: boolean;
+  onPhotoApprove?: (itemIndex: number) => void;
+  onPhotoDeny?: (itemIndex: number) => void;
   onContinueAfterWin: () => void;
   onEndGameAfterWin: () => void | Promise<void>;
   onCopyCode: () => void;
@@ -92,6 +101,12 @@ export default function HostScreen({
   onToggleIncorrectItem,
   onRejectWin,
   onConfirmWin,
+  photoProofMode = false,
+  claimProofs = [],
+  photoApprovedItems = new Set(),
+  proofsLoading = false,
+  onPhotoApprove,
+  onPhotoDeny,
   onContinueAfterWin,
   onEndGameAfterWin,
   onCopyCode,
@@ -135,6 +150,12 @@ export default function HostScreen({
             onToggleIncorrectItem={onToggleIncorrectItem}
             onReject={onRejectWin}
             onConfirm={onConfirmWin}
+            photoProofMode={photoProofMode}
+            claimProofs={claimProofs}
+            photoApprovedItems={photoApprovedItems}
+            onPhotoApprove={onPhotoApprove}
+            onPhotoDeny={onPhotoDeny}
+            proofsLoading={proofsLoading}
           />
         )}
 
