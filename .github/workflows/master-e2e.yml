@@ -6,10 +6,20 @@ name: Master full e2e
 on:
   pull_request:
     branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+  # push on release/* also publishes the required check on the head SHA.
+  # workflow_dispatch alone can finish green without appearing in the PR rollup,
+  # so Protect Master stays "Waiting for status to be reported".
+  push:
+    branches:
+      - "release/**"
+      - "release-*"
+      - "ship/**"
   workflow_dispatch:
 
 concurrency:
-  group: master-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # run_id for non-PR events avoids cross-PR cancel storms that left e2e stuck.
+  group: master-e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions:
