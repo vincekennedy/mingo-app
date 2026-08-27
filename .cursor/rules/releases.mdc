@@ -5,9 +5,10 @@ alwaysApply: true
 
 # Releases (CalVer)
 
+Playbook (dispatch Action, then PR): `.cursor/skills/calver-release/SKILL.md`.
+
 - Production releases are merges into **`master`** (usually from `develop`).
-- Before (or as part of) cutting a production release, run GitHub Action **CalVer release on develop** (`workflow_dispatch`). It sets `package.json` to **today’s date** in `America/New_York` as `YYYY.MM.DD`, commits `chore: release …` on **`develop`**, and tags `vYYYY.MM.DD`.
-- Same calendar day, additional releases use `YYYY.MM.DD.1`, `.2`, …
-- Promote that commit to production with a normal **`develop` → `master`** PR. Do **not** push CalVer commits directly to `master` (rules require PRs).
-- Do **not** hand-bump `package.json` for production releases unless the user asks; prefer the Action on `develop`.
+- Cut the version with GitHub Action **CalVer release on develop** (`workflow_dispatch`). Do **not** hand-bump `package.json` for production unless the user asks.
+- Format: `YYYY.MM.DD` in `America/New_York`; same day extras are `YYYY.MM.DD.1`, `.2`, …
+- Do **not** push CalVer commits directly to **`master`** (PRs required).
 - Feature work stays on `develop`; do not open routine feature PRs into `master`.
