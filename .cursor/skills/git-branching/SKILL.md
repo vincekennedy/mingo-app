@@ -16,7 +16,7 @@ git pull origin develop
 git checkout -b feature/…
 ```
 
-Do not branch from `master` or skip the pull.
+Do not branch from `master` or skip the pull. Before `git checkout -b`, list open Dependabot PRs (`.cursor/rules/dependabot.mdc`) and prefer landing those first.
 
 ## Land the work
 

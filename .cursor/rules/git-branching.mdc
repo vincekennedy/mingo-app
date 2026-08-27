@@ -9,6 +9,7 @@ Playbook (fetch → pull → `feature/*`): `.cursor/skills/git-branching/SKILL.m
 
 - **`develop`** is the integration branch. **`master`** is production only.
 - Do **not** commit or push feature work on **`master`**.
+- Before creating a feature branch, check open Dependabot PRs (`.cursor/rules/dependabot.mdc`). Prefer landing those first.
 - Always sync `origin/develop` before creating a feature branch. Do not branch from `master`, a stale local `develop`, or the session’s starting branch. Do not skip the pull.
 - Open PRs into **`develop`**, not `master`, unless the user explicitly asks otherwise.
 - Cut CalVer on **`develop`**, then PR **`develop` → `master`**. See `.cursor/rules/releases.mdc`.
