@@ -42,6 +42,7 @@ export default defineConfig([
       'api/**/*.{js,mjs,cjs}',
       'e2e/**/*.{js,mjs,cjs}',
       'scripts/**/*.{js,mjs,cjs}',
+      '.cursor/hooks/**/*.{js,mjs,cjs}',
     ],
     languageOptions: {
       globals: globals.node,
