@@ -3,6 +3,12 @@
   "hooks": {
     "beforeShellExecution": [
       {
+        "command": ".cursor/hooks/pre-commit-tests.sh",
+        "matcher": "git\\s+commit",
+        "failClosed": true,
+        "timeout": 600
+      },
+      {
         "command": ".cursor/hooks/pre-push-e2e.sh",
         "matcher": "git\\s+push",
         "failClosed": true,
