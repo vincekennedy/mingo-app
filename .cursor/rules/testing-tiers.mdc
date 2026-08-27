@@ -11,8 +11,8 @@ Discover failures locally, not on GitHub. Command choice and examples: `.cursor/
 
 1. **Before `git commit`** — lint changed JS/JSX only (`npm run lint:precommit`), then Playwright on changed `e2e/*.spec.js` (`npm run test:e2e:precommit`). Both skip if there is nothing to run. Agent commits are gated by `.cursor/hooks/pre-commit-tests.sh`. Full-repo `npm run lint` is optional, not the commit gate.
 2. **Before `git push`** — newly added `e2e/*.spec.js` only (`npm run test:e2e:prepush`). Edits to existing specs are not in this gate. Hook: `.cursor/hooks/pre-push-e2e.sh`.
-3. **PR → `develop`** — smoke (`npm run test:e2e:smoke`). Workflow: **PR Smoke Tests**.
-4. **PR → `master`** — full suite (`npm run test:e2e`). Workflow: `.github/workflows/master-e2e.yml`.
+3. **PR → `develop`** — lint + typecheck (`npm run lint`) and smoke (`npm run test:e2e:smoke`). GitHub ruleset **Protect Develop** requires **Lint** and **Playwright smoke (landing + api + lifecycle)**.
+4. **PR → `master`** — full suite (`npm run test:e2e`, `.github/workflows/master-playwright.yml`). Ruleset **Protect Master** requires **Playwright full suite** before merge. Hobby Vercel then deploys that already-green `master` commit; Preview is not gated.
 
 Do not skip Cursor hooks. Do not run the full Playwright suite on every commit.
 
