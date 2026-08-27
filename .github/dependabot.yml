@@ -6,6 +6,7 @@ updates:
       interval: weekly
       day: monday
     target-branch: develop
+    rebase-strategy: auto
     open-pull-requests-limit: 5
     groups:
       production-deps:

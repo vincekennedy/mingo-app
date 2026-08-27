@@ -1,0 +1,18 @@
+---
+description: Check open Dependabot PRs before creating a feature branch
+alwaysApply: true
+---
+
+# Dependabot before branching
+
+Before `git checkout -b` (or any new feature branch), list open Dependabot PRs:
+
+```bash
+gh pr list --author app/dependabot --state open --base develop
+```
+
+If any are open, tell the user (number, title, URL) and prefer landing or closing them first so they do not stack behind the new branch. Only skip that pause when the user explicitly says to continue.
+
+Do not open a second Dependabot-related feature PR if one is already waiting unless the user asks.
+
+Auto-merge for non-major Dependabot PRs is `.github/workflows/dependabot-auto-merge.yml` (needs repo **Allow auto-merge**). Smoke is skipped for `dependabot[bot]`; **Lint** still gates.
