@@ -1,6 +1,6 @@
 name: PR lint
 
-# ESLint + TypeScript check on PRs into develop.
+# ESLint + TypeScript check on PRs into develop (Protect Develop required check: "Lint").
 # Local: npm run lint && npm run typecheck
 
 on:
