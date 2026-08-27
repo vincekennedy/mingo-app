@@ -1,8 +1,9 @@
 name: Master Playwright
 
-# Required PR check for PRs into master (Protect Master: "Playwright full suite").
-# Separate from master-e2e.yml so the required check is always PR-attached;
-# workflow_dispatch-only runs do not appear in the PR status rollup.
+# Required check name: "Playwright full suite" (Protect Master merge gate).
+# Do not also run on push to master: Hobby Vercel promotes as soon as the
+# production build succeeds, so a post-merge suite cannot hold the domain.
+# Separate from master-e2e.yml (manual dispatch only).
 
 on:
   pull_request:

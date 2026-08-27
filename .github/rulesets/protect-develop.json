@@ -1,0 +1,8 @@
+{
+  "name": "Protect Develop",
+  "required_status_checks": [
+    { "context": "Lint", "integration_id": 15368 },
+    { "context": "Playwright smoke (landing + api + lifecycle)", "integration_id": 15368 }
+  ],
+  "strict_required_status_checks_policy": true
+}

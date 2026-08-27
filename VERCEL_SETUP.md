@@ -47,6 +47,12 @@ After adding the environment variables:
 3. You should NOT see the error: "Missing Supabase environment variables"
 4. The app should load normally
 
+## Production vs Preview
+
+Preview deploys as soon as you push a branch. Click it while GitHub Actions run.
+
+Production on **Hobby** promotes as soon as `npm run build` succeeds after a push to `master`. Vercel Deployment Checks (hold the production domain until GitHub is green) are a Pro feature. The production lock is GitHub: **Protect Master** requires **Playwright full suite** on the `develop` → `master` PR, so a red suite never reaches `master` unless someone bypasses the ruleset.
+
 ## Important Notes
 
 - **Environment variables are case-sensitive**: Must be exactly `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
