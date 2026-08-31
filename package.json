@@ -24,11 +24,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^2.18.0",
-    "@supabase/supabase-js": "^2.112.3",
+    "@google/genai": "^2.19.0",
+    "@supabase/supabase-js": "^2.112.4",
     "@vercel/analytics": "^2.0.1",
     "canvas-confetti": "^1.9.4",
-    "lucide-react": "^1.33.0",
+    "lucide-react": "^1.35.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
